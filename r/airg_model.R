@@ -1,6 +1,6 @@
 
-# TODO:
-#   
+# TODO: ----
+#   pluck initial yield curve from the data esp short and long values
 
 
 # ONETIME: routines that should have been run before this --------------
@@ -95,6 +95,68 @@ runparams$ir_generator$correl12
 
 ## construct yield curves ----
 ncurves <- runparams$nyears * 12 # number of curves PER SCENARIO
+
+# initialize yield curve before looping through scenarios
+# vb code is below
+# Init_Rate_Short is the 1-year rate on start_date in Scenario Generator tab
+# Init_Rate_Long is the 20-year rate
+# InitialVol is D25 in parameters sheet, runparams$ir_generator$initialvol
+
+
+# vb code:
+  # Set curves(0) = New YieldCurveClass
+  # Call curves(0).Initialize(Range("Init_Rate_Short").Value, _
+  #                           Range("Init_Rate_Long").Value, _
+  #                           Log(Range("InitialVol").Value))
+
+# '***************************************** floor the generated rates at 0.0001 = 0.01% *****************
+#   generatedRates(1) = max(shortRate, 0.0001)
+#   generatedRates(2) = max(longRate, 0.0001)
+#   logVolatility = logVol
+# '***************************************** floor the generated rates at 0.0001 = 0.01% *****************
+  
+# maturities(1) = 0.25
+# maturities(2) = 0.5
+# maturities(3) = 1#
+# maturities(4) = 2#
+# maturities(5) = 3#
+# maturities(6) = 5#
+# maturities(7) = 7#
+# maturities(8) = 10#
+# maturities(9) = 20#
+# maturities(10) = 30#
+# 
+# interpolateNS
+
+# 'Use Nelson-Siegel two point interpolation
+# 
+# Dim i As Integer
+# Dim t As Double
+# Dim b0 As Double, b1 As Double
+# Dim k As Double
+# Dim const1 As Double, const20 As Double
+# Dim r1 As Double, r20 As Double
+# 
+#   r1 = generatedRates(1)
+#   r20 = generatedRates(2)
+# 
+#   k = 0.4
+#   const1 = (1 - Exp(-k * 1)) / (k * 1)
+#   const20 = (1 - Exp(-k * 20)) / (k * 20)
+# 
+#   b1 = (r1 - r20) / (const1 - const20)
+#   b0 = r1 - (b1 * const1)
+#   
+#   For i = 1 To 10
+#     t = maturities(i)
+#     If t = 0 Then t = 0.25
+#     interpolatedRates(i) = b0 + b1 * (1 - Exp(-k * t)) / (k * t)
+#   Next i
+
+# 
+# spotRatesAvailable = False
+
+
 
 
 
