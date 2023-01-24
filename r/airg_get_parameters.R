@@ -4,7 +4,9 @@ get_parameters <- function(data, params, start_date){
   runparams <- list()
   
   runparams$start_date <- as.Date(start_date)
-  runparams$mrp <- update_mrp(data$hist_curves, start_date)
+  runparams$hist_curves <- data$hist_curves
+  runparams$init_curve <- get_init_curve(hist_curves=data$hist_curves)
+  runparams$mrp <- update_mrp(hist_curves=data$hist_curves, start_date)
   runparams$ir_generator <- get_ir_generator_parameters(params)
   runparams$bond_index <- get_bond_index_parameters(params)
   runparams$equity_fund <- get_equity_index_parameters(params)
@@ -34,7 +36,7 @@ get_bond_index_parameters <- function(params){
   # convert symbol to lower case and save to runparams
   # maybe change format later
   bond_index <- params$bond_index |> 
-    mutate(symbol=str_to_lower(symbol))
+    dplyr::mutate(symbol=str_to_lower(symbol))
   
   bond_index
 }
@@ -62,16 +64,24 @@ get_equity_index_parameters <- function(params){
   # NA        DiversifiedFund.SETvolatility = .Cells(39, 9).Value
   
   equity_fund <- params$equity_fund |> 
-    mutate(symbol=str_to_lower(symbol),
-           symbol=case_when(symbol=="sigma(v)" ~ "sigma_v",
-                            symbol=="sigma(0)" ~ "sigma_0",
-                            symbol=="sigma-" ~ "sigma_min",
-                            symbol=="sigma+" ~ "sigma_max",
-                            symbol=="sigma*" ~ "sigma_maxrand",
-                            TRUE ~ symbol))
+    dplyr::mutate(symbol=str_to_lower(symbol),
+                  symbol=case_when(symbol=="sigma(v)" ~ "sigma_v",
+                  symbol=="sigma(0)" ~ "sigma_0",
+                  symbol=="sigma-" ~ "sigma_min",
+                  symbol=="sigma+" ~ "sigma_max",
+                  symbol=="sigma*" ~ "sigma_maxrand",
+                  TRUE ~ symbol))
   equity_fund
 }
 
+
+get_init_curve <- function(hist_curves){
+  init_curve <- hist_curves |> 
+    dplyr::filter(date %in% c(as.Date(start_date), max(date))) |> 
+    dplyr::arrange(date) |> 
+    dplyr::filter(row_number()==1)
+  init_curve
+}
 
 get_ir_generator_parameters <- function(params){
   # get default interest rate generator parameters as previously read-in from
@@ -97,8 +107,8 @@ get_ir_generator_parameters <- function(params){
   #                                                         const5 = beta1 * Log(tau1)
   
   df <- params$ir_generator |>
-    filter(!is.na(range_name)) |>
-    mutate(range_name=str_to_lower(range_name))
+    dplyr::filter(!is.na(range_name)) |>
+    dplyr::mutate(range_name=str_to_lower(range_name))
   
   ir_generator <- list_from_df(df, "range_name", "default")
   
@@ -151,9 +161,9 @@ update_mrp <- function(hist_curves, start_date){
   
   # The NAIC MRP changes only once per year, in January.
   mrp_df <- hist_curves |> 
-    select(date, curvenum, UST_20) |> 
-    arrange(date) |> 
-    mutate(mdn600=zoo::rollapplyr(UST_20, 600, median,
+    dplyr::select(date, curvenum, UST_20) |> 
+    dplyr::arrange(date) |> 
+    dplyr::mutate(mdn600=zoo::rollapplyr(UST_20, 600, median,
                                   align="right", na.rm = TRUE, partial = TRUE),
            mean36=zoo::rollapplyr(UST_20, 36, mean,
                                   align="right", na.rm = TRUE, partial = TRUE),
@@ -163,8 +173,8 @@ update_mrp <- function(hist_curves, start_date){
            mrp_aaa_round=round_nearest(mrp_aaa_step1, .0025),
            mrp_naic_step1=.2*mdn600 + .3*mean120 + .5*mean36,
            mrp_naic_jan=ifelse(month(date)==1, mrp_naic_step1, NA_real_)) |> 
-    fill(mrp_naic_jan, .direction = "down") |> 
-    mutate(mrp_naic_jan_round=round_nearest(mrp_naic_jan, .0025),
+    tidyr::fill(mrp_naic_jan, .direction = "down") |> 
+    dplyr::mutate(mrp_naic_jan_round=round_nearest(mrp_naic_jan, .0025),
            mrp_aaa=mrp_aaa_round, mrp_naic=mrp_naic_jan_round)
   tail(mrp_df, 14)
   # the spreadsheet continues naic calculations for a year beyond the last data year -- do I need that??
@@ -173,10 +183,10 @@ update_mrp <- function(hist_curves, start_date){
   # runparams$start_date <- "2020-06-01"
   # runparams$start_date <- "2021-12-01"
   mrp_naic <- mrp_df |> 
-    filter(date %in% c(as.Date(start_date), max(date))) |> 
-    arrange(date) |> 
-    filter(row_number()==1) |> 
-    pull(mrp_naic)
+    dplyr::filter(date %in% c(as.Date(start_date), max(date))) |> 
+    dplyr::arrange(date) |> 
+    dplyr::filter(row_number()==1) |> 
+    dplyr::pull(mrp_naic)
   
   return(mrp_naic)
 }

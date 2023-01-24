@@ -1,5 +1,137 @@
 
-# Geometric Brownian Motion ----
+# http://www.turingfinance.com/random-walks-down-wall-street-stochastic-processes-in-python/
+
+# correlated gbm ----
+# https://quant.stackexchange.com/questions/24472/two-correlated-brownian-motions
+
+#n is number of samples 
+#r is correlation
+#t is tick step
+
+# 1) Generate n standard normal variate for x (the first asset)
+# 2) Since, ei∼N(0,1−ρ2). So generates n normal variate as ei from normal distribution with mean 0 and variance 1−ρ2.
+# 3) Get y=ρx+ei (standard normal for y, the 2nd asset)
+# 4) Convert your standard normal numbers back to Normal (remember correlation is independent of change of origin and scale)
+
+f <- function(n=30, r=.5, t=1/252){
+  asset1_sn <- rnorm(n, mean=0, sd= 1) # std normal version of first asset
+  se <- sqrt(1 - r^2) # standard deviation of error
+  e <- rnorm(n, mean=0, sd=se)
+  asset2_sn <- r*asset1_sn + e # std normal for 2nd asset
+  change1 <- c(0, asset1_sn* sqrt(t))
+  change2 <- c(0, asset2_sn* sqrt(t))
+  asset1 <- cumsum(change1)
+  asset2 <- cumsum(change2)
+  tibble(time=0:n, asset1=asset1, asset2=asset2) |> 
+    pivot_longer(-time)
+}
+
+f() |> 
+  ggplot(aes(time, value, colour=name)) +
+  geom_line() +
+  geom_hline(yintercept = 0)
+
+
+n <- 30
+r <- .5
+t <- 1/252
+x <- rnorm(n, mean=0, sd= 1)
+se <- sqrt(1 - r^2) # standard deviation of error
+e <- rnorm(n, mean=0, sd=se)
+y <- r*x + e
+
+change1 <- c(0, x* sqrt(t))
+change2 <- c(0, y* sqrt(t))
+
+stocks <- cumsum(x* sqrt(t))
+bonds <- cumsum(y* sqrt(t))
+
+tibble(stocks=stocks, bonds=bonds, time=1:length(stocks)) |> 
+  pivot_longer(-time) |> 
+  ggplot(aes(time, value, colour=name)) +
+  geom_line()
+  
+
+
+
+corGBM <- function(n, r, t=1/365, plot=TRUE) {
+  #n is number of samples 
+  #r is correlation
+  #t is tick step
+  x <- rnorm(n, mean=0, sd= 1)
+  se <- sqrt(1 - r^2) #standard deviation of error
+  e <- rnorm(n, mean=0, sd=se)
+  y <- r*x + e
+  
+  X <- cumsum(x* sqrt(t))
+  Y <- cumsum(y* sqrt(t))
+  Max <- max(c(X,Y))
+  Min <- min(c(X,Y))
+  
+  if(plot) {
+    plot(X, type="l", ylim=c(Min, Max))
+    lines(Y, col="blue")
+  }
+  return(cor(x,y))
+}
+
+#sample result
+corGBM(10000,.95)
+
+
+
+
+# GBM with package ----
+library(LSMRealOptions)
+# https://search.r-project.org/CRAN/refmans/LSMRealOptions/html/GBM_simulate.html
+
+
+# n	The total number of price paths to simulate
+# t	The forecasting period, in years
+# mu The drift term of the GBM process
+# sigma	The volatility term of the GBM process
+# S0	The initial value of the underlying asset
+# dt	The discrete time step of observations, in years
+
+
+
+
+## 100 simulations of 1 year of monthly price paths:
+m <- GBM_simulate(n = 100,
+                  t = 1,
+                  mu = 0.05,
+                  sigma = 0.2,
+                  S0 = 100,
+                  dt = 1/12)
+
+m <- GBM_simulate(n = 10000,
+                  t = 30,
+                  mu = 0.07,
+                  sigma = 0.12,
+                  S0 = 100,
+                  dt = 1)
+
+colnames(m) <- 0:(ncol(m) - 1)
+
+df <- as_tibble(m) |> 
+  mutate(time=row_number() - 1) |> 
+  pivot_longer(-time, names_to = "sim")
+
+df |> 
+  #filter(sim %in% 1:4) |> 
+  filter(sim %in% sample(1:nrow(m), 5)) |> 
+  ggplot(aes(time, value, colour=sim)) +
+  geom_line() +
+  geom_hline(yintercept = 100) +
+  scale_x_continuous(breaks=0:100) +
+  scale_y_continuous(limits=c(0, NA))
+
+f <- function(x) x^(1/30) - 1
+cagr <- m[31, ] |> f()
+quantile(cagr)
+
+
+# Geometric Brownian Motion from scratch ----
 
 ## a single path ----
 # First, we need to specify the parameters of the GBM model

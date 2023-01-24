@@ -1,6 +1,8 @@
 
 # TODO: ----
-#   pluck initial yield curve from the data esp short and long values
+#   [DONE] pluck initial yield curve from the data esp short and long values
+#   put maturities into params
+#   put initial yield curve, as vector, into param
 
 
 # ONETIME: routines that should have been run before this --------------
@@ -77,8 +79,16 @@ names(runparams)
 runparams$nyears <- 30
 runparams$nsims <- 10
 
-runparams$nyears <- 100
-runparams$nsims <- 10000
+# runparams$nyears <- 100
+# runparams$nsims <- 10000
+
+
+
+# play --------------------------------------------------------------------
+
+tmp <- runparams$init_curve
+
+
 
 
 # interest rates ----------------------------------------------------------
@@ -86,7 +96,7 @@ runparams$nsims <- 10000
 ## get correlated random numbers ----
 a <- proc.time()
 arnorm_cor <- intgen_rancorr(nyears=runparams$nyears,
-                             nsims=runparams$nsims, runparams, seed=12345)
+                             nsims=runparams$nsims, runparams, seed=1234)
 b <- proc.time()
 b - a
 cor(c(arnorm_cor[, 1, ]), c(arnorm_cor[, 2, ]))
@@ -94,7 +104,113 @@ runparams$ir_generator$correl12
 
 
 ## construct yield curves ----
+### begin by constructing the initial yield curve ----
+# get 2 points on the yield curve -- 1 and 20 years
+# using Nielsen-Siegel method, generate a yield curve from that
+# compare to actual initial yield curve
+# perturb moves an NS estimate toward actual by a portion of the difference
+#   all the way, in the case of the initial curve
+#   AND it sets a floor for all rates in the curve of 0.0001
+
+# NOTE that this uses no randomness and is the same for 10,000 scenarios
+# but I think airg does it in each scenario
+
 ncurves <- runparams$nyears * 12 # number of curves PER SCENARIO
+runparams$init_curve
+rate_short <- runparams$init_curve$UST_1 # 1-year rate on start_date
+rate_long <- runparams$init_curve$UST_20 # 20-year rate on start_date
+logvol <- log(runparams$ir_generator$initialvol)
+genrate1 <- max(rate_short, 0.0001)
+genrate2 <- max(rate_long, 0.0001)
+
+icurve <- runparams$init_curve |> dplyr::select(-c(date, curvenum)) |> as.numeric()
+runparams$init_curve_NS <- interpolateNS(r1=genrate1, r20=genrate2)0
+runparams$init_curve_NS_perturbed <- perturb(icurve, runparams$init_curve_NS)
+
+### construct future yield curve ----
+# get previously generated random numbers - already done
+# initialize prior-month rates
+oldShortRate <- rate_short
+oldLogLongRate <- log(rate_long) # notice the log
+oldDiff <- rate_long - rate_short
+oldLogVol <- logvol
+# With curves(0)
+# oldShortRate = .rateAtIndex(3)
+# oldLogLongRate = Log(.rateAtIndex(9))
+# oldDiff = .rateAtIndex(9) - .rateAtIndex(3)
+# oldLogVol = .logVolatility
+# End With
+
+
+# 'Initialize the soft cap and floor on the log long rate
+# note that airg var names use r1 for long and r2 for short, oddly
+minLogLongRate <- log(runparams$ir_generator$minr1) # log soft floor on long rate before shock
+maxLogLongRate <- log(runparams$ir_generator$maxr1) # # log soft cap on long rate before shock
+minShortRate <- runparams$ir_generator$minr2
+
+
+# Generate future yield curves *****************************
+  
+# First initialize the prior month rates
+
+
+# 'Initialize the soft cap and floor on the log long rate
+#   minLogLongRate = Log(Range("Minr1").Value)
+#   maxLogLongRate = Log(Range("Maxr1").Value)
+#   minShortRate = Range("Minr2").Value
+  
+
+
+perturb <- function(init_curve_hist, init_curve_NS, portion=1){
+  # AIRG calls hist minus NS "initialCurveFit" but I give a different name
+  # Note that when portion=1, as it does for the startup, then
+  # the revised curve is the same as the historical curve 
+  diff <- init_curve_hist - init_curve_NS
+  revised <- init_curve_NS + portion * diff
+  revised
+}
+
+# interpolatedRates(i) = interpolatedRates(i) + portion * adj(i)
+# 'Now enforce no negative interest rates
+#     If (interpolatedRates(i) < 0.0001) Then interpolatedRates(i) = 0.0001
+# 
+# perturb(initialCurveFit, 1#)
+
+tibble(maturity=maturities, 
+       init=icurve, 
+       ns=runparams$init_curve_NS, 
+       perturb=runparams$init_curve_NS_perturbed) |> 
+  pivot_longer(-maturity) |> 
+  ggplot(aes(maturity, value, colour=name)) +
+  geom_line(aes(linetype=name), linewidth=1)
+
+
+interpolateNS <- function(r1, r20){
+  # Nelson-Siegel two point interpolation 
+  
+  # According to ChatGPT (not sure I understand this)
+  # Nelson-Siegel two-point interpolation fits a curve to a set of points to
+  # estimate the yield curve. It uses three parameters (lambda, beta1, and
+  # beta2) to fit a curve to the points on the yield curve. The curve is
+  # constructed by adding together two exponential functions, each of which is
+  # controlled by one of the beta parameters. The lambda parameter controls the
+  # overall shape of the curve, while the beta1 and beta2 parameters control the
+  # slope of the curve at different points in time.
+  
+  maturities <- c(0.25, 0.5, 1, 2, 3, 5, 7, 10, 20, 30)
+  
+  k <- 0.4
+  const1 <- (1 - exp(-k * 1)) / (k * 1)
+  const20 <- (1 - exp(-k * 20)) / (k * 20)
+  
+  b1 <- (r1 - r20) / (const1 - const20)
+  b0 <- r1 - (b1 * const1)
+  
+  t <- ifelse(maturities==0, 0.25, maturities)
+  interp_NS <- b0 + b1 * (1 - exp(-k * t)) / (k * t)
+  interp_NS
+}
+
 
 # initialize yield curve before looping through scenarios
 # vb code is below
@@ -104,61 +220,13 @@ ncurves <- runparams$nyears * 12 # number of curves PER SCENARIO
 
 
 # vb code:
-  # Set curves(0) = New YieldCurveClass
-  # Call curves(0).Initialize(Range("Init_Rate_Short").Value, _
-  #                           Range("Init_Rate_Long").Value, _
-  #                           Log(Range("InitialVol").Value))
-
 # '***************************************** floor the generated rates at 0.0001 = 0.01% *****************
 #   generatedRates(1) = max(shortRate, 0.0001)
 #   generatedRates(2) = max(longRate, 0.0001)
 #   logVolatility = logVol
 # '***************************************** floor the generated rates at 0.0001 = 0.01% *****************
   
-# maturities(1) = 0.25
-# maturities(2) = 0.5
-# maturities(3) = 1#
-# maturities(4) = 2#
-# maturities(5) = 3#
-# maturities(6) = 5#
-# maturities(7) = 7#
-# maturities(8) = 10#
-# maturities(9) = 20#
-# maturities(10) = 30#
-# 
-# interpolateNS
-
-# 'Use Nelson-Siegel two point interpolation
-# 
-# Dim i As Integer
-# Dim t As Double
-# Dim b0 As Double, b1 As Double
-# Dim k As Double
-# Dim const1 As Double, const20 As Double
-# Dim r1 As Double, r20 As Double
-# 
-#   r1 = generatedRates(1)
-#   r20 = generatedRates(2)
-# 
-#   k = 0.4
-#   const1 = (1 - Exp(-k * 1)) / (k * 1)
-#   const20 = (1 - Exp(-k * 20)) / (k * 20)
-# 
-#   b1 = (r1 - r20) / (const1 - const20)
-#   b0 = r1 - (b1 * const1)
-#   
-#   For i = 1 To 10
-#     t = maturities(i)
-#     If t = 0 Then t = 0.25
-#     interpolatedRates(i) = b0 + b1 * (1 - Exp(-k * t)) / (k * t)
-#   Next i
-
-# 
 # spotRatesAvailable = False
-
-
-
-
 
 # IntScenarioClass class includes the random numbers used, the generated
 # short and long rates, and the 10-point interpolated yield curve.
@@ -167,11 +235,7 @@ ncurves <- runparams$nyears * 12 # number of curves PER SCENARIO
 # first, it generates a yield curve for a single scenario
 
 
-
-
-
 # vb notes parameters ----
-# CDbl converts to double
 
 
 

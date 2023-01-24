@@ -1,5 +1,5 @@
 
-fmod3 <- function(anorm){
+fmod3 <- function(anorm, correl13, const2, const3){
   # anorm is a 3-dimension array:
   # array dimensions are [ncurves=nyears x 12 curves, 3 rnorms, nsims]
   # return a vector of revised values for the third random number for a yield curve
@@ -13,7 +13,7 @@ fmod3 <- function(anorm){
     anorm[, 3, ] * const3
 }
 
-fmod2 <- function(anorm){
+fmod2 <- function(anorm, correl12, const1){
   # return a vector of revised values for the second random number for a yield curve
   # array dimensions are [ncurves=nyears x 12 curves, 3 rnorms, nsims]
   
@@ -79,8 +79,8 @@ intgen_rancorr <- function(nyears, nsims, params, seed=1234)
   #  values for the 1st and 2nd rnorm values
   #  then the 2nd rnorm values, using the new 3rd rnorm values (if they have been revised)
   #  although fmod2 does not currently use the 3rd rnorms as inputs
-  arnorm_cor[, 3, ] <- fmod3(arnorm_cor)
-  arnorm_cor[, 2, ] <- fmod2(arnorm_cor)
+  arnorm_cor[, 3, ] <- fmod3(arnorm_cor, correl13, const2, const3)
+  arnorm_cor[, 2, ] <- fmod2(arnorm_cor, correl12, const1)
   
   # return the correlated array
   arnorm_cor
