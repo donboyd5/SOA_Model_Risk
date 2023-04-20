@@ -1,0 +1,5 @@
+# Generating investment returns from fat-tailed probability distributions
+
+Probability distribution that can generate time-independent fat-tailed returns, such as the Student's t distribution,
+ 
+ 

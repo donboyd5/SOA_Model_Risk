@@ -1,0 +1,3 @@
+# Investment returns correlated over time
+
+A multivariate normal distribution with returns correlated over time, parameterized by mean, standard deviation, and a correlation matrix.

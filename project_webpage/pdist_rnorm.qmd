@@ -1,0 +1,3 @@
+# Random normal investment returns
+
+Simple time-independent random normal distribution portfolio-returns.
