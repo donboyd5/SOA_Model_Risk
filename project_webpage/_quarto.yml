@@ -42,6 +42,7 @@ book:
     - roadmap.qmd
     - part: "Investment returns"
       chapters:
+      - irfacts.qmd
       - pdist_intro.qmd
       - pdist_rnorm.qmd
       - pdist_fat_tails.qmd
@@ -52,7 +53,8 @@ book:
       - comp_intro.qmd
     - part: "Appendix"
       chapters:
-      - project_doc.qmd
+      - appdx_project_doc.qmd
+      - appdx_damodaran_data.qmd
     - bibliography.qmd      
     
 bibliography: _bibliography.bib

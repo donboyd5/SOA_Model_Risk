@@ -1,0 +1,176 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Investment return facts
+
+## Stylized facts
+
+TO COME.
+
+### Equities
+
+The following are stylized facts from: Economic Scenario Generator Work Group. \"Economic Scenario Generator (ESG) Stylized Facts for Equities.\" Presented at the National Association of Insurance Commissioners (NAIC) Life Actuarial (A) Task Force (LATF), September 29, 2022. <https://content.naic.org/sites/default/files/call_materials/ESGWG%20-%20Stylized%20Facts%20for%20Equity%20v2%2020220929%20final.pdf>.).
+
+1.  Equity indices (indeed, all asset classes) tend to exhibit consistent risk/reward relationships over long time horizons.
+
+2.  Cumulative equity returns tend to exceed the compounded risk-free rate (positive observed equity risk premium) over long time horizons, but over short time horizons, the observed equity risk premium fluctuates due to several factors and can be negative.
+
+3.  Equities fluctuate between bull and bear markets (bubbles tend to burst) --- markets can experience significant losses but eventually tend to move back into positive territory (negative cumulative equity returns become less likely over longer time horizons).
+
+4.  Cumulative equity returns over long time horizons are not materially impacted by initial market conditions.
+
+5.  The volatility of equity returns varies over time but has a strong tendency to quickly revert to normative levels. This allows for both extreme gains and extreme losses over short time periods (i.e., the distribution has fat tails, or positive kurtosis). Furthermore, the volatility of equity returns is higher in bear markets. This increases the probability of extreme losses relative to extreme gains (i.e., the distribution has a longer left tail, or negative skewness).
+
+6.  Equity markets contain pathwise dynamics over long time horizons that aren't present in the distribution of single-period returns. Future equity scenarios should have reasonable distributions of cumulative equity returns over long time horizons (e.g., 10, 20, 30 years), especially since these distributions are key to the performance of long-duration life and annuity products.
+
+7.  Future equity scenarios should include events that are plausibly more extreme than history.
+
+8.  Equity returns have both a price and dividend component, and they behave differently---dividend returns tend to be more stable than price returns.
+
+9.  Returns between different equity indices are generally positively correlated over long time horizons. This correlation may increase sharply in bear markets, but it tends to revert to normative levels in a short period of time.
+
+
+## Historical Returns on U.S. Stocks, Bonds and Bills: 1928-2022
+
+The following uses data compiled by Aswath Damodaran at New York University. See the documentation in the [Appendix](appdx_damodaran_data.qmd).
+
+```{r}
+#| label: includes
+#| include: false
+
+source(here::here("r", "libraries.r"))
+
+```
+
+
+```{r}
+#| label: ONETIME-download-data
+#| include: false
+#| eval: false
+
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/home.htm
+# https://www.stern.nyu.edu/faculty/bio/aswath-damodaran
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/data.html
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histretSP.html
+# https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls
+
+url <- "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
+dest <- here::here("data", fs::path_file(url))
+download.file(url, dest, mode="wb")
+
+
+```
+
+```{r}
+#| label: get-save-data
+#| include: false
+#| eval: false
+
+
+url <- "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
+fpath <- here::here("data", fs::path_file(url))
+
+df1 <- read_excel(fpath, sheet="Returns by year",
+                  range="A18:X113")
+glimpse(df1)
+
+dfnames <- tibble(vnum=1:length(names(df1)), vname=names(df1))
+dfnames
+
+df2 <- df1 |> 
+  select(year=`Year`,
+         sp500=2, 
+         tbill3=3,
+         ustbond=4,
+         baacorp=5,
+         realestate=6,
+         gold=7,
+         cpiu=18)
+
+# do some checks on the data to be sure they match what Damodaran has
+# here's what he report for 1928-2022 nominal average returns; cpiu calc'd by djb
+# for       sp500, tbill3, ustbond, baacorp, realestate, gold; cpiu
+# 1928-2022	11.51%  3.32%   4.87%   6.96%      4.42%    6.48%;  3.11%
+skim(df2) # good - the numbers match
+
+saveRDS(df2, here::here("data", "damodaran_data.rds"))
+
+
+```
+
+
+### Comparison to normality
+
+```{r}
+#| label: load-data
+#| include: false
+
+returns <- readRDS(here::here("data", "damodaran_data.rds"))
+retlong <- returns |> 
+  pivot_longer(-year)
+
+```
+
+
+#### Individual assets
+
+```{r}
+#| label: plot-normal
+#| include: true
+
+# get means and standard deviations for normal curve
+# musigma <- retlong |> 
+#   summarise(mu=mean(value), sigma=sd(value), .by=name)
+# 
+# retlong |> 
+#   ggplot(aes(x=value)) +
+#   geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
+#   stat_function(fun = dnorm, args = list(mean=mean(df$ir), sd=sd(df$ir)), col="black") +
+#   labs(x="investment return", y="density") +
+#   scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(df$ir)), labels = scales::label_percent(accuracy=.1),
+#                      limits=c(-.6, .6)) +
+#   ggtitle("Investment returns from the normal distribution",
+#           subtitle="With overlaid normal curve with same mean and standard deviation") +
+#   theme_bw()
+
+# normal_density <- retlong %>%
+#   group_by(name) %>%
+#   do(data.frame(value = seq(min(.$value), max(.$value), length.out = 1000),
+#                  density = dnorm(seq(min(.$value), max(.$value), length.out = 1000),
+#                                  mean(.$value), sd(.$value)),
+#                  name = unique(.$name))) %>%
+#   ungroup()
+
+# note that nobs must be greater than actual # of obs in each group
+nobs <- 1000
+normal_density <- retlong %>%
+  rename(invalue=value) |> 
+  reframe(value=seq(min(invalue), max(invalue), length.out=nobs),
+          density = dnorm(seq(min(invalue), max(invalue), length.out = nobs),
+                          mean(invalue), sd(invalue)),
+          .by=name)
+# normal_density
+
+
+# Create the faceted plot
+p <- retlong |> 
+  filter(!name %in% c("cpiu", "gold")) |> 
+  ggplot() +
+  geom_histogram(aes(x = value, y = after_stat(density)), binwidth = .01, fill = "lightblue", alpha = 0.7) +
+  geom_line(data = normal_density |> 
+  filter(!name %in% c("cpiu", "gold")), aes(x = value, y = density, group = name), color = "red", size = 1) +
+  facet_wrap(~ name, ncol = 2, scales="free") +
+  theme_minimal() +
+  labs(title = "Faceted Histograms with Normal Curve Overlay",
+       x = "Value",
+       y = "Density")
+
+p
+
+```
+
+
+

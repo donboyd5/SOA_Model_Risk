@@ -1,0 +1,95 @@
+---
+editor: 
+  markdown: 
+    wrap: sentence
+---
+
+# Documentation: Historical investment return data from Aswath Damodaran
+
+Here, with very light editing, is the documentation Aswath Damodaran provides for the stocks, bonds, and other investment returns data he provides on his [NYU web page](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/data.html).
+The data are in an [xls file](https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls) reachable from his [data page](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/data.html).
+The documentation is in the "Explanations and FAQ" tab of the xls file.
+
+We downloaded the file on April 21, 2023.
+
+------------------------------------------------------------------------
+
+## End Game
+
+My objective in this spreadsheet is to compute the annual returns you would have earned on major financial asset classes, on an annual basis, inclusive of both cash payout during the year and the price appreciation.
+
+## Explanations, by asset class
+
+### Stocks (Large Cap)
+
+I use the S&P 500, which was created in 1957, and then back fill the data using other indices of large market cap companies that existed prior.
+Each year, I compute the annual return, by first computing the dividend yield by dividing the dividends paid and the price change in the index, by the level of the index at the start of the year.
+Thus, if the index starts at 1000, and increases to 1080, while delivering a dividend of 5, my annual return = (1080-1000+5)/1000 = 8.5%
+
+### US T.Bond
+
+I use the 10-year US treasury bond, since it is the only longer maturity bond with an uninterrupted history going back in time.
+For the data, I use the yields on aconstant-maturity 10-year bond, which can be found on FRED (the Federal Reserve website).
+I convert the yield into a return, by repricing the bond, issued at par at the prior year's yield, with the new yield, while keeping the maturity constant at 10 years.
+Thus, if the yield goes from 2.5% to 3%, I first price a 2.5%, 10 year coupon bond with a 3% interest rate, and subtract this number from the par value of the bond which is \$1000.
+That gives me the price change.
+Adding the 3% coupon for the current year gives me the total return.
+
+### US T.Bill
+
+I use the 3-month US treasury bill, again choosing it over the 6-month because of longevity.
+While I used to report the end of the year number as the return on the T.Bill for the year, I have replaced that with the average T.Bill rate over the year, since that is a better representation.
+
+### Aaa & Baa Corporate Bond
+
+I obtain the yield on a Moody's Aaa and Baa corporate bond yields from FRED and then compute the return on the bond, using the same approach that I use for the US T.Bond.
+
+### Real Estate
+
+I use the home price data that Robert Shiller reports on his webpage to compute a real estate return on residential real estate.
+That series has now morphed into the Case-Shiller Index.
+
+### Gold
+
+Year-end prices for gold, per oz,
+
+### Inflation Rate
+
+I use the CPI for all urban consumers, reported on FRED.
+
+### Real Returns
+
+For each of the data series.
+I compute a real return by removing the inflation for the year from the nominal return, using (1+ Nominal Rate)/ (1+Inflation Rate) -1.
+
+### Arithmetic Average Return
+
+A simple average of the annual returns over the specified period (10 yrs, 50 yrs, etc.)
+
+### Geometric Average Return
+
+A compounded average of the returns over the period.
+This is most simply computed by dividing the value you would have at the end of the period by the value at the beginning and then computing the compounded average.
+To compute the cumulated value on both stocks and bonds, I assume that dividends/coupons get reinvested back.
+
+### Risk Premium
+
+The risk premium is the difference in the annualized return on stocks and the annualized return on T.Bonds and on T.Bills over the specified period.
+
+## FAQ
+
+### How precise are the annual numbers?
+
+Since the S&P and US treasuries are liquid and the underlying data is widely dispersed, the annual numbers are reliable.
+
+### How good are the averages as predictors?
+
+The returns, especially on stocks and bonds, are noisy, with up years and down years.
+The averages that have been computed come with error, and I have computed standard errors in each of the numbers (especially the risk premiums).
+Note that even with the longest data series, there is substantial standard error and it becomes explosively large for shorter periods.
+
+### Why do you keep the maturity of the 10-year bond unchanged, when you compute the return on the bond?
+
+Normally, when you buy a 10-year bond and hold it for a year, you will end up with a 9-year bond.
+While I could compute the return using a 9-year maturity, and the answer will be fairly close to what I report, I want to keep the 10-year maturity going for consistency in my risk premium computation.
+Put simply, think of the return on the 10-year bond as the one you would have if the coupon changed, but the maturity is reset to 10 years at the end of the year.

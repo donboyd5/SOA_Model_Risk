@@ -1,0 +1,16 @@
+{
+  "hash": "de2d8808221cda9a133d0ac7793fab69",
+  "result": {
+    "markdown": "---\noutput: html_document\neditor_options: \n  chunk_output_type: console\n---\n\n# Random normal investment returns\n\nSimple time-independent random normal distribution portfolio-returns.\n\n\n\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](pdist_rnorm_files/figure-html/hist-1.png){width=672}\n:::\n:::\n",
+    "supporting": [
+      "pdist_rnorm_files"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

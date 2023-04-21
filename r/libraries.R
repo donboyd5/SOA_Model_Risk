@@ -3,6 +3,7 @@ library(rlang)
 library(tidyverse)
 tprint <- 75  # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
+library(skimr)
 library(pryr)
 library(fs)
 

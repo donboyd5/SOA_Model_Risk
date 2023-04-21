@@ -1,0 +1,16 @@
+{
+  "hash": "d90fa4dec0cda46630717dadf6de8c60",
+  "result": {
+    "markdown": "---\noutput: html_document\neditor_options: \n  chunk_output_type: console\n---\n\n# Generating investment returns from fat-tailed probability distributions\n\nProbability distribution that can generate time-independent fat-tailed returns, such as the Student's t distribution,\n \n \n\n\n\n\n\n::: {.cell}\n::: {.cell-output-display}\n![](pdist_fat_tails_files/figure-html/hist-1.png){width=672}\n:::\n:::\n",
+    "supporting": [
+      "pdist_fat_tails_files"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

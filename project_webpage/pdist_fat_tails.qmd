@@ -1,5 +1,67 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 # Generating investment returns from fat-tailed probability distributions
 
 Probability distribution that can generate time-independent fat-tailed returns, such as the Student's t distribution,
+ 
+ 
+```{r}
+#| label: includes
+#| include: false
+source(here::here("r", "libraries.r"))
+
+```
+
+
+
+```{r}
+#| label: data
+#| include: false
+
+nyears <- 50
+nsims <- 1000
+
+ir.mean <- .07
+ir.sd <- .10
+dfreedom <- 5 # new parameter for the t distribution
+
+t_random <- rt(nyears * nsims, dfreedom)
+
+# Scale and shift the random numbers to the desired mean and standard deviation
+# ir <- rnorm(nyears * nsims, mean = ir.mean, sd=ir.sd)
+ir <- ir.mean + ir.sd * t_random
+
+stubs <- crossing(year=1:nyears, sim=1:nsims)
+
+df <- stubs |> 
+  mutate(ir=ir)
+glimpse(df)
+skim(df)
+
+```
+
+
+```{r}
+#| label: hist
+#| include: true
+
+#create histogram and overlay normal curve
+df |> 
+  ggplot(aes(x=ir)) +
+  geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
+  stat_function(fun = dnorm, args = list(mean=mean(df$ir), sd=sd(df$ir)), col="black") +
+  labs(x="investment return", y="density") +
+  scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(df$ir)), labels = scales::label_percent(accuracy=.1),
+                     limits=c(-.6, .6)) +
+  ggtitle("Investment returns from the t distribution",
+          subtitle="With overlaid normal curve with same mean and standard deviation") +
+  theme_bw()
+
+```
+
+
  
  
