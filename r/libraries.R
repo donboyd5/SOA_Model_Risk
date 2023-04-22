@@ -34,3 +34,11 @@ library(patchwork)
 library(gridExtra)
 library(ggrepel)
 library(ggbreak)
+library(GGally)
+
+# tables
+library(knitr)
+library(kableExtra)
+library(DT)
+library(gt)
+library(janitor)
