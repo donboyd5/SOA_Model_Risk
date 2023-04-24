@@ -1,0 +1,31 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Stylized facts for investment returns
+
+
+## Equities
+
+The following are stylized facts from: Economic Scenario Generator Work Group. "Economic Scenario Generator (ESG) Stylized Facts for Equities." Presented at the National Association of Insurance Commissioners (NAIC) Life Actuarial (A) Task Force (LATF), September 29, 2022. <https://content.naic.org/sites/default/files/call_materials/ESGWG%20-%20Stylized%20Facts%20for%20Equity%20v2%2020220929%20final.pdf>.).
+
+1.  Equity indices (indeed, all asset classes) tend to exhibit consistent risk/reward relationships over long time horizons.
+
+2.  Cumulative equity returns tend to exceed the compounded risk-free rate (positive observed equity risk premium) over long time horizons, but over short time horizons, the observed equity risk premium fluctuates due to several factors and can be negative.
+
+3.  Equities fluctuate between bull and bear markets (bubbles tend to burst) --- markets can experience significant losses but eventually tend to move back into positive territory (negative cumulative equity returns become less likely over longer time horizons).
+
+4.  Cumulative equity returns over long time horizons are not materially impacted by initial market conditions.
+
+5.  The volatility of equity returns varies over time but has a strong tendency to quickly revert to normative levels. This allows for both extreme gains and extreme losses over short time periods (i.e., the distribution has fat tails, or positive kurtosis). Furthermore, the volatility of equity returns is higher in bear markets. This increases the probability of extreme losses relative to extreme gains (i.e., the distribution has a longer left tail, or negative skewness).
+
+6.  Equity markets contain pathwise dynamics over long time horizons that aren't present in the distribution of single-period returns. Future equity scenarios should have reasonable distributions of cumulative equity returns over long time horizons (e.g., 10, 20, 30 years), especially since these distributions are key to the performance of long-duration life and annuity products.
+
+7.  Future equity scenarios should include events that are plausibly more extreme than history.
+
+8.  Equity returns have both a price and dividend component, and they behave differently---dividend returns tend to be more stable than price returns.
+
+9.  Returns between different equity indices are generally positively correlated over long time horizons. This correlation may increase sharply in bear markets, but it tends to revert to normative levels in a short period of time.
+

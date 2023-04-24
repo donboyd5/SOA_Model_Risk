@@ -1,0 +1,21 @@
+# Measures to describe investment returns
+
+We use the following measures to describe the characteristics of investment returns.
+
+## Measures to describe a single time period (or for all time periods taken together)
+
+**Mean**: We use the arithmetic mean of returns unless stated otherwise.
+
+**Standard Deviation**: We use the sample standard deviation as our standard measure of volatility.
+
+**Skewness**: We use skewness to measure the asymmetry of the return distribution. Positive skewness indicates a longer tail on the right, and negative skewness a longer tail on the left. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version.)
+
+**Excess Kurtosis**: Excess kurtosis measures the "fat-tailedness" of the return distribution, relative to the normal distribution. Positive values indicate heavier tails and a higher likelihood of extreme returns compared to a normal distribution. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version.)
+
+## Measures to describe behavior of investment returns over time
+
+TO COME.
+
+## Measures to describe correlation of investment returns across asset classes
+
+TO COME.

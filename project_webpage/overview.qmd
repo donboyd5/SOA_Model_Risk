@@ -1,0 +1,19 @@
+# Project Overview {.unnumbered}
+
+For the full project document, see the [Appendix](appdx_project_doc.qmd#Project%20document) or this [pdf](https://drive.google.com/file/d/1iAtAQtC2Yn1l8U4jAOOuDGeIAET0K8_g/view?usp=sharing).
+
+## Goals
+
+-   Prepare a report that will help pension fund practitioners understand the risks associated with models used for pension fund investment and funding decision-making.
+
+-   Focus primarily on risks related to stochastic economic scenario generators (ESGs) used as inputs to pension investment and funding models.
+
+-   Key question: to what extent can ESG model structure or parameters lead to meaningful alternative conclusions about pension-related risks?
+
+-   Provide advice to pension fund practitioners on questions to ask about ESG and pension models they use to evaluate pension risks.\
+
+
+This web page tracks our development and analysis of investment returns under alternative approaches and their impact on pension outcomes using a simple pension model.
+
+The project report will be a separate document that addresses full project goals and will incorporate key results from this web page.
+

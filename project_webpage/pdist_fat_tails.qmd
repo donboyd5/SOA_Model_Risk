@@ -1,17 +1,34 @@
 ---
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 # Generating investment returns from fat-tailed probability distributions
 
-Probability distribution that can generate time-independent fat-tailed returns, such as the Student's t distribution,
+One probability distribution that can generate time-independent fat-tailed returns is the Student's t distribution.
  
  
 ```{r}
 #| label: includes
 #| include: false
+
 source(here::here("r", "libraries.r"))
+source(here::here("r", "libraries_ts.r"))
+source(here::here("r", "constants.r"))
+source(here::here("r", "functions.r"))
+
+```
+
+
+The t distribution has a degrees-of-freedom parameter that controls the "fat-tailedness" of the distribution.
+
+[To come: discussion of how to parameterize the t distribution and calibrate its mean and standard deviation so that we can compare to otherwise-similar normal distribution.]
+
+
+```{r}
+#| label: kurtosis
+#| include: false
+
 
 ```
 
@@ -21,18 +38,119 @@ source(here::here("r", "libraries.r"))
 #| label: data
 #| include: false
 
+set.seed(constants$seed)
+#set.seed(1234)
+
 nyears <- 50
 nsims <- 1000
 
-ir.mean <- .07
-ir.sd <- .10
-dfreedom <- 5 # new parameter for the t distribution
+ir_mean_target <- constants$ir_mean_target
+ir_sd_target <- constants$ir_sd_target
 
-t_random <- rt(nyears * nsims, dfreedom)
+# ir_mean_target <- .07
+# ir_sd_target <- .10
+
+# t_random <- rt(nyears * nsims, dfreedom)
+
+set.seed(1234)
+ir_mean_target <- .07
+ir_sd_target <- .10
+dfreedom <- 3
+
+trandom <- rt(nyears * nsims, dfreedom)
+mean(trandom)
+sd(trandom)
+kurt <- kurtosis(trandom)
+excess_kurt <- kurt - 3
+excess_kurt
 
 # Scale and shift the random numbers to the desired mean and standard deviation
-# ir <- rnorm(nyears * nsims, mean = ir.mean, sd=ir.sd)
-ir <- ir.mean + ir.sd * t_random
+sdadjust <- ir_sd_target / sd(trandom)
+muadjust <- (ir_mean_target - sdadjust * mean(trandom)) / sdadjust
+
+ir <- (trandom + muadjust) * sdadjust
+# mean(ir)
+# sd(ir)
+# irkurt <- kurtosis(ir)
+# irexcess <- irkurt - 3
+# irexcess
+# 
+# # Run the ks.test comparing the standardized values with the t-distribution
+# standardized_ir <- (ir - mean(ir)) / sd(ir)
+# ks_result <- ks.test(standardized_ir, "pt", dfreedom)
+# 
+# # Show the test results
+# cat("Kolmogorov-Smirnov test statistic:", ks_result$statistic, "\n")
+# cat("p-value:", ks_result$p.value, "\n")
+# # If the p-value is greater than a chosen significance level (e.g., 0.05), you can conclude that the adjusted values are not significantly different from the t-distribution. 
+# 
+# 
+# ir <- ir_mean_target + ir_sd_target * t_random
+# 
+# ir <- ir_mean_target + ir_sd_target * t_random
+# mean(ir) # 0.07024717
+# sd(ir) # 0.120183
+# 
+# 
+# ir <- ir_mean_target*.998 + ir_sd_target * t_random * .775
+# 
+# 
+# set.seed(1234)
+# 
+# ir_mean_target <- 0.07
+# ir_sd_target <- 0.10
+# max_iter <- 1000
+# best_diff <- Inf
+# best_df <- -1
+# best_ir <- NULL
+# 
+# # Search for the best degrees of freedom
+# for (i in 1:max_iter) {
+#   dfreedom <- i
+#   t_random <- rt(nyears * nsims, dfreedom)
+#   ir <- ir_mean_target + ir_sd_target * t_random
+#   cur_mean <- mean(ir)
+#   cur_sd <- sd(ir)
+#   
+#   # Calculate the total difference between current and target values
+#   diff <- abs(cur_mean - ir_mean_target) + abs(cur_sd - ir_sd_target)
+#   
+#   if (diff < best_diff) {
+#     best_diff <- diff
+#     best_df <- dfreedom
+#     best_ir <- ir
+#     best_t <- t_random
+#     
+#     # Break the loop if the difference is small enough
+#     if (best_diff < 1e-6) {
+#       break
+#     }
+#   }
+# }
+# 
+# # Adjust the scale and shift factors
+# actual_mean <- mean(best_ir)
+# actual_sd <- sd(best_ir)
+# sd_adjustment <- ir_sd_target / actual_sd
+# adjusted_ir <- (best_ir - actual_mean) * sd_adjustment + ir_mean_target
+# 
+# mean(adjusted_ir)
+# sd(adjusted_ir)
+# 
+# 
+# standardized_ir <- (adjusted_ir - mean(adjusted_ir)) / sd(adjusted_ir)
+# 
+# # Run the ks.test comparing the standardized values with the t-distribution
+# ks_result <- ks.test(standardized_ir, "pt", best_df)
+# 
+# # Show the test results
+# cat("Kolmogorov-Smirnov test statistic:", ks_result$statistic, "\n")
+# cat("p-value:", ks_result$p.value, "\n")
+# # If the p-value is greater than a chosen significance level (e.g., 0.05), you can conclude that the adjusted values are not significantly different from the t-distribution. 
+# 
+# t_adj <- (best_t - mean(best_t)) / sd(best_t)
+# tks <- ks.test(t_adj, "pt", best_df)
+# tks$p.value
 
 stubs <- crossing(year=1:nyears, sim=1:nsims)
 
@@ -48,17 +166,24 @@ skim(df)
 #| label: hist
 #| include: true
 
+title1 <- paste0("Investment returns drawn from the t distribution, calibrated to: mean ",
+                 f_pct(mean(ir), accuracy=.1),
+                 " and standard deviation ",
+                 f_pct(sd(ir), accuracy=.1))
+
 #create histogram and overlay normal curve
-df |> 
+p <- df |> 
   ggplot(aes(x=ir)) +
   geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
   stat_function(fun = dnorm, args = list(mean=mean(df$ir), sd=sd(df$ir)), col="black") +
+  geom_vline(xintercept = mean(ir)) +
   labs(x="investment return", y="density") +
   scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(df$ir)), labels = scales::label_percent(accuracy=.1),
                      limits=c(-.6, .6)) +
-  ggtitle("Investment returns from the t distribution",
-          subtitle="With overlaid normal curve with same mean and standard deviation") +
+  ggtitle(title1,
+          subtitle="Overlaid normal curve has same mean and standard deviation") +
   theme_bw()
+p
 
 ```
 

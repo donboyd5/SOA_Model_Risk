@@ -7,6 +7,10 @@ library(skimr)
 library(pryr)
 library(fs)
 
+# probability and statistics
+library(stats)
+library(moments)
+
 # fast random number generators
 library(dqrng)
 library(RcppZiggurat)

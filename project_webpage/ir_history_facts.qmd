@@ -1,0 +1,535 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Historical facts for investment returns
+
+```{r}
+#| label: includes
+#| include: false
+
+source(here::here("r", "libraries.r"))
+source(here::here("r", "libraries_ts.r"))
+source(here::here("r", "constants.r"))
+source(here::here("r", "functions.r"))
+
+```
+
+## Characteristics of selected U.S. assets: 1928-2022
+
+Now we examine characteristics of returns from six U.S. asset classes using data compiled by Aswath Damodaran at New York University. For details, see the documentation in the [Appendix](appdx_damodaran_data.qmd). The asset classes are:
+
+-   baacorp - Moody's Aaa and Baa corporate bonds, average
+
+-   cpiu - Consumer Price Index, all urban consumers
+
+-   gold - year-end price
+
+-   realestate - residential, similar to Case-Schiller index
+
+-   sp500 - S&P 500 index total return (including dividends)
+
+-   tbill3 - 3-month Treasury bill, average rate for the year
+
+-   ustbond - 10-year constant maturity Treasury bond
+
+```{r}
+#| label: ONETIME-download-data
+#| include: false
+#| eval: false
+
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/home.htm
+# https://www.stern.nyu.edu/faculty/bio/aswath-damodaran
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/data.html
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histretSP.html
+# https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls
+
+url <- "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
+dest <- here::here("data", fs::path_file(url))
+download.file(url, dest, mode="wb")
+
+```
+
+```{r}
+#| label: get-save-data
+#| include: false
+#| eval: false
+
+
+url <- "https://www.stern.nyu.edu/~adamodar/pc/datasets/histretSP.xls"
+fpath <- here::here("data", fs::path_file(url))
+
+df1 <- read_excel(fpath, sheet="Returns by year",
+                  range="A18:X113")
+glimpse(df1)
+
+dfnames <- tibble(vnum=1:length(names(df1)), vname=names(df1))
+dfnames
+
+df2 <- df1 |> 
+  select(year=`Year`,
+         sp500=2, 
+         tbill3=3,
+         ustbond=4,
+         baacorp=5,
+         realestate=6,
+         gold=7,
+         cpiu=18)
+
+# do some checks on the data to be sure they match what Damodaran has
+# here's what he report for 1928-2022 nominal average returns; cpiu calc'd by djb
+# for       sp500, tbill3, ustbond, baacorp, realestate, gold; cpiu
+# 1928-2022	11.51%  3.32%   4.87%   6.96%      4.42%    6.48%;  3.11%
+skim(df2) # good - the numbers match
+
+saveRDS(df2, here::here("data", "damodaran_data.rds"))
+
+
+```
+
+```{r}
+#| label: load-data
+#| include: false
+
+returns <- readRDS(here::here("data", "damodaran_data.rds"))
+retlong <- returns |> 
+  pivot_longer(-year)
+
+# get min, max, mean, sd, kurt for normal curve and other purposes
+measures <- retlong |>
+  summarise(uvmeasures(value),
+            .by=name) |> 
+  arrange(name)
+
+
+```
+
+Here are selected summary statistics for the asset classes.
+
+**Skewness**: A measure of symmetry -- the more positive the skewness statistic, the more the distribution is positively skewed and the tail is longer on the right side. The more negative the statistic, the longer the tail is to the left.
+
+**Excess kurtosis**: A measure of fat-tailedness relative to the normal distribution. The more positive it is, the more fat-tailed it is than the normal distribution.
+
+```{r}
+#| label: sumstats
+#| include: true
+
+measures |> 
+  gt() |> 
+   tab_header(
+    title = html("Summary measures for selected U.S. asset classes, 1928-2022"),
+    subtitle=html("Based on annual returns")
+  ) |>
+  cols_label(name=html("Asset class"),
+             skew = html("Skewness"),
+             xkurt = html("Excess kurtosis")) |>
+  fmt_number(columns=c(skew, xkurt),
+             decimals=3) |> 
+  fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
+  tab_source_note(source_note="Source: Aswath Damodaran, New York University")
+
+```
+
+### Plot each series
+
+```{r}
+#| label: plot
+#| include: true
+
+p <- retlong |> 
+  filter(!name %in% c("cpiu", "gold")) |> 
+  ggplot(aes(year, value)) +
+  geom_line(colour="blue") +
+  geom_hline(yintercept = 0) +
+  geom_hline(aes(yintercept=mean), data=measures |> filter(!name %in% c("cpiu", "gold")),
+             colour="red") +
+  scale_y_continuous(name="% return",
+                     breaks=seq(-1, 1, .1),
+                     labels = label_percent(accuracy=1)) +
+  scale_x_continuous(name=NULL) +
+  facet_wrap(~name, ncol=3) +
+  theme_bw() +
+  ggtitle("Annual investment returns",
+          subtitle="Red horizontal line gives mean return")
+
+p
+
+```
+
+### Comparison to normality
+
+#### Individual assets
+
+```{r}
+#| label: plot-normal
+#| include: true
+
+nobs <- 1000
+normal_density <- measures %>%
+  reframe(value=seq(min, max, length.out=nobs),
+          density = dnorm(seq(min, max, length.out = nobs),
+                          mean, sd),
+          .by=name)
+
+# Create the faceted plot
+p <- retlong |> 
+  filter(!name %in% c("cpiu", "gold")) |> 
+  ggplot() +
+  geom_histogram(aes(x = value, y = after_stat(density)), binwidth = .01, fill = "lightblue", alpha = 0.7) +
+  facet_wrap(~ name, ncol = 2, scales="free") +
+  geom_line(aes(x = value, y = density, group = name), color = "red", linewidth = 1,
+            data = normal_density |> filter(!name %in% c("cpiu", "gold"))) +
+  geom_vline(aes(xintercept=mean), data=measures |> filter(!name %in% c("cpiu", "gold"))) +
+  scale_x_continuous(labels=label_percent(accuracy=1)) +
+  theme_bw() +
+  labs(title="Annual investment returns",
+       subtitle = "Histograms with normal curve overlay",
+       x = "% return",
+       y = "density")
+
+p
+
+```
+
+## Auto correlation over time
+
+```{r}
+#| label: plot-acf
+#| eval: true
+#| include: true
+
+# Convert to tsibble
+data_tsibble <- retlong |> 
+  filter(!name %in% c("cpiu", "gold")) |> 
+  as_tsibble(index = year, key = name)
+
+data_tsibble |> 
+  ACF(value, lag_max=10) |> 
+  ggplot(aes(x=lag, y=acf)) +
+  geom_point() +
+  geom_line()  +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept=c(-.2, .2), linetype="dashed") +
+  facet_wrap(~ name, ncol = 2) +
+  theme_bw() +
+  ggtitle("Autocorrelation plots of investment returns")
+
+```
+
+## Correlation across asset classes
+
+How to read a correlation plot:
+
+-   Diagonal shows a kernel density curve for each asset class (similar to a normal curve for normally distributed data, but for the actual data for a given investment class).
+
+-   Upper triangle shows correlation coefficent between two asset classes.
+
+-   Lower triangle shows scatterplot for 2 asset classes. To find the scatterplot associated with a given correlation coefficient, look along the southwest diagonal from the correlation, counting the same number of boxes on the lower side of the diagonal as it is on the upper side.
+
+```{r}
+#| label: plot-corr
+#| eval: false
+#| include: false
+
+# in interest of speed, set eval to false -- calc in advance and save plot
+
+
+# returns
+# cor(returns)
+
+# library(GGally)
+
+p <- returns |> 
+  select(-year) |> 
+  ggpairs(title="Correlation plot")
+
+ggpsave <- function(plot, fpath, pointsize=5, res=72) {
+  png(fpath, height=1000, width=1000, units="px", pointsize=pointsize, res=res)
+  print(plot)
+  dev.off()
+}
+
+fpath <- here::here("project_webpage", "history_corrplot.png")
+ggpsave(p, fpath, pointsize=10, res=100)
+
+```
+
+![](history_corrplot.png)
+
+## Portfolios
+
+I've constructed 3 stocks-bonds portfolios (sp500-baacorp): 75-25, 50-50, and 25-75.
+
+```{r}
+#| label: portfolios
+#| eval: true
+#| include: false
+
+portfolios <- returns |> 
+  mutate(stock75bond25= .75 * sp500 + .25 * baacorp,
+         stock50bond50= .5 * sp500 + .5 * baacorp,
+         stock25bond75= .25 * sp500 + .75 * baacorp) |> 
+  pivot_longer(-year)
+  
+portmeas <- portfolios |>
+  summarise(uvmeasures(value),
+            .by=name)
+
+portmeas |> 
+  gt() |> 
+   tab_header(
+    title = html("Summary measures for selected U.S. asset classes and portfolios, 1928-2022"),
+    subtitle=html("Based on annual returns")
+  ) |>
+  cols_label(name=html("Asset class"),
+             skew = html("Skewness"),
+             xkurt = html("Excess kurtosis")) |>
+  fmt_number(columns=c(skew, xkurt),
+             decimals=3) |> 
+  fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
+  tab_source_note(source_note="Source: Aswath Damodaran, New York University")
+
+
+```
+
+## Impact of data frequency on summary measures of investment returns
+
+```{r}
+#| label: apple
+#| eval: false
+#| include: false
+
+aapl  <- tq_get("AAPL", get = "stock.prices", from = " 1990-01-01")
+
+
+tmp <- aapl |> 
+  mutate(days=date - lag(date),
+         days2=as.integer(days))
+count(tmp, days)
+count(tmp, days2)  
+
+aapl2 <- aapl |> 
+  arrange(date) |> 
+  mutate(days=as.integer(date - lag(date))) |> 
+  filter(days==1) |> 
+  mutate(name="aapl", value=adjusted / lag(adjusted) - 1) |> 
+  filter(row_number() > 1)
+
+aaplmeas <- aapl2 |> 
+  summarise(uvmeasures(value), .by=name)
+
+nobs <- 1000
+normal_density <- aaplmeas %>%
+  reframe(value=seq(min, max, length.out=nobs),
+          density = dnorm(seq(min, max, length.out = nobs),
+                          mean, sd),
+          .by=name)
+
+# Create the faceted plot
+p <- aapl2 |> 
+  ggplot() +
+  geom_histogram(aes(x = value, y = after_stat(density)), binwidth = .01, fill = "lightblue", alpha = 0.7) +
+  geom_line(aes(x = value, y = density, group = name), color = "red", linewidth = 1,
+            data = normal_density |> filter(!name %in% c("cpiu", "gold"))) +
+  geom_vline(aes(xintercept=mean), data=aaplmeas) +
+  scale_x_continuous(labels=label_percent(accuracy=1)) +
+  theme_bw() +
+  labs(title="Annual investment returns",
+       subtitle = "Histograms with normal curve overlay",
+       x = "% return",
+       y = "density")
+
+p
+
+```
+
+
+```{r}
+#| label: ONETIME-stock-prices-data
+#| eval: false
+#| include: false
+
+sp500  <- tq_get("^GSPC", get = "stock.prices", from = " 1900-01-01") # , from = " 1990-01-01"
+skim(sp500)
+
+# tq_index("SP500")
+
+
+sp500b <- sp500 |> 
+  arrange(date) |> 
+  mutate(days=as.integer(date - lag(date))) |> 
+  mutate(name="sp500", return=(adjusted / lag(adjusted) - 1) / days)
+
+saveRDS(sp500b, here::here("data", "sp500_daily_yahoofinance.rds"))
+
+
+```
+
+
+This section examines how data frequency affects key measures of interest. The data are based on daily closing values for the S&P 500 adjusted for splits and dividends, from Yahoo Finance. We've drawn data for 1928 through 2022. We report results below for 1950 through 2022.
+
+```{r}
+#| label: stock-prices
+#| eval: true
+#| include: false
+
+# https://rpubs.com/juliakresky/955405
+
+tq_transmute_fun_options()
+
+# $quantmod "annualReturn" daily, weekly, monthly, quarterly, annual
+# $PerformanceAnalytics "Return.annualized" 
+
+sp500 <- readRDS(here::here("data", "sp500_daily_yahoofinance.rds")) |> 
+  # filter(days==1) |> 
+  filter(year(date) %in% 1928:2022) #|>   filter(year(date) >= 1960)
+
+sp500meas <- sp500 |> 
+  summarise(uvmeasures(return), .by=name)
+
+data <- sp500 |> 
+  filter(year(date) >= 1950)
+
+daily <- data %>%
+    group_by(symbol) %>%
+    tq_transmute(select     = adjusted, 
+                 mutate_fun = periodReturn, 
+                 period     = "daily", 
+                 type       = "arithmetic")
+
+weekly <- data %>%
+    group_by(symbol) %>%
+    tq_transmute(select     = adjusted, 
+                 mutate_fun = periodReturn, 
+                 period     = "weekly", 
+                 type       = "arithmetic")
+
+monthly <- data %>%
+    group_by(symbol) %>%
+    tq_transmute(select     = adjusted, 
+                 mutate_fun = periodReturn, 
+                 period     = "monthly", 
+                 type       = "arithmetic")
+
+annual <- data %>%
+    group_by(symbol) %>%
+    tq_transmute(select     = adjusted, 
+                 mutate_fun = periodReturn, 
+                 period     = "yearly", 
+                 type       = "arithmetic")
+
+
+stack <- bind_rows(
+  daily |> mutate(freq="daily", length=252) |> rename(value=3),
+  weekly |> mutate(freq="weekly", length=52) |> rename(value=3),
+  monthly |> mutate(freq="monthly", length=12) |> rename(value=3),
+  annual |> mutate(freq="annual", length=1) |> rename(value=3)
+  ) |> ungroup()
+
+skim(stack)
+
+
+stackmeas <- stack |> 
+  # filter(date >= "1982-09-01", date <= "2020-01-01") |> JF Begin time period
+  summarise(length=first(length), uvmeasures(value), .by=c(symbol, freq)) |> 
+  mutate(annret=(1 + mean)^length - 1,
+         sdret=sd / mean) |> 
+  arrange(symbol, desc(length))
+stackmeas
+
+portmeas
+
+```
+
+
+Note that:
+
+-   Volatility falls as we move from daily to annual frequency (the ratio of the standard deviation to the mean return falls)
+
+-   Skewness seems little affected by the data frequency
+
+-   Excess kurtosis declines dramatically as we move from daily to annual frequency, and is approximately normal (i.e., close to zero) at annual frequency
+
+
+```{r}
+#| label: stock-prices-table
+#| eval: true
+#| include: true
+
+stackmeas |> 
+  select(freq, n:sdret) |> 
+  gt() |> 
+   tab_header(
+    title = html("Summary measures for S&P 500 total return at different frequencies, 1950-2022"),
+    subtitle=html("Based on daily closing values, adjusted for splits and dividends")
+  ) |>
+  tab_spanner(columns = min:xkurt,
+              label=html("Units based on period returns (daily, weekly, monthly, annual)")) |>
+  cols_label(freq=html("Frequency"),
+             min=html("Minimum return"),
+             max=html("Maximum return"),
+             mean=html("Mean rerturn"),
+             sd=html("Standard deviation of return"),
+             skew = html("Skewness"),
+             xkurt = html("Excess kurtosis"),
+             annret = html("Annualized return"),
+             sdret=html("Ratio of standard deviation to mean return")) |>
+  fmt_number(columns=c(skew, xkurt, sdret),
+             decimals=2) |> 
+  fmt_number(columns=c(n),
+             decimals=0) |> 
+  fmt_percent(columns=c(min, max, mean, sd, annret), decimals=1)|>
+  tab_source_note(source_note="Source: Yahoo Finance")
+
+```
+
+
+
+
+## Notes from research
+
+"we find heteroscedasticity, negative skewness (−1.02) and large positive excess kurtosis (3.63) for the monthly S&P 500 returns" ("our data begin in September 1982 and finish in January 2020") @beginComplexEconomicScenario2021
+
+The table below gives measures for our S&P 500 data over the same time period. While the skewness and excess kurtosis values are similar, they are not the same. However, the Begin paper appears to construct separate values for S&P 500 dividends and prices (unadjusted for dividends), whereas our data are adjusted for dividends. We suspect that explains the difference.
+
+
+```{r}
+#| label: stock-prices-jfbegin
+#| eval: true
+#| include: true
+
+stack |> 
+  filter(date >= "1982-09-01", date <= "2020-01-01") |> # JF Begin time period
+  summarise(length=first(length), uvmeasures(value), .by=c(symbol, freq)) |> 
+  mutate(annret=(1 + mean)^length - 1,
+         sdret=sd / mean) |> 
+  arrange(symbol, desc(length)) |> 
+  select(freq, n:sdret) |> 
+  gt() |> 
+   tab_header(
+    title = html("Summary measures for S&P 500 total return at different frequencies, Sept 1982 - Jan 2020"),
+    subtitle=html("Based on daily closing values, adjusted for splits and dividends")
+  ) |>
+  tab_spanner(columns = min:xkurt,
+              label=html("Units based on period returns (daily, weekly, monthly, annual)")) |>
+  cols_label(freq=html("Frequency"),
+             min=html("Minimum return"),
+             max=html("Maximum return"),
+             mean=html("Mean rerturn"),
+             sd=html("Standard deviation of return"),
+             skew = html("Skewness"),
+             xkurt = html("Excess kurtosis"),
+             annret = html("Annualized return"),
+             sdret=html("Ratio of standard deviation to mean return")) |>
+  fmt_number(columns=c(skew, xkurt, sdret),
+             decimals=2) |> 
+  fmt_number(columns=c(n),
+             decimals=0) |> 
+  fmt_percent(columns=c(min, max, mean, sd, annret), decimals=1)|>
+  tab_source_note(source_note="Source: Yahoo Finance")
+  
+```
+
+

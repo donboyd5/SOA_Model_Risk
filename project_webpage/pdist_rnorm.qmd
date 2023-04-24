@@ -10,23 +10,40 @@ Simple time-independent random normal distribution portfolio-returns.
 ```{r}
 #| label: includes
 #| include: false
+
 source(here::here("r", "libraries.r"))
+source(here::here("r", "libraries_ts.r"))
+source(here::here("r", "constants.r"))
+source(here::here("r", "functions.r"))
 
 ```
-
 
 
 ```{r}
 #| label: data
 #| include: false
 
+set.seed(constants$seed)
+#set.seed(1234)
+
 nyears <- 50
 nsims <- 1000
 
-ir.mean <- .07
-ir.sd <- .10
+ir_mean_target <- constants$ir_mean_target
+ir_sd_target <- constants$ir_sd_target
 
-ir <- rnorm(nyears * nsims, mean = ir.mean, sd=ir.sd)
+# ir_mean_target <- .07
+# ir_sd_target <- .10
+
+
+ir_actual <- rnorm(nyears * nsims, mean = ir_mean_target, sd=ir_sd_target)
+
+# adjust the values to have the EXACT mean and sd we want
+ir <- ir_mean_target + (ir_actual - mean(ir_actual)) * ir_sd_target / sd(ir_actual)
+saveRDS(ir, here::here("data", "ir_norm.rds"))
+
+mean(ir_actual); mean(ir)
+sd(ir_actual); sd(ir)
 
 stubs <- crossing(year=1:nyears, sim=1:nsims)
 
@@ -44,15 +61,21 @@ skim(df)
 #| include: true
 
 #create histogram and overlay normal curve
+title1 <- paste0("Investment returns drawn from the normal distribution, calibrated to: mean ",
+                 f_pct(mean(ir), accuracy=.1),
+                 " and standard deviation ",
+                 f_pct(sd(ir), accuracy=.1))
+
 df |> 
   ggplot(aes(x=ir)) +
   geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
-  stat_function(fun = dnorm, args = list(mean=mean(df$ir), sd=sd(df$ir)), col="black") +
+  stat_function(fun = dnorm, args = list(mean=mean(ir), sd=sd(ir)), col="black") +
   labs(x="investment return", y="density") +
-  scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(df$ir)), labels = scales::label_percent(accuracy=.1),
+  scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(ir)), labels = scales::label_percent(accuracy=.1),
                      limits=c(-.6, .6)) +
-  ggtitle("Investment returns from the normal distribution",
-          subtitle="With overlaid normal curve with same mean and standard deviation") +
+  geom_vline(xintercept = mean(ir)) +
+  ggtitle(title1,
+          subtitle="Overlaid normal curve has same mean and standard deviation") +
   theme_bw()
 
 ```
