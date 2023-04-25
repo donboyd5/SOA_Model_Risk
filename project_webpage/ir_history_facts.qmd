@@ -19,7 +19,7 @@ source(here::here("r", "functions.r"))
 
 ## Characteristics of selected U.S. assets: 1928-2022
 
-Now we examine characteristics of returns from six U.S. asset classes using data compiled by Aswath Damodaran at New York University. For details, see the documentation in the [Appendix](appdx_damodaran_data.qmd). The asset classes are:
+Now we examine characteristics of returns from six U.S. asset classes plus the CPI using data compiled by Aswath Damodaran at New York University. For details, see the documentation in the [Appendix](appdx_damodaran_data.qmd). The asset classes are:
 
 -   baacorp - Moody's Aaa and Baa corporate bonds, average
 
@@ -128,7 +128,7 @@ measures |>
   fmt_number(columns=c(skew, xkurt),
              decimals=3) |> 
   fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
-  tab_source_note(source_note="Source: Aswath Damodaran, New York University")
+  tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
 
 ```
 
@@ -193,12 +193,16 @@ p
 
 ```
 
-## Auto correlation over time
+## Auto correlation
+
+Each point is the correlation coefficient between current observations and a particular lag of the observations.
 
 ```{r}
 #| label: plot-acf
 #| eval: true
 #| include: true
+#| fig-width: 10
+#| fig-height: 8
 
 # Convert to tsibble
 data_tsibble <- retlong |> 
@@ -208,10 +212,11 @@ data_tsibble <- retlong |>
 data_tsibble |> 
   ACF(value, lag_max=10) |> 
   ggplot(aes(x=lag, y=acf)) +
-  geom_point() +
-  geom_line()  +
+  geom_point(colour="blue") +
+  geom_line(colour="blue", size=1.25)  +
   geom_hline(yintercept = 0) +
   geom_hline(yintercept=c(-.2, .2), linetype="dashed") +
+  scale_x_continuous(breaks=1:10) +
   facet_wrap(~ name, ncol = 2) +
   theme_bw() +
   ggtitle("Autocorrelation plots of investment returns")
@@ -242,6 +247,7 @@ How to read a correlation plot:
 # library(GGally)
 
 p <- returns |> 
+  select(sort(colnames(returns))) |> 
   select(-year) |> 
   ggpairs(title="Correlation plot")
 
@@ -260,12 +266,12 @@ ggpsave(p, fpath, pointsize=10, res=100)
 
 ## Portfolios
 
-I've constructed 3 stocks-bonds portfolios (sp500-baacorp): 75-25, 50-50, and 25-75.
+We've constructed 3 stocks-bonds portfolios (sp500-baacorp): 75-25, 50-50, and 25-75.
 
 ```{r}
 #| label: portfolios
 #| eval: true
-#| include: false
+#| include: true
 
 portfolios <- returns |> 
   mutate(stock75bond25= .75 * sp500 + .25 * baacorp,
@@ -274,27 +280,36 @@ portfolios <- returns |>
   pivot_longer(-year)
   
 portmeas <- portfolios |>
+  filter(year %in% 1950:2022) |> 
   summarise(uvmeasures(value),
-            .by=name)
+            .by=name) |> 
+  mutate(sdret=sd / mean,
+         group=ifelse(str_starts(name, "stock"), "port", "asset")) |> 
+  arrange(group, name)
 
 portmeas |> 
+  select(-group) |> 
   gt() |> 
    tab_header(
-    title = html("Summary measures for selected U.S. asset classes and portfolios, 1928-2022"),
+    title = html("Summary measures for selected U.S. asset classes and portfolios, 1950-2022"),
     subtitle=html("Based on annual returns")
   ) |>
-  cols_label(name=html("Asset class"),
+  cols_label(min=html("Minimum return"),
+             max=html("Maximum return"),
+             mean=html("Mean return"),
+             sd=html("Standard deviation of return"),
              skew = html("Skewness"),
-             xkurt = html("Excess kurtosis")) |>
-  fmt_number(columns=c(skew, xkurt),
-             decimals=3) |> 
+             xkurt = html("Excess kurtosis"),
+             sdret=html("Ratio of standard deviation to mean return")) |>
+  fmt_number(columns=c(skew, xkurt, sdret),
+             decimals=2) |> 
   fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
-  tab_source_note(source_note="Source: Aswath Damodaran, New York University")
+  tab_source_note(source_note="Source: Data obtained from web page of Aswath Damodaran, New York University")
 
 
 ```
 
-## Impact of data frequency on summary measures of investment returns
+## Impact of periodicity on summary measures of investment returns
 
 ```{r}
 #| label: apple
@@ -345,7 +360,6 @@ p
 
 ```
 
-
 ```{r}
 #| label: ONETIME-stock-prices-data
 #| eval: false
@@ -366,7 +380,6 @@ saveRDS(sp500b, here::here("data", "sp500_daily_yahoofinance.rds"))
 
 
 ```
-
 
 This section examines how data frequency affects key measures of interest. The data are based on daily closing values for the S&P 500 adjusted for splits and dividends, from Yahoo Finance. We've drawn data for 1928 through 2022. We report results below for 1950 through 2022.
 
@@ -392,29 +405,29 @@ sp500meas <- sp500 |>
 data <- sp500 |> 
   filter(year(date) >= 1950)
 
-daily <- data %>%
-    group_by(symbol) %>%
+daily <- data  |> 
+    group_by(symbol)  |> 
     tq_transmute(select     = adjusted, 
                  mutate_fun = periodReturn, 
                  period     = "daily", 
                  type       = "arithmetic")
 
-weekly <- data %>%
-    group_by(symbol) %>%
+weekly <- data  |> 
+    group_by(symbol)  |> 
     tq_transmute(select     = adjusted, 
                  mutate_fun = periodReturn, 
                  period     = "weekly", 
                  type       = "arithmetic")
 
-monthly <- data %>%
-    group_by(symbol) %>%
+monthly <- data  |> 
+    group_by(symbol)  |> 
     tq_transmute(select     = adjusted, 
                  mutate_fun = periodReturn, 
                  period     = "monthly", 
                  type       = "arithmetic")
 
-annual <- data %>%
-    group_by(symbol) %>%
+annual <- data  |> 
+    group_by(symbol)  |> 
     tq_transmute(select     = adjusted, 
                  mutate_fun = periodReturn, 
                  period     = "yearly", 
@@ -443,7 +456,6 @@ portmeas
 
 ```
 
-
 Note that:
 
 -   Volatility falls as we move from daily to annual frequency (the ratio of the standard deviation to the mean return falls)
@@ -451,7 +463,6 @@ Note that:
 -   Skewness seems little affected by the data frequency
 
 -   Excess kurtosis declines dramatically as we move from daily to annual frequency, and is approximately normal (i.e., close to zero) at annual frequency
-
 
 ```{r}
 #| label: stock-prices-table
@@ -470,7 +481,7 @@ stackmeas |>
   cols_label(freq=html("Frequency"),
              min=html("Minimum return"),
              max=html("Maximum return"),
-             mean=html("Mean rerturn"),
+             mean=html("Mean return"),
              sd=html("Standard deviation of return"),
              skew = html("Skewness"),
              xkurt = html("Excess kurtosis"),
@@ -485,15 +496,95 @@ stackmeas |>
 
 ```
 
+## Impact of diversification on summary measures of investment returns
+
+TO COME.
+
+```{r}
+#| label: stock-diversification
+#| eval: true
+#| include: true
+#| fig-width: 10
+#| fig-height: 8
+
+df <- tq_index("SP500")
+
+sp500_stocks <- tq_get(df$symbol,
+                      get  = "stock.prices",
+                      from = " 1900-01-01")
+
+saveRDS(sp500_stocks, here::here("data", "sp500_stocks_daily.rds"))
 
 
+sp500_stocks_annual <- sp500_stocks |> 
+  
+
+```
+
+
+## Changing measures over time
+
+```{r}
+#| label: stock-prices-rolling
+#| eval: true
+#| include: true
+#| fig-width: 10
+#| fig-height: 8
+
+
+#   #| column: screen-inset-shaded
+
+# returns |>
+#   mutate(sp500r=zoo::rollapplyr(sp500, width=30, FUN=e1071::kurtosis, type=1,
+#                                 align="right", fill=NA)) |> # partial = FALSE
+#   ggplot(aes(year, sp500r)) + geom_line()
+
+retroll <- returns |> 
+  select(year, sp500) |> 
+  mutate(retroll=zoo::rollapplyr(sp500, width=30, FUN=uvmeasures,
+                         align="right", fill=NA),
+         n=retroll[, 1],
+         min=retroll[, 2],
+         max=retroll[, 3],
+         mean=retroll[, 4],
+         sd=retroll[, 5],
+         skew=retroll[, 6],
+         xkurt=retroll[, 7]) |> 
+  select(-retroll) |> 
+  pivot_longer(-year, names_to = "measure") |> 
+  mutate(name="sp500")
+
+p <- retroll |> 
+  filter(measure %in% c("mean", "sd", "skew", "xkurt"), !is.na(value)) |> 
+  mutate(measure=factor(
+    measure,
+    levels=c("mean", "sd", "skew", "xkurt"),
+    labels=c("mean", "sd",
+             "skew: negative -> frequent small gains & a few large losses",
+             "xkurt: positive -> heavier tails than normal distribution"))) |> 
+  arrange(measure) |> 
+  ggplot(aes(year, value)) +
+  geom_line(colour="blue", size=1.25) +
+  # geom_point(colour="blue") +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~measure, scales="free_y",
+             ncol=2) +
+  scale_x_continuous(breaks=seq(1900, 2100, 5)) +
+  ggtitle("30-year rolling measures for annual S&P 500 total returns") +
+  theme_bw() +
+  labs(x=NULL, y=NULL, caption = "Data source: Aswath Damodaran, New York University") +
+  caption_left
+p
+
+# skew: negative=frequent small gains and a few large losses
+
+```
 
 ## Notes from research
 
 "we find heteroscedasticity, negative skewness (−1.02) and large positive excess kurtosis (3.63) for the monthly S&P 500 returns" ("our data begin in September 1982 and finish in January 2020") @beginComplexEconomicScenario2021
 
 The table below gives measures for our S&P 500 data over the same time period. While the skewness and excess kurtosis values are similar, they are not the same. However, the Begin paper appears to construct separate values for S&P 500 dividends and prices (unadjusted for dividends), whereas our data are adjusted for dividends. We suspect that explains the difference.
-
 
 ```{r}
 #| label: stock-prices-jfbegin
@@ -517,7 +608,7 @@ stack |>
   cols_label(freq=html("Frequency"),
              min=html("Minimum return"),
              max=html("Maximum return"),
-             mean=html("Mean rerturn"),
+             mean=html("Mean return"),
              sd=html("Standard deviation of return"),
              skew = html("Skewness"),
              xkurt = html("Excess kurtosis"),
@@ -531,5 +622,3 @@ stack |>
   tab_source_note(source_note="Source: Yahoo Finance")
   
 ```
-
-

@@ -3,12 +3,16 @@
 .RData
 .Ruserdata
 
+_freeze/
 _report/
+data/
+images/
 
 *.csv
 *.doc*
 *.htm*
 *.pdf
+*.png
 *.ppt*
 *.rds
 *.txt

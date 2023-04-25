@@ -8,7 +8,9 @@ We use the following measures to describe the characteristics of investment retu
 
 **Standard Deviation**: We use the sample standard deviation as our standard measure of volatility.
 
-**Skewness**: We use skewness to measure the asymmetry of the return distribution. Positive skewness indicates a longer tail on the right, and negative skewness a longer tail on the left. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version.)
+**Skewness**: We use skewness to measure the asymmetry of the return distribution. Positive skewness indicates a longer tail on the right, and negative skewness a longer tail on the left. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version.) When investment returns are negatively skewed, we may expect frequent small gains and a few large losses.
+
+![](images/image-1903548430.png)
 
 **Excess Kurtosis**: Excess kurtosis measures the "fat-tailedness" of the return distribution, relative to the normal distribution. Positive values indicate heavier tails and a higher likelihood of extreme returns compared to a normal distribution. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version.)
 
