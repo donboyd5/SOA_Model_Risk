@@ -501,11 +501,9 @@ stackmeas |>
 TO COME.
 
 ```{r}
-#| label: stock-diversification
-#| eval: true
-#| include: true
-#| fig-width: 10
-#| fig-height: 8
+#| label: ONETIME-get-sp500-stocks
+#| eval: false
+#| include: false
 
 df <- tq_index("SP500")
 
@@ -513,11 +511,48 @@ sp500_stocks <- tq_get(df$symbol,
                       get  = "stock.prices",
                       from = " 1900-01-01")
 
-saveRDS(sp500_stocks, here::here("data", "sp500_stocks_daily.rds"))
+saveRDS(sp500_stocks, here::here("data", "sp500_stocks_rawdaily.rds"))
+glimpse(sp500_stocks)
+
+sp500_stocks_daily <- 
+  sp500_stocks |>
+    group_by(symbol)  |> 
+    tq_transmute(select     = adjusted, 
+                 mutate_fun = periodReturn, 
+                 period     = "daily", 
+                 type       = "arithmetic") |> 
+  ungroup()
+saveRDS(sp500_stocks_daily, here::here("data", "sp500_stocks_daily.rds"))
+
+skim(sp500_stocks_daily)
 
 
-sp500_stocks_annual <- sp500_stocks |> 
+sp500_stocks_annual <- 
+  sp500_stocks |>
+    group_by(symbol)  |> 
+    tq_transmute(select     = adjusted, 
+                 mutate_fun = periodReturn, 
+                 period     = "yearly", 
+                 type       = "arithmetic") |> 
+  ungroup()
+saveRDS(sp500_stocks_annual, here::here("data", "sp500_stocks_annual.rds"))
   
+skim(sp500_stocks_annual)
+head(sp500_stocks_annual)
+
+
+```
+
+
+```{r}
+#| label: stock-diversification
+#| eval: true
+#| include: true
+#| fig-width: 10
+#| fig-height: 8
+
+sp500_stocks <- readRDS(here::here("data", "sp500_stocks_annual.rds"))
+skim(sp500_stocks)
 
 ```
 
