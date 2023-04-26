@@ -53,7 +53,7 @@ download.file(url, dest, mode="wb")
 ```
 
 ```{r}
-#| label: get-save-data
+#| label: ONETIME-get-save-data
 #| include: false
 #| eval: false
 
@@ -304,7 +304,7 @@ portmeas |>
   fmt_number(columns=c(skew, xkurt, sdret),
              decimals=2) |> 
   fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
-  tab_source_note(source_note="Source: Data obtained from web page of Aswath Damodaran, New York University")
+  tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
 
 
 ```
@@ -492,11 +492,11 @@ stackmeas |>
   fmt_number(columns=c(n),
              decimals=0) |> 
   fmt_percent(columns=c(min, max, mean, sd, annret), decimals=1)|>
-  tab_source_note(source_note="Source: Yahoo Finance")
+  tab_source_note(source_note="Data source: Yahoo Finance")
 
 ```
 
-## Impact of diversification on summary measures of investment returns
+## How does diversification affect summary measures of investment returns?
 
 TO COME.
 
@@ -545,19 +545,190 @@ head(sp500_stocks_annual)
 
 
 ```{r}
+#| label: stock-diversification-prep
+#| eval: true
+#| include: false
+
+sp500_stocks <- readRDS(here::here("data", "sp500_stocks_annual.rds"))
+skim(sp500_stocks)
+
+stocks2 <- sp500_stocks |> 
+  filter(month(date)==12) |> 
+  mutate(year=year(date)) |> 
+  select(symbol, year, return=yearly.returns)
+
+count(stocks2, year)
+
+```
+
+
+```{r}
 #| label: stock-diversification
 #| eval: true
 #| include: true
 #| fig-width: 10
 #| fig-height: 8
 
-sp500_stocks <- readRDS(here::here("data", "sp500_stocks_annual.rds"))
-skim(sp500_stocks)
+# how do our measures change as we change the sample size
+# here are counts by year -- so let's use 2019-2022
+# 57  2018   494
+# 58  2019   498
+# 59  2020   500
+# 60  2021   501
+# 61  2022   503
+
+
+# stocks3 <- stocks2 |> filter(year==2022) # pick a single year to work with
+
+library(tidymodels)
+
+# create an equally-weighted portfolio of 1, 10, ..., 500 stocks each year
+# calculate stats each years
+
+f <- function(symbol, return, nfirms, reps){
+  nsought <- nfirms
+  if(length(symbol) < nsought) nfirms <- length(symbol)
+  tibble(symbol, return, nfirms, nsought) |> 
+    # note that if nfirms is > what's available in data, this will use what's available
+    rep_slice_sample(n = nfirms, reps = reps)
+}
+
+f_get_nfirms <- function(nfirms, reps){
+  stocks2 |> 
+    filter(year %in% 2019:2022) |> 
+    reframe(f(symbol, return, nfirms, reps), .by=year) |> 
+    select(year, nfirms, nsought, replicate, symbol, return)
+}
+
+# df <- f_get_nfirms(nfirms=1000, reps=10)
+
+df2 <- purrr::map(.x=c(1, 10, 50, 100, 250, 1000), .f=f_get_nfirms, reps=100) |> list_rbind()
+
+# get summary measures for each year
+  # get their summary measures and give them a sample id
+meas <- df2 |>
+  summarise(uvmeasures(return), .by=c(year, nfirms, replicate))
+meas
+ht(meas)
+meas |> filter(nfirms==250)
+
+
+dflong <- meas |> 
+  select(year, nfirms, replicate, mean, sd, skew, xkurt) |> 
+  pivot_longer(-c(year, nfirms, replicate), names_to = "measure")|> 
+  mutate(nfirms=factor(nfirms))
+
+medians <- dflong |> 
+  summarise(median=median(value, na.rm=TRUE), .by = c(year, nfirms, measure))
+
+dflong |> 
+  filter(year==2022) |> 
+  ggplot(aes(nfirms, value)) +
+  # geom_point() +
+  geom_quasirandom(size=0.75, colour="blue") +
+  geom_point(aes(x=nfirms, y=median), data=medians|> filter(year==2022),
+             colour="red", size=1.5) +
+  geom_hline(yintercept = 0) +
+  # scale_x_continuous(breaks=unique(df$sample)) +
+  facet_wrap(~measure, scales = "free_y") +
+  labs(x="# of firms sampled", y="value of the measure") +
+  ggtitle(label="Summary investment-return statistics for each of 100 random samples of firms in the S&P 500",
+          subtitle="For different numbers of firms, year=2022. Each blue dot is a sample. Red dot is median across samples.") +
+  theme_bw()
+
+
+
+
+
+df <- stocks2 |> 
+  filter(year %in% 2019:2022) |> 
+  reframe(f(symbol, return, 10), .by=year)
+
+
+df <- stocks2 |> 
+  filter(year %in% 2019:2022) |> 
+  group_by(year) |> 
+  reframe(rep_slice_sample(n = 50, reps = 10))
+
+
+
+fsamps <- function(size){
+  stocks2 |>
+  group_by(year) |> 
+    slice_sample(n=size)
+}
+
+
+
+samps <- stocks2 |>
+  group_by(year) |> 
+    slice_sample(n=100)
+
+
+fsamp <- function(n, df, year){
+  df |> 
+    filter(year==!year) |> 
+    slice_sample(n=n) |> 
+    mutate(sample=n) |> 
+    relocate(sample)
+}
+
+# fsamp(10, stocks2)
+# 
+# df2 <- purrr::map(.x=c(1, 10, 50, 100, 250, nrow(stocks3)), .f=fsamp, df=stocks3) |> list_rbind()
+# 
+# df2 |> 
+#   summarise(uvmeasures(return), .by=sample)
+
+# get a bunch of samples
+fmeas <- function(id, df, year){
+  # get a set of samples
+  df <- purrr::map(.x=c(1, 10, 50, 100, 250, nrow(df)), .f=fsamp, df=df, year=year) |>
+    list_rbind()
+  
+  # get their summary measures and give them a sample id
+  meas <- df |>
+    summarise(uvmeasures(return), .by=sample) |>
+    mutate(id=!!id, year=!!year) |>
+    relocate(id, year)
+  meas
+}
+
+# fmeas(1, stocks3)
+
+# take multiple samples
+df <- purrr::map(1:100, fmeas, stocks2, 2000) |> list_rbind()
+glimpse(df)
+count(df, id)
+count(df, sample)
+
+dflong <- df |> 
+  select(id, sample, mean, sd, skew, xkurt) |> 
+  pivot_longer(-c(id, sample), names_to = "measure")|> 
+  mutate(sample=factor(sample))
+
+medians <- dflong |> 
+  summarise(median=median(value, na.rm=TRUE), .by = c(sample, measure))
+
+dflong |> 
+  ggplot(aes(sample, value)) +
+  # geom_point() +
+  geom_quasirandom(size=0.75, colour="blue") +
+  geom_point(aes(x=sample, y=median), data=medians, colour="red", size=1.5) +
+  geom_hline(yintercept = 0) +
+  # scale_x_continuous(breaks=unique(df$sample)) +
+  facet_wrap(~measure, scales = "free_y") +
+  labs(x="# of firms sampled", y="value of the measure") +
+  ggtitle(label="Summary investment-return statistics for each of 100 random samples of firms in the S&P 500",
+          subtitle="For different numbers of firms, year=2022. Red dot is median across samples.") +
+  theme_bw()
+  
+
 
 ```
 
 
-## Changing measures over time
+## How do summary measures of investment returns change over time?
 
 ```{r}
 #| label: stock-prices-rolling
@@ -599,7 +770,7 @@ p <- retroll |>
              "xkurt: positive -> heavier tails than normal distribution"))) |> 
   arrange(measure) |> 
   ggplot(aes(year, value)) +
-  geom_line(colour="blue", size=1.25) +
+  geom_line(colour="blue", linewidth=1.25) +
   # geom_point(colour="blue") +
   geom_hline(yintercept = 0) +
   facet_wrap(~measure, scales="free_y",
@@ -654,6 +825,6 @@ stack |>
   fmt_number(columns=c(n),
              decimals=0) |> 
   fmt_percent(columns=c(min, max, mean, sd, annret), decimals=1)|>
-  tab_source_note(source_note="Source: Yahoo Finance")
+  tab_source_note(source_note="Data source: Yahoo Finance")
   
 ```
