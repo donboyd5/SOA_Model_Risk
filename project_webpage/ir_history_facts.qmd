@@ -269,14 +269,101 @@ ggpsave(p, fpath, pointsize=10, res=100)
 We've constructed 3 stocks-bonds portfolios (sp500-baacorp): 75-25, 50-50, and 25-75.
 
 ```{r}
+#| label: portfolio-efficient
+#| eval: false
+#| include: false
+
+# find the efficient portfolio - it takes some time so run in advance and save results
+
+# create an xts object
+ret2 <- returns |> 
+  filter(year %in% 1950:2022) |> 
+  mutate(date=strptime(year, "%Y")) |>
+  select(-year, -cpiu)
+xret <- as.xts(ret2 |> select(-date), ret2$date)  
+
+# construct the portfolio specification
+ps <- portfolio.spec(colnames(xret))
+ps <- add.constraint(portfolio =ps, type = "full_investment")
+ps <- add.constraint(portfolio = ps, type = "long_only")
+ps <- add.objective(portfolio = ps, type = "risk", name = "StdDev")
+# ps <- add.objective(portfolio = ps, type = "return", name = "mean")
+ps
+
+# find the optimal risk-minimizing portfolio
+opt <- optimize.portfolio(xret, portfolio = ps2, optimize_method = "ROI", trace=TRUE)
+opt
+
+# calculate the efficient frontier
+eff <- extractEfficientFrontier(
+  opt,
+  match.col = "StdDev",
+  n.portfolios = 1001,
+  risk_aversion = NULL)
+
+saveRDS(eff, here::here("data", "eff_history.rds"))
+
+```
+
+### Efficient portfolios
+
+Here are selected points on the efficient mean-variance frontier for long-only portfolios.
+
+```{r}
+#| label: portfolio-eff-show
+#| eval: true
+#| include: true
+
+eff <- readRDS(here::here("data", "eff_history.rds"))
+
+effdf <- frontier_tbl(eff)
+
+indexes <- purrr::map_vec(c(.04, .05, .06, .07, .08, .09, .099, .10, .11), iclosest, effdf$mean)
+
+points <- effdf |> 
+  filter(obs %in% indexes) |> 
+  rename_with(.fn= ~str_remove(.x, "w."), .cols=starts_with("w."))
+
+points |> 
+  select(-out, -obs) |> 
+  gt() |> 
+   tab_header(
+    title = html("Selected points on the mean-variance efficient frontier for long-only portfolios"),
+    subtitle=html("Based on annual returns")
+  ) |>
+  tab_spanner(columns = sp500:gold,
+              label="Portfolio weights") |>
+  cols_label(mean=html("Mean return"),
+             sd=html("Standard deviation of return")) |>
+  fmt_percent(columns=mean:gold, decimals=1) |>
+  tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
+
+```
+
+
+```{r}
 #| label: portfolios
 #| eval: true
 #| include: true
 
+# portfolio analytics long-only weights targeting 7%
+# sp500 tbill3 ustbond baacorp realestate  gold
+# 0.157  0.000       0   0.526      0.234 0.083
+# 0.155  0.000       0   0.525      0.238 0.082
+# 0.939 0            0   0          0     0.061 # for 11.2%
+# .735 0 0 .140 .125
+# .487 .341 .172
+
 portfolios <- returns |> 
   mutate(stock75bond25= .75 * sp500 + .25 * baacorp,
          stock50bond50= .5 * sp500 + .5 * baacorp,
-         stock25bond75= .25 * sp500 + .75 * baacorp) |> 
+         stock25bond75= .25 * sp500 + .75 * baacorp,
+         # efflong07=.155 * sp500 + .525 * baacorp + .238 * realestate + .082 * gold,
+         efflong099= 
+           0.487 * sp500 + 
+           0.341 * baacorp + 
+           0.172 * gold
+         ) |> 
   pivot_longer(-year)
   
 portmeas <- portfolios |>
@@ -284,7 +371,7 @@ portmeas <- portfolios |>
   summarise(uvmeasures(value),
             .by=name) |> 
   mutate(sdret=sd / mean,
-         group=ifelse(str_starts(name, "stock"), "port", "asset")) |> 
+         group=ifelse(str_starts(name, "stock") | str_starts(name, "eff"), "port", "asset")) |> 
   arrange(group, name)
 
 portmeas |> 
@@ -541,6 +628,32 @@ skim(sp500_stocks_annual)
 head(sp500_stocks_annual)
 
 
+# check out:
+# https://www.r-bloggers.com/2017/07/downloading-sp-500-stock-data-from-googlequandl-with-r-command-line-script/
+# https://github.com/Robot-Wealth/r-quant-recipes/blob/master/historical-spx-constituents/historical-spx-constituents.Rmd
+# https://robotwealth.com/how-to-get-historical-spx-constituents-data-for-free/
+# https://github.com/fja05680/sp500  # see csv file of companies
+# https://github.com/datasets/s-and-p-500-companies
+# https://datahub.io/core/s-and-p-500-companies-financials/r/1.html
+# https://www.kaggle.com/code/paytonfisher/s-p-500-analysis-using-r
+# https://site.financialmodelingprep.com/developer/docs/historical-sp-500-companies-api/#R
+# https://analyzingalpha.com/sp500-historical-components-and-changes
+# https://raw.githubusercontent.com/leosmigel/analyzingalpha/master/2019-09-18-sp500-historical-components-and-changes/sp500_history.csv
+# https://github.com/datasets/s-and-p-500-companies/blob/main/data/constituents.csv
+# https://www.kaggle.com/datasets/andrewmvd/sp-500-stocks?resource=download
+
+library(quantmod)
+getSymbols("AAPL",
+           from = "2016/12/31",
+           to = "2018/12/31",
+           periodicity = "monthly")
+
+mult_stocks <- tq_get(c("FB", "AMZN"),
+                      get  = "stock.prices",
+                      from = "2016-01-01",
+                      to   = "2017-01-01",
+                      periodicity = "monthly")
+
 ```
 
 
@@ -578,12 +691,9 @@ count(stocks2, year)
 # 61  2022   503
 
 
-# stocks3 <- stocks2 |> filter(year==2022) # pick a single year to work with
-
-library(tidymodels)
-
 # create an equally-weighted portfolio of 1, 10, ..., 500 stocks each year
 # calculate stats each years
+
 
 f <- function(symbol, return, nfirms, reps){
   nsought <- nfirms
@@ -640,38 +750,38 @@ dflong |>
 
 
 
-df <- stocks2 |> 
-  filter(year %in% 2019:2022) |> 
-  reframe(f(symbol, return, 10), .by=year)
-
-
-df <- stocks2 |> 
-  filter(year %in% 2019:2022) |> 
-  group_by(year) |> 
-  reframe(rep_slice_sample(n = 50, reps = 10))
-
-
-
-fsamps <- function(size){
-  stocks2 |>
-  group_by(year) |> 
-    slice_sample(n=size)
-}
-
-
-
-samps <- stocks2 |>
-  group_by(year) |> 
-    slice_sample(n=100)
-
-
-fsamp <- function(n, df, year){
-  df |> 
-    filter(year==!year) |> 
-    slice_sample(n=n) |> 
-    mutate(sample=n) |> 
-    relocate(sample)
-}
+# df <- stocks2 |> 
+#   filter(year %in% 2019:2022) |> 
+#   reframe(f(symbol, return, 10), .by=year)
+# 
+# 
+# df <- stocks2 |> 
+#   filter(year %in% 2019:2022) |> 
+#   group_by(year) |> 
+#   reframe(rep_slice_sample(n = 50, reps = 10))
+# 
+# 
+# 
+# fsamps <- function(size){
+#   stocks2 |>
+#   group_by(year) |> 
+#     slice_sample(n=size)
+# }
+# 
+# 
+# 
+# samps <- stocks2 |>
+#   group_by(year) |> 
+#     slice_sample(n=100)
+# 
+# 
+# fsamp <- function(n, df, year){
+#   df |> 
+#     filter(year==!year) |> 
+#     slice_sample(n=n) |> 
+#     mutate(sample=n) |> 
+#     relocate(sample)
+# }
 
 # fsamp(10, stocks2)
 # 
@@ -679,50 +789,50 @@ fsamp <- function(n, df, year){
 # 
 # df2 |> 
 #   summarise(uvmeasures(return), .by=sample)
-
-# get a bunch of samples
-fmeas <- function(id, df, year){
-  # get a set of samples
-  df <- purrr::map(.x=c(1, 10, 50, 100, 250, nrow(df)), .f=fsamp, df=df, year=year) |>
-    list_rbind()
-  
-  # get their summary measures and give them a sample id
-  meas <- df |>
-    summarise(uvmeasures(return), .by=sample) |>
-    mutate(id=!!id, year=!!year) |>
-    relocate(id, year)
-  meas
-}
-
-# fmeas(1, stocks3)
-
-# take multiple samples
-df <- purrr::map(1:100, fmeas, stocks2, 2000) |> list_rbind()
-glimpse(df)
-count(df, id)
-count(df, sample)
-
-dflong <- df |> 
-  select(id, sample, mean, sd, skew, xkurt) |> 
-  pivot_longer(-c(id, sample), names_to = "measure")|> 
-  mutate(sample=factor(sample))
-
-medians <- dflong |> 
-  summarise(median=median(value, na.rm=TRUE), .by = c(sample, measure))
-
-dflong |> 
-  ggplot(aes(sample, value)) +
-  # geom_point() +
-  geom_quasirandom(size=0.75, colour="blue") +
-  geom_point(aes(x=sample, y=median), data=medians, colour="red", size=1.5) +
-  geom_hline(yintercept = 0) +
-  # scale_x_continuous(breaks=unique(df$sample)) +
-  facet_wrap(~measure, scales = "free_y") +
-  labs(x="# of firms sampled", y="value of the measure") +
-  ggtitle(label="Summary investment-return statistics for each of 100 random samples of firms in the S&P 500",
-          subtitle="For different numbers of firms, year=2022. Red dot is median across samples.") +
-  theme_bw()
-  
+# 
+# # get a bunch of samples
+# fmeas <- function(id, df, year){
+#   # get a set of samples
+#   df <- purrr::map(.x=c(1, 10, 50, 100, 250, nrow(df)), .f=fsamp, df=df, year=year) |>
+#     list_rbind()
+#   
+#   # get their summary measures and give them a sample id
+#   meas <- df |>
+#     summarise(uvmeasures(return), .by=sample) |>
+#     mutate(id=!!id, year=!!year) |>
+#     relocate(id, year)
+#   meas
+# }
+# 
+# # fmeas(1, stocks3)
+# 
+# # take multiple samples
+# df <- purrr::map(1:100, fmeas, stocks2, 2000) |> list_rbind()
+# glimpse(df)
+# count(df, id)
+# count(df, sample)
+# 
+# dflong <- df |> 
+#   select(id, sample, mean, sd, skew, xkurt) |> 
+#   pivot_longer(-c(id, sample), names_to = "measure")|> 
+#   mutate(sample=factor(sample))
+# 
+# medians <- dflong |> 
+#   summarise(median=median(value, na.rm=TRUE), .by = c(sample, measure))
+# 
+# dflong |> 
+#   ggplot(aes(sample, value)) +
+#   # geom_point() +
+#   geom_quasirandom(size=0.75, colour="blue") +
+#   geom_point(aes(x=sample, y=median), data=medians, colour="red", size=1.5) +
+#   geom_hline(yintercept = 0) +
+#   # scale_x_continuous(breaks=unique(df$sample)) +
+#   facet_wrap(~measure, scales = "free_y") +
+#   labs(x="# of firms sampled", y="value of the measure") +
+#   ggtitle(label="Summary investment-return statistics for each of 100 random samples of firms in the S&P 500",
+#           subtitle="For different numbers of firms, year=2022. Red dot is median across samples.") +
+#   theme_bw()
+#   
 
 
 ```

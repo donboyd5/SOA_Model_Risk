@@ -1,4 +1,5 @@
 
+# basic libraries
 library(rlang)
 library(tidyverse)
 tprint <- 75  # default tibble print
@@ -6,6 +7,10 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 library(skimr)
 library(pryr)
 library(fs)
+
+# enhancements to tidyverse
+library(tidymodels)
+library(infer)
 
 # probability and statistics
 library(stats)
@@ -24,6 +29,9 @@ library(RColorBrewer)
 library(RcppRoll)
 library(fredr)
 library(tidycensus)
+
+# portfolio analysis
+library(PortfolioAnalytics)
 
 # boyd libraries
 library(btools)

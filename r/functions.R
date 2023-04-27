@@ -1,4 +1,21 @@
 
+iclosest <- function(value, vec){
+  which.min(abs(value - vec))[1]
+}
+
+
+frontier_tbl <- function(frontobj){
+  # convert an efficient-frontier object, from Portfolio Analytics package
+  # to a tibble
+  cnames <- colnames(frontobj$frontier)
+  matrix(frontobj$frontier, nrow=nrow(frontobj$frontier)) |> 
+    as_tibble() |> 
+    setNames(cnames) |> 
+    rename(sd=StdDev) |> 
+    mutate(obs=row_number()) |> 
+    relocate(obs)
+}
+
 
 uvmeasures <- function(ir){
   # ir is a vector of returns for a given time period (or, if historical, all observations)
