@@ -6,6 +6,10 @@ editor_options:
 
 # Historical facts for investment returns
 
+**We examine historical facts for investment returns to inform us about plausible ranges for parameters of interest in stochastic investment return models.**
+
+The analysis presumes we are interested in statistical measures and parameters for annual investment returns, usually over long time periods (e.g., 10, 20, 30, 40 years), often for diversified portfolios.
+
 ```{r}
 #| label: includes
 #| include: false
@@ -17,13 +21,19 @@ source(here::here("r", "functions.r"))
 
 ```
 
-## Characteristics of selected U.S. assets: 1928-2022
+```{r}
+#| label: constants
+#| include: false
 
-Now we examine characteristics of returns from six U.S. asset classes plus the CPI using data compiled by Aswath Damodaran at New York University. For details, see the documentation in the [Appendix](appdx_damodaran_data.qmd). The asset classes are:
+analysis_years <- 1950:2022  # update efficient portfolio calculation when analysis_years changes
+
+```
+
+## Characteristics of selected U.S. assets and associated portfolios
+
+We begin by examining characteristics of returns from six U.S. asset classes using data compiled by Aswath Damodaran at New York University. For details, see the documentation in the [Appendix](appdx_damodaran_data.qmd). The asset classes are:
 
 -   baacorp - Moody's Aaa and Baa corporate bonds, average
-
--   cpiu - Consumer Price Index, all urban consumers
 
 -   gold - year-end price
 
@@ -34,6 +44,14 @@ Now we examine characteristics of returns from six U.S. asset classes plus the C
 -   tbill3 - 3-month Treasury bill, average rate for the year
 
 -   ustbond - 10-year constant maturity Treasury bond
+
+The data are annual, for 1928-2022. We examine the full period graphically but in most of the subsequent analysis, we focus on 1950-2022, on the belief that the post-war period generally will be more relevant to us.
+
+In addition to the 6 asset classes, we examine 4 portfolios:
+
+-   3 stocks-bonds (sp500-baacorp) portfolios: 75-25, 50-50, and 25-75, and
+
+-   a portfolio that has the same average return as the 50-50 portfolio, but is a combination of up to six assets that is on the efficient mean-variance frontier for long-only portfolios
 
 ```{r}
 #| label: ONETIME-download-data
@@ -90,23 +108,203 @@ saveRDS(df2, here::here("data", "damodaran_data.rds"))
 ```
 
 ```{r}
+#| label: ONETIME-efficient-portfolios
+#| eval: false
+#| include: false
+
+# find the efficient portfolio - it takes some time so run in advance and save results
+
+
+returns <- readRDS(here::here("data", "damodaran_data.rds"))
+
+# create an xts object
+ret2 <- returns |> 
+  filter(year %in% analysis_years) |> 
+  mutate(date=strptime(year, "%Y")) |>
+  select(-year, -cpiu)
+xret <- as.xts(ret2 |> select(-date), ret2$date)  
+
+# construct the portfolio specification
+ps <- portfolio.spec(colnames(xret))
+ps <- add.constraint(portfolio =ps, type = "full_investment")
+ps <- add.constraint(portfolio = ps, type = "long_only")
+ps <- add.objective(portfolio = ps, type = "risk", name = "StdDev")
+# ps <- add.objective(portfolio = ps, type = "return", name = "mean")
+ps
+
+# find the optimal risk-minimizing portfolio
+opt <- optimize.portfolio(xret, portfolio = ps, optimize_method = "ROI", trace=TRUE)
+opt
+
+# calculate the efficient frontier
+eff <- extractEfficientFrontier(
+  opt,
+  match.col = "StdDev",
+  n.portfolios = 1001, # generate enough portfolios that we can get fine differences in returns
+  risk_aversion = NULL)
+
+
+# save the points on the efficient frontier as a tibble
+effdf <- frontier_tbl(eff) # function I wrote
+# generates this warning message (which is ok):
+# The `x` argument of `as_tibble.matrix()` must have unique column names if `.name_repair` is omitted as of tibble 2.0.0.
+#  Using compatibility `.name_repair`.
+
+efflist <- list()
+efflist$eff <- eff
+efflist$effdf <- effdf
+
+saveRDS(efflist, here::here("data", "eff_history.rds"))
+
+```
+
+## Load data, construct portfolios, calculate measures
+
+In this section, we construct the 4 portfolios mentioned, and calculate selected measures for the analysis years, which range from `r min(analysis_years)` to `r max(analysis_years)`.
+
+```{r}
 #| label: load-data
 #| include: false
 
 returns <- readRDS(here::here("data", "damodaran_data.rds"))
-retlong <- returns |> 
-  pivot_longer(-year)
+efflist <- readRDS(here::here("data", "eff_history.rds")) # efficient frontier, 1950-2022
 
-# get min, max, mean, sd, kurt for normal curve and other purposes
-measures <- retlong |>
-  summarise(uvmeasures(value),
-            .by=name) |> 
-  arrange(name)
+# eff <- readRDS(here::here("data", "eff_history.rds"))
+# 
+# effdf <- frontier_tbl(eff)
 
 
 ```
 
-Here are selected summary statistics for the asset classes.
+```{r}
+#| label: eff-portfolios
+#| include: false
+
+# find asset weights for the efficient portfolio that has return closest to the 50-50 portfolio
+(return_5050 <- returns |> 
+  filter(year %in% analysis_years) |> 
+  mutate(port5050=.5 * sp500 + .5 * baacorp) |> 
+  pull(port5050) |> 
+  mean())
+
+# find the index in the tibble of efficient portfolios for portfolio that has return
+# closest to the 5050 return
+i5050 <- iclosest(return_5050, efflist$effdf$mean)
+
+# get weights for the efficient portfolio closest to the 5050 portfolio
+(w5050 <- efflist$effdf |> 
+  filter(obs == i5050) |> 
+  rename_with(.fn= ~str_remove(.x, "w."), .cols=starts_with("w.")) |> 
+  mutate(across(c(sp500, tbill3, ustbond, baacorp, realestate, gold),
+                ~ .x * (abs(.x) > 1e-12)))) # force weights to be at least 1e-12, else zero
+
+```
+
+```{r}
+#| label: build-portfolios
+#| include: false
+
+retport <- returns |> 
+  mutate(port2575=.25 * sp500 + .75 * baacorp,
+         port7525=.75 * sp500 + .25 * baacorp,
+         port5050=.5 * sp500 + .5 * baacorp,
+         porteff5050=w5050$sp500 * sp500 +
+           w5050$tbill3 * tbill3 +
+           w5050$ustbond * ustbond +
+           w5050$baacorp * baacorp +
+           w5050$realestate * realestate +
+           w5050$gold * gold)
+
+
+retlong <- retport |> 
+  pivot_longer(-year) |> 
+  mutate(type=case_when(str_starts(name, "port") ~ "portfolio",
+                        name=="cpiu" ~ "cpi",
+                        TRUE ~ "asset"))
+glimpse(retlong)
+
+count(retlong, type, name)
+
+
+```
+
+## Plots for the full time period
+
+### Plot each asset -- all years
+
+```{r}
+#| label: plot-means
+#| include: false
+
+# get means over ALL years for the plots
+means <- retlong |> 
+  summarise(mean=mean(value),
+            .by=c(type, name)) |> 
+  arrange(type, name)
+
+```
+
+```{r}
+#| label: plot-assets
+#| include: true
+#| fig-width: 8
+#| fig-height: 8
+
+p <- retlong |> 
+  # filter(!name %in% c("cpiu", "gold")) |>
+  filter(type=="asset") |> 
+  filter(abs(value) < 1) |> 
+  ggplot(aes(year, value)) +
+  geom_line(colour="blue") +
+  geom_hline(yintercept = 0) +
+  geom_hline(aes(yintercept=mean), data=means |> filter(type=="asset"),
+             colour="red") +
+  scale_y_continuous(name="% return",
+                     breaks=seq(-1, 1, .1),
+                     labels = label_percent(accuracy=1)) +
+  scale_x_continuous(name=NULL) +
+  facet_wrap(~name, ncol=2) +
+  theme_bw() +
+  ggtitle("Annual investment returns, individual asset classes, all years (excluding one gold return > 100%)",
+          subtitle="Red horizontal line gives mean return")
+
+p
+
+```
+
+### Plot each portfolio -- all years
+
+```{r}
+#| label: plot-ports
+#| include: true
+#| fig-width: 8
+#| fig-height: 6
+
+p <- retlong |> 
+  # filter(!name %in% c("cpiu", "gold")) |>
+  filter(type=="portfolio") |> 
+  # filter(abs(value) < 1) |> 
+  ggplot(aes(year, value)) +
+  geom_line(colour="blue") +
+  geom_hline(yintercept = 0) +
+  geom_hline(aes(yintercept=mean), data=means |> filter(type=="portfolio"),
+             colour="red") +
+  scale_y_continuous(name="% return",
+                     breaks=seq(-1, 1, .1),
+                     labels = label_percent(accuracy=1)) +
+  scale_x_continuous(name=NULL) +
+  facet_wrap(~name, ncol=2) +
+  theme_bw() +
+  ggtitle("Annual investment returns, selected portfolios, ALL YEARS",
+          subtitle="Red horizontal line gives mean return")
+
+p
+
+```
+
+## Statistical measures -- 1950-2022
+
+Here are selected summary statistics for the asset classes and portfolios, calculated over the analysis years (1950-2022).
 
 **Skewness**: A measure of symmetry -- the more positive the skewness statistic, the more the distribution is positively skewed and the tail is longer on the right side. The more negative the statistic, the longer the tail is to the left.
 
@@ -116,54 +314,41 @@ Here are selected summary statistics for the asset classes.
 #| label: sumstats
 #| include: true
 
+
+# get min, max, mean, sd, kurt for normal curve and other purposes, using analysis years
+measures <- retlong |>
+  filter(name!="cpiu", year %in% analysis_years) |> 
+  summarise(uvmeasures(value),
+            .by=c(type, name)) |> 
+  mutate(sdmean=sd / mean) |> 
+  arrange(type, name)
+
+
 measures |> 
   gt() |> 
    tab_header(
-    title = html("Summary measures for selected U.S. asset classes, 1928-2022"),
+    title = html("Summary measures for selected U.S. asset classes and portfolios, 1950-2022"),
     subtitle=html("Based on annual returns")
   ) |>
   cols_label(name=html("Asset class"),
              skew = html("Skewness"),
-             xkurt = html("Excess kurtosis")) |>
+             xkurt = html("Excess kurtosis"),
+             sdmean=html("Ratio of SD to mean")) |>
   fmt_number(columns=c(skew, xkurt),
-             decimals=3) |> 
+             decimals=2) |> 
+    fmt_number(columns=c(sdmean),
+             decimals=2) |> 
   fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
   tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
 
 ```
 
-### Plot each series
+## Comparison to normality -- 1950-2022
+
+### Histograms with normal curve overlay
 
 ```{r}
-#| label: plot
-#| include: true
-
-p <- retlong |> 
-  filter(!name %in% c("cpiu", "gold")) |> 
-  ggplot(aes(year, value)) +
-  geom_line(colour="blue") +
-  geom_hline(yintercept = 0) +
-  geom_hline(aes(yintercept=mean), data=measures |> filter(!name %in% c("cpiu", "gold")),
-             colour="red") +
-  scale_y_continuous(name="% return",
-                     breaks=seq(-1, 1, .1),
-                     labels = label_percent(accuracy=1)) +
-  scale_x_continuous(name=NULL) +
-  facet_wrap(~name, ncol=3) +
-  theme_bw() +
-  ggtitle("Annual investment returns",
-          subtitle="Red horizontal line gives mean return")
-
-p
-
-```
-
-### Comparison to normality
-
-#### Individual assets
-
-```{r}
-#| label: plot-normal
+#| label: plot-densities
 #| include: true
 
 nobs <- 1000
@@ -171,17 +356,24 @@ normal_density <- measures %>%
   reframe(value=seq(min, max, length.out=nobs),
           density = dnorm(seq(min, max, length.out = nobs),
                           mean, sd),
-          .by=name)
+          .by=c(type, name))
+
+```
+
+```{r}
+#| label: plot-normal-assets
+#| include: true
 
 # Create the faceted plot
 p <- retlong |> 
-  filter(!name %in% c("cpiu", "gold")) |> 
+  # filter(!name %in% c("cpiu", "gold")) |> 
+  filter(type=="asset", year %in% analysis_years) |> 
   ggplot() +
   geom_histogram(aes(x = value, y = after_stat(density)), binwidth = .01, fill = "lightblue", alpha = 0.7) +
   facet_wrap(~ name, ncol = 2, scales="free") +
   geom_line(aes(x = value, y = density, group = name), color = "red", linewidth = 1,
-            data = normal_density |> filter(!name %in% c("cpiu", "gold"))) +
-  geom_vline(aes(xintercept=mean), data=measures |> filter(!name %in% c("cpiu", "gold"))) +
+            data = normal_density |> filter(type=="asset")) +
+  geom_vline(aes(xintercept=mean), data=measures |> filter(type=="asset")) +
   scale_x_continuous(labels=label_percent(accuracy=1)) +
   theme_bw() +
   labs(title="Annual investment returns",
@@ -193,33 +385,175 @@ p
 
 ```
 
-## Auto correlation
+```{r}
+#| label: plot-normal-portfolios
+#| include: true
+
+# Create the faceted plot
+p <- retlong |> 
+  # filter(!name %in% c("cpiu", "gold")) |> 
+  filter(type=="portfolio", year %in% analysis_years) |> 
+  ggplot() +
+  geom_histogram(aes(x = value, y = after_stat(density)), binwidth = .01, fill = "lightblue", alpha = 0.7) +
+  facet_wrap(~ name, ncol = 2, scales="free") +
+  geom_line(aes(x = value, y = density, group = name), color = "red", linewidth = 1,
+            data = normal_density |> filter(type=="portfolio")) +
+  geom_vline(aes(xintercept=mean), data=measures |> filter(type=="portfolio")) +
+  scale_x_continuous(labels=label_percent(accuracy=1)) +
+  theme_bw() +
+  labs(title="Annual investment returns, selected portfolios",
+       subtitle = "Histograms with normal curve overlay",
+       x = "% return",
+       y = "density")
+
+p
+
+```
+
+### q-q plots
+
+Histograms are good for seeing the overall shape of a distribution, but not for seeing details of the tails of the distribution.
+
+For that we use q-q plots, which, as implemented below, plot the actual values of a distribution against what we would expect if the values were normally distributed with the same mean and standard deviation.
+
+The horizontal axis is in standard deviation units and the vertical axis is shown as investment returns.
+
+The diagonal line shows where we would expect the points to lie if the data were normally distributed.
+
+Each point is an investment return on the vertical axis and where it is in standard deviation units from the mean.
+
+If the data were normally distributed, we would expect each point to lie on the diagonal line.
+
+A typical fat-tailed pattern would have points below the diagonal line at extreme negative values on the horizontal axis, and points above the diagonaly for extreme postive values on the horizontal axis. That is, the values far below the mean would be further from the mean than we would expect for the normal distribution, and the values far above the mean would be more positive than we would expect from the normal distribution.
+
+#### q-q plots for individual assets
+
+```{r}
+#| label: plot-qq-assets
+#| include: true
+
+# https://math.illinois.edu/system/files/inline-files/Proj9AY1516-report2.pdf
+
+p <- retlong |> 
+  # filter(!name %in% c("cpiu", "gold")) |>
+  # filter(!name %in% c("cpiu")) |> 
+  filter(type=="asset", year %in% analysis_years) |> 
+  ggplot(aes(sample=value)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  scale_x_continuous(labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(labels=label_percent(accuracy=0.1)) +
+  # geom_hline(yintercept = 0, colour="grey80") +
+  # geom_vline(xintercept = 0, colour="grey80") +
+  facet_wrap(~name, ncol = 2, scales="free_y") +
+  theme_bw() +
+  labs(title="q-q plots of annual investment returns for individual assets",
+       subtitle = "Relative to normal distribution",
+       x = "theoretical quantiles for normal distribution",
+       y = "investment returns")
+p
+
+```
+
+#### q-q plots for selected portfolios
+
+```{r}
+#| label: plot-qq-portfolios
+#| include: true
+
+# https://math.illinois.edu/system/files/inline-files/Proj9AY1516-report2.pdf
+
+p <- retlong |> 
+  # filter(!name %in% c("cpiu", "gold")) |>
+  # filter(!name %in% c("cpiu")) |> 
+  filter(type=="portfolio", year %in% analysis_years) |> 
+  ggplot(aes(sample=value)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  scale_x_continuous(labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(labels=label_percent(accuracy=0.1)) +
+  # geom_hline(yintercept = 0, colour="grey80") +
+  # geom_vline(xintercept = 0, colour="grey80") +
+  facet_wrap(~name, ncol = 2, scales="free_y") +
+  theme_bw() +
+  labs(title="q-q plots of annual investment returns for selected portfolios",
+       subtitle = "Relative to normal distribution",
+       x = "theoretical quantiles for normal distribution",
+       y = "investment returns")
+  
+p
+
+```
+
+## Autocorrelation
 
 Each point is the correlation coefficient between current observations and a particular lag of the observations.
 
+Real estate and tbills appear to have substantial autocorrelation, but other assets do not.
+
 ```{r}
-#| label: plot-acf
+#| label: acf-data
 #| eval: true
-#| include: true
-#| fig-width: 10
-#| fig-height: 8
+#| include: false
 
 # Convert to tsibble
 data_tsibble <- retlong |> 
-  filter(!name %in% c("cpiu", "gold")) |> 
-  as_tsibble(index = year, key = name)
+  filter(!name %in% c("cpiu")) |>
+  filter(year %in% analysis_years) |> 
+  as_tsibble(index = year, key = c(type, name))
+
+```
+
+### Individual assets
+
+```{r}
+#| label: plot-acf-assets
+#| eval: true
+#| include: true
+#| fig-width: 8
+#| fig-height: 8
+
 
 data_tsibble |> 
+  filter(type=="asset") |> 
   ACF(value, lag_max=10) |> 
   ggplot(aes(x=lag, y=acf)) +
   geom_point(colour="blue") +
-  geom_line(colour="blue", size=1.25)  +
+  geom_line(colour="blue", linewidth=1.25)  +
   geom_hline(yintercept = 0) +
   geom_hline(yintercept=c(-.2, .2), linetype="dashed") +
   scale_x_continuous(breaks=1:10) +
   facet_wrap(~ name, ncol = 2) +
   theme_bw() +
-  ggtitle("Autocorrelation plots of investment returns")
+  ggtitle("Autocorrelation plots of investment returns, individual assets")
+
+
+```
+
+### Selected portfolios
+
+```{r}
+#| label: plot-acf-portfolios
+#| eval: true
+#| include: true
+#| fig-width: 8
+#| fig-height: 6
+
+
+
+data_tsibble |> 
+  filter(type=="portfolio") |> 
+  ACF(value, lag_max=10) |> 
+  ggplot(aes(x=lag, y=acf)) +
+  geom_point(colour="blue") +
+  geom_line(colour="blue", linewidth=1.25)  +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept=c(-.2, .2), linetype="dashed") +
+  scale_x_continuous(breaks=1:10) +
+  facet_wrap(~ name, ncol = 2) +
+  theme_bw() +
+  ggtitle("Autocorrelation plots of investment returns, selected portfolios")
+
 
 ```
 
@@ -240,15 +574,31 @@ How to read a correlation plot:
 
 # in interest of speed, set eval to false -- calc in advance and save plot
 
+# sorting column names
 
-# returns
-# cor(returns)
+# native R pipe pipes the LHS into the first argument of the function on the RHS
+# (with an extra requirement of needing a function call on the RHS)
+# can use an anonymous function
+# mtcars |> (\(x) {
+#    x[which.max(x$mpg), ]
+# })()
 
-# library(GGally)
+# sorted_column_names <- returns |> 
+#   select(-c(year, cpiu)) |> 
+#   colnames() |> http://127.0.0.1:16037/graphics/plot_zoom_png?width=1035&height=900
+#   sort()
 
+# combine the above with: select(all_of(sorted_column_names))
+
+# another approach
+# returns |>
+#   select(-c(year, cpiu)) %>% # use the magrittr pipe so we can use .
+#   select(order(colnames(.)))
+
+# or use peek_vars()
 p <- returns |> 
-  select(sort(colnames(returns))) |> 
-  select(-year) |> 
+  select(-c(year, cpiu)) |> 
+  select(sort(tidyselect::peek_vars())) |> 
   ggpairs(title="Correlation plot")
 
 ggpsave <- function(plot, fpath, pointsize=5, res=72) {
@@ -264,65 +614,24 @@ ggpsave(p, fpath, pointsize=10, res=100)
 
 ![](history_corrplot.png)
 
-## Portfolios
+## Efficient portfolios
 
-We've constructed 3 stocks-bonds portfolios (sp500-baacorp): 75-25, 50-50, and 25-75.
-
-```{r}
-#| label: portfolio-efficient
-#| eval: false
-#| include: false
-
-# find the efficient portfolio - it takes some time so run in advance and save results
-
-# create an xts object
-ret2 <- returns |> 
-  filter(year %in% 1950:2022) |> 
-  mutate(date=strptime(year, "%Y")) |>
-  select(-year, -cpiu)
-xret <- as.xts(ret2 |> select(-date), ret2$date)  
-
-# construct the portfolio specification
-ps <- portfolio.spec(colnames(xret))
-ps <- add.constraint(portfolio =ps, type = "full_investment")
-ps <- add.constraint(portfolio = ps, type = "long_only")
-ps <- add.objective(portfolio = ps, type = "risk", name = "StdDev")
-# ps <- add.objective(portfolio = ps, type = "return", name = "mean")
-ps
-
-# find the optimal risk-minimizing portfolio
-opt <- optimize.portfolio(xret, portfolio = ps2, optimize_method = "ROI", trace=TRUE)
-opt
-
-# calculate the efficient frontier
-eff <- extractEfficientFrontier(
-  opt,
-  match.col = "StdDev",
-  n.portfolios = 1001,
-  risk_aversion = NULL)
-
-saveRDS(eff, here::here("data", "eff_history.rds"))
-
-```
-
-### Efficient portfolios
-
-Here are selected points on the efficient mean-variance frontier for long-only portfolios.
+Here are selected points on the efficient mean-variance frontier for long-only portfolios, calculated over the 1950-2022 period.
 
 ```{r}
 #| label: portfolio-eff-show
 #| eval: true
 #| include: true
 
-eff <- readRDS(here::here("data", "eff_history.rds"))
+efflist <- readRDS(here::here("data", "eff_history.rds"))
 
-effdf <- frontier_tbl(eff)
+indexes <- purrr::map_vec(c(.04, .05, .06, .07, .08, .09, w5050$mean, .10, .11), iclosest, efflist$effdf$mean)
 
-indexes <- purrr::map_vec(c(.04, .05, .06, .07, .08, .09, .099, .10, .11), iclosest, effdf$mean)
-
-points <- effdf |> 
+points <- efflist$effdf |> 
   filter(obs %in% indexes) |> 
-  rename_with(.fn= ~str_remove(.x, "w."), .cols=starts_with("w."))
+  rename_with(.fn= ~str_remove(.x, "w."), .cols=starts_with("w.")) |> 
+  mutate(sdmean=sd / mean) |> 
+  relocate(sdmean, .after=sd)
 
 points |> 
   select(-out, -obs) |> 
@@ -334,17 +643,18 @@ points |>
   tab_spanner(columns = sp500:gold,
               label="Portfolio weights") |>
   cols_label(mean=html("Mean return"),
-             sd=html("Standard deviation of return")) |>
+             sd=html("Standard deviation of return"),
+             sdmean=html("Ratio of SD to mean")) |>
   fmt_percent(columns=mean:gold, decimals=1) |>
+  fmt_number(columns=sdmean, decimals=2) |> 
   tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
 
 ```
 
-
 ```{r}
 #| label: portfolios
-#| eval: true
-#| include: true
+#| eval: false
+#| include: false
 
 # portfolio analytics long-only weights targeting 7%
 # sp500 tbill3 ustbond baacorp realestate  gold
@@ -353,45 +663,48 @@ points |>
 # 0.939 0            0   0          0     0.061 # for 11.2%
 # .735 0 0 .140 .125
 # .487 .341 .172
-
-portfolios <- returns |> 
-  mutate(stock75bond25= .75 * sp500 + .25 * baacorp,
-         stock50bond50= .5 * sp500 + .5 * baacorp,
-         stock25bond75= .25 * sp500 + .75 * baacorp,
-         # efflong07=.155 * sp500 + .525 * baacorp + .238 * realestate + .082 * gold,
-         efflong099= 
-           0.487 * sp500 + 
-           0.341 * baacorp + 
-           0.172 * gold
-         ) |> 
-  pivot_longer(-year)
-  
-portmeas <- portfolios |>
-  filter(year %in% 1950:2022) |> 
-  summarise(uvmeasures(value),
-            .by=name) |> 
-  mutate(sdret=sd / mean,
-         group=ifelse(str_starts(name, "stock") | str_starts(name, "eff"), "port", "asset")) |> 
-  arrange(group, name)
-
-portmeas |> 
-  select(-group) |> 
-  gt() |> 
-   tab_header(
-    title = html("Summary measures for selected U.S. asset classes and portfolios, 1950-2022"),
-    subtitle=html("Based on annual returns")
-  ) |>
-  cols_label(min=html("Minimum return"),
-             max=html("Maximum return"),
-             mean=html("Mean return"),
-             sd=html("Standard deviation of return"),
-             skew = html("Skewness"),
-             xkurt = html("Excess kurtosis"),
-             sdret=html("Ratio of standard deviation to mean return")) |>
-  fmt_number(columns=c(skew, xkurt, sdret),
-             decimals=2) |> 
-  fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
-  tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
+# 
+# portfolios <- returns |> 
+#   mutate(stock75bond25= .75 * sp500 + .25 * baacorp,
+#          stock50bond50= .5 * sp500 + .5 * baacorp,
+#          stock25bond75= .25 * sp500 + .75 * baacorp,
+#          # efflong07=.155 * sp500 + .525 * baacorp + .238 * realestate + .082 * gold,
+#          efflong099= 
+#            0.487 * sp500 + 
+#            0.341 * baacorp + 
+#            0.172 * gold
+#          ) |> 
+#   pivot_longer(-year)
+#   
+# portmeas <- portfolios |>
+#   filter(year %in% 1950:2022) |> 
+#   summarise(uvmeasures(value),
+#             .by=name) |> 
+#   mutate(sdret=sd / mean,
+#          group=ifelse(str_starts(name, "stock") | str_starts(name, "eff"), "port", "asset")) |> 
+#   arrange(group, name)
+# 
+# 
+# measures
+# 
+# portmeas |> 
+#   select(-group) |> 
+#   gt() |> 
+#    tab_header(
+#     title = html("Summary measures for selected U.S. asset classes and portfolios, 1950-2022"),
+#     subtitle=html("Based on annual returns")
+#   ) |>
+#   cols_label(min=html("Minimum return"),
+#              max=html("Maximum return"),
+#              mean=html("Mean return"),
+#              sd=html("Standard deviation of return"),
+#              skew = html("Skewness"),
+#              xkurt = html("Excess kurtosis"),
+#              sdret=html("Ratio of standard deviation to mean return")) |>
+#   fmt_number(columns=c(skew, xkurt, sdret),
+#              decimals=2) |> 
+#   fmt_percent(columns=c(min, max, mean, sd), decimals=1)|>
+#   tab_source_note(source_note="Data source: Aswath Damodaran, New York University")
 
 
 ```
@@ -535,11 +848,11 @@ stackmeas <- stack |>
   # filter(date >= "1982-09-01", date <= "2020-01-01") |> JF Begin time period
   summarise(length=first(length), uvmeasures(value), .by=c(symbol, freq)) |> 
   mutate(annret=(1 + mean)^length - 1,
-         sdret=sd / mean) |> 
+         sdmean=sd / mean) |> 
   arrange(symbol, desc(length))
 stackmeas
 
-portmeas
+# portmeas
 
 ```
 
@@ -557,7 +870,7 @@ Note that:
 #| include: true
 
 stackmeas |> 
-  select(freq, n:sdret) |> 
+  select(freq, n:sdmean) |> 
   gt() |> 
    tab_header(
     title = html("Summary measures for S&P 500 total return at different frequencies, 1950-2022"),
@@ -573,8 +886,8 @@ stackmeas |>
              skew = html("Skewness"),
              xkurt = html("Excess kurtosis"),
              annret = html("Annualized return"),
-             sdret=html("Ratio of standard deviation to mean return")) |>
-  fmt_number(columns=c(skew, xkurt, sdret),
+             sdmean=html("Ratio of standard deviation to mean return")) |>
+  fmt_number(columns=c(skew, xkurt, sdmean),
              decimals=2) |> 
   fmt_number(columns=c(n),
              decimals=0) |> 
@@ -656,7 +969,6 @@ mult_stocks <- tq_get(c("FB", "AMZN"),
 
 ```
 
-
 ```{r}
 #| label: stock-diversification-prep
 #| eval: true
@@ -673,7 +985,6 @@ stocks2 <- sp500_stocks |>
 count(stocks2, year)
 
 ```
-
 
 ```{r}
 #| label: stock-diversification
@@ -718,9 +1029,9 @@ df2 <- purrr::map(.x=c(1, 10, 50, 100, 250, 1000), .f=f_get_nfirms, reps=100) |>
   # get their summary measures and give them a sample id
 meas <- df2 |>
   summarise(uvmeasures(return), .by=c(year, nfirms, replicate))
-meas
-ht(meas)
-meas |> filter(nfirms==250)
+# meas
+# ht(meas)
+# meas |> filter(nfirms==250)
 
 
 dflong <- meas |> 
@@ -745,9 +1056,6 @@ dflong |>
   ggtitle(label="Summary investment-return statistics for each of 100 random samples of firms in the S&P 500",
           subtitle="For different numbers of firms, year=2022. Each blue dot is a sample. Red dot is median across samples.") +
   theme_bw()
-
-
-
 
 
 # df <- stocks2 |> 
@@ -837,15 +1145,17 @@ dflong |>
 
 ```
 
+## How do summary measures of investment returns change over time? (Full 1928-2022 period used)
 
-## How do summary measures of investment returns change over time?
+The first plot shows how measures for stock returns have changed, using rolling 30-year periods. The second plot shows the same measures for a 75-25 stocks-bonds portfolio.
+
 
 ```{r}
 #| label: stock-prices-rolling
 #| eval: true
 #| include: true
-#| fig-width: 10
-#| fig-height: 8
+#| fig-width: 8
+#| fig-height: 6
 
 
 #   #| column: screen-inset-shaded
@@ -889,12 +1199,141 @@ p <- retroll |>
   ggtitle("30-year rolling measures for annual S&P 500 total returns") +
   theme_bw() +
   labs(x=NULL, y=NULL, caption = "Data source: Aswath Damodaran, New York University") +
-  caption_left
+  caption_left +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0, hjust=0.5))
 p
+
+# p +  theme(axis.text.x = element_text(angle = -90, vjust = 0, hjust=0.5))
 
 # skew: negative=frequent small gains and a few large losses
 
 ```
+
+
+```{r}
+#| label: port7525-rolling
+#| eval: true
+#| include: true
+#| fig-width: 8
+#| fig-height: 6
+
+
+#   #| column: screen-inset-shaded
+
+# returns |>
+#   mutate(sp500r=zoo::rollapplyr(sp500, width=30, FUN=e1071::kurtosis, type=1,
+#                                 align="right", fill=NA)) |> # partial = FALSE
+#   ggplot(aes(year, sp500r)) + geom_line()
+
+retroll <- retlong |>
+  filter(type=="portfolio", name=="port7525") |> 
+  select(year, value) |> 
+  mutate(retroll=zoo::rollapplyr(value, width=30, FUN=uvmeasures,
+                         align="right", fill=NA),
+         n=retroll[, 1],
+         min=retroll[, 2],
+         max=retroll[, 3],
+         mean=retroll[, 4],
+         sd=retroll[, 5],
+         skew=retroll[, 6],
+         xkurt=retroll[, 7]) |> 
+  select(-retroll) |> 
+  pivot_longer(-year, names_to = "measure") |> 
+  mutate(name="port7525")
+
+p <- retroll |> 
+  filter(measure %in% c("mean", "sd", "skew", "xkurt"), !is.na(value)) |> 
+  mutate(measure=factor(
+    measure,
+    levels=c("mean", "sd", "skew", "xkurt"),
+    labels=c("mean", "sd",
+             "skew: negative -> frequent small gains & a few large losses",
+             "xkurt: positive -> heavier tails than normal distribution"))) |> 
+  arrange(measure) |> 
+  ggplot(aes(year, value)) +
+  geom_line(colour="blue", linewidth=1.25) +
+  # geom_point(colour="blue") +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~measure, scales="free_y",
+             ncol=2) +
+  scale_x_continuous(breaks=seq(1900, 2100, 5)) +
+  ggtitle("30-year rolling measures for annual returns on a 75% stock, 25% corporate bonds portfolio") +
+  theme_bw() +
+  labs(x=NULL, y=NULL, caption = "Data source: Aswath Damodaran, New York University") +
+  caption_left +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0, hjust=0.5))
+p
+
+# p +  theme(axis.text.x = element_text(angle = -90, vjust = 0, hjust=0.5))
+
+# skew: negative=frequent small gains and a few large losses
+
+```
+
+
+
+
+```{r}
+#| label: port2575-rolling
+#| eval: true
+#| include: true
+#| fig-width: 8
+#| fig-height: 6
+
+
+#   #| column: screen-inset-shaded
+
+# returns |>
+#   mutate(sp500r=zoo::rollapplyr(sp500, width=30, FUN=e1071::kurtosis, type=1,
+#                                 align="right", fill=NA)) |> # partial = FALSE
+#   ggplot(aes(year, sp500r)) + geom_line()
+
+retroll <- retlong |>
+  filter(type=="portfolio", name=="port2575") |> 
+  select(year, value) |> 
+  mutate(retroll=zoo::rollapplyr(value, width=30, FUN=uvmeasures,
+                         align="right", fill=NA),
+         n=retroll[, 1],
+         min=retroll[, 2],
+         max=retroll[, 3],
+         mean=retroll[, 4],
+         sd=retroll[, 5],
+         skew=retroll[, 6],
+         xkurt=retroll[, 7]) |> 
+  select(-retroll) |> 
+  pivot_longer(-year, names_to = "measure") |> 
+  mutate(name="port7525")
+
+p <- retroll |> 
+  filter(measure %in% c("mean", "sd", "skew", "xkurt"), !is.na(value)) |> 
+  mutate(measure=factor(
+    measure,
+    levels=c("mean", "sd", "skew", "xkurt"),
+    labels=c("mean", "sd",
+             "skew: negative -> frequent small gains & a few large losses",
+             "xkurt: positive -> heavier tails than normal distribution"))) |> 
+  arrange(measure) |> 
+  ggplot(aes(year, value)) +
+  geom_line(colour="blue", linewidth=1.25) +
+  # geom_point(colour="blue") +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~measure, scales="free_y",
+             ncol=2) +
+  scale_x_continuous(breaks=seq(1900, 2100, 5)) +
+  ggtitle("30-year rolling measures for annual returns on a 25% stock, 75% corporate bonds portfolio") +
+  theme_bw() +
+  labs(x=NULL, y=NULL, caption = "Data source: Aswath Damodaran, New York University") +
+  caption_left +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0, hjust=0.5))
+p
+
+# p +  theme(axis.text.x = element_text(angle = -90, vjust = 0, hjust=0.5))
+
+# skew: negative=frequent small gains and a few large losses
+
+```
+
+
 
 ## Notes from research
 

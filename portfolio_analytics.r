@@ -202,3 +202,52 @@ port_opt <- optimize.portfolio(R = means,
 # print the optimal portfolio weights
 port_opt$weights
 
+
+
+
+# fat tailedness ----------------------------------------------------------
+
+library(fBasics)
+
+# Generate samples from a t-distribution with 3 degrees of freedom
+set.seed(123)
+x_t <- rt(1000, df = 3)
+
+# Calculate the quantile ratio for the 95th percentile
+# qr_t <- qtR(x_t, p = 0.95)
+med <- median(x_t) # Calculate the median probability
+df <- 3
+tail_prob <- 1 - pt(qt(0.95, df = df), df = df) # Calculate the tail probability at the 95th percentile
+tail_prob
+
+# Calculate the quantile ratio
+qr_t <- tail_prob/med
+qr_t
+
+# Plot density curves of the t-distribution and normal distribution
+x_seq <- seq(-4, 4, length.out = 100)
+dens_t <- dt(x_seq, df = 3)
+dens_norm <- dnorm(x_seq)
+
+plot(x_seq, dens_t, type = "l", col = "red", lwd = 2,
+     main = "Comparison of t-distribution and normal distribution",
+     xlab = "x", ylab = "Density")
+lines(x_seq, dens_norm, col = "blue", lwd = 2)
+
+legend("topright", c("t-distribution", "Normal distribution"), 
+       col = c("red", "blue"), lwd = 2)
+
+p <- ggplot(df, aes(sample = y))
+p + stat_qq() + stat_qq_line()
+
+xt <- rt(1000, df = 3)
+summary(xt)
+tibble(obs=1:length(xt), xt) |> 
+  ggplot(aes(sample=xt))  + 
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  theme_bw()
+
+
+
+

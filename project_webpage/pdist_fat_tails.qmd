@@ -3,11 +3,11 @@ output: html_document
 editor_options: 
   chunk_output_type: inline
 ---
+
 # Generating investment returns from fat-tailed probability distributions
 
 One probability distribution that can generate time-independent fat-tailed returns is the Student's t distribution.
- 
- 
+
 ```{r}
 #| label: includes
 #| include: false
@@ -19,10 +19,41 @@ source(here::here("r", "functions.r"))
 
 ```
 
-
 The t distribution has a degrees-of-freedom parameter that controls the "fat-tailedness" of the distribution.
 
-[To come: discussion of how to parameterize the t distribution and calibrate its mean and standard deviation so that we can compare to otherwise-similar normal distribution.]
+## Choosing the degrees of freedom given targets for mean, standard deviation, and excess kurtosis
+
+To determine the degrees of freedom for a t-distribution given the desired mean, standard deviation, and kurtosis, we use the relationship between the degrees of freedom (ν) and the kurtosis (γ2).
+
+For a t-distribution, kurtosis is defined as:
+
+γ2 = (6(ν-2)) / (ν-4), for ν \> 4
+
+First, we need to find the excess kurtosis, which is the difference between the kurtosis of the desired distribution and the kurtosis of a normal distribution, which is 3. Denote the excess kurtosis as γ2_excess:
+
+γ2_excess = γ2 - 3
+
+Now, we use the relationship between the degrees of freedom and excess kurtosis:
+
+γ2_excess = (6(ν-2)) / (ν-4)
+
+Rearranging to solve for ν (degrees of freedom):
+
+ν = (12 + 6γ2_excess + 2γ2_excess\^2) / (3 + γ2_excess)
+
+If, for example, we are solving for the degrees of freedom needed to generate random values from a t distribution with excess kurtosis of 3, we would have:
+
+ν = (12 + 6 \* 3 + 2 \* 3\^2) / (3 + 3)
+
+ν = 8
+
+The relationship between degrees of freedom and kurtosis is only valid when ν \> 4. If the calculated degrees of freedom fall outside this range, we may need to consider alternative distributions or methods to achieve the desired distribution characteristics.
+
+## Calibrating values from the t distribution to hit desired mean and standard deviation while keeping excess kurtosis constant
+
+The t-distribution's mean and standard deviation can be controlled through shifting and scaling. The mean and standard deviation do not affect the degrees of freedom, which determine the kurtosis and overall shape of the distribution.
+
+Casella, George, and Roger L. Berger. *Statistical Inference*. 2nd ed. Australia ; Pacific Grove, CA: Thomson Learning, 2002. <https://mybiostats.files.wordpress.com/2015/03/casella-berger.pdf>.
 
 
 ```{r}
@@ -31,8 +62,6 @@ The t distribution has a degrees-of-freedom parameter that controls the "fat-tai
 
 
 ```
-
-
 
 ```{r}
 #| label: data
@@ -161,7 +190,6 @@ skim(df)
 
 ```
 
-
 ```{r}
 #| label: hist
 #| include: true
@@ -186,7 +214,3 @@ p <- df |>
 p
 
 ```
-
-
- 
- 

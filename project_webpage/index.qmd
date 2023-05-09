@@ -10,12 +10,23 @@ editor_options:
 
 -   Progress to date
 
--   Feedback sought:
+-   Selected assumptions and issues:
 
-    -   Calibration of probability-distribution returns to random normal
+    -   We focus on annual periods as being appropriate for pension funds (not monthly, weekly, daily, ...)
+    
+    -   We focus on longer time frames as being appropriate for pension funds -- e.g., (10, 20, 30, 40 years)
+    
+    -   We have not yet chosen pension-related measures for evaluating differences across model structures and parameterizations
+
+    -   Technical: Calibration of probability-distribution returns to random normal
     
     -   Other?
 
 -   What's ahead
+
+
+
+
+**NOTE: This web page includes far more information than will be in in the final report.**
 
 

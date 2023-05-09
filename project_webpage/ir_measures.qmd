@@ -12,7 +12,15 @@ We use the following measures to describe the characteristics of investment retu
 
 ![](images/image-1903548430.png)
 
-**Excess Kurtosis**: Excess kurtosis measures the "fat-tailedness" of the return distribution, relative to the normal distribution. Positive values indicate heavier tails and a higher likelihood of extreme returns compared to a normal distribution. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version.)
+**Excess Kurtosis**: Excess kurtosis measures the "fat-tailedness" of the return distribution, relative to the normal distribution. Positive values indicate heavier tails and a higher likelihood of extreme returns compared to a normal distribution. (Currently, we use the type 1 measure from the r package e1071, a standard textbook version. Note that kurtosis measures can be misleading, particularly for multimodal distributions but our data generally will have a single mode. They also can be misleading when there are substantial outliers.)
+
+The plot below (taken from [Cross Validated](https://stats.stackexchange.com/questions/172467/what-is-the-meaning-of-tail-of-kurtosis)) shows density curves for a normal distribution and for a t distribution with 3 degrees of freedom. The t distribution has fat tails (its density line is above the normal line in the tails); it also has a higher peak (more values clustered around the mean).
+
+![](images/image-2094188496.png)
+
+<!-- Useful blog post: https://aakinshin.net/posts/misleading-kurtosis/ -->
+
+We'll use histograms with density curves for our initial visualization of skewness and kurtosis, but because relatively few observations are in the tails, to get a clearer picture we'll use q-q plots which show tails more clearly. This will be apparent in the section on historical investment returns.
 
 ## Measures to describe behavior of investment returns over time
 

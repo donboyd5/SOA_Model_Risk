@@ -44,7 +44,7 @@ book:
       chapters:
       - ir_measures.qmd
       - ir_stylized_facts.qmd
-      - ir_history_facts.qmd
+      - ir_historical_facts.qmd
     - part: "Investment returns from probability distributions and similar models"
       chapters:
       - pdist_intro.qmd
