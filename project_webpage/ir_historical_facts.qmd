@@ -225,6 +225,8 @@ glimpse(retlong)
 
 count(retlong, type, name)
 
+skim(retport)
+
 
 ```
 
@@ -556,6 +558,46 @@ data_tsibble |>
 
 
 ```
+
+
+## Mean reversion
+
+```{r}
+
+f <- function(vec){
+  rts <- ts(vec, start = 1)
+  rts_ar1 <- Arima(rts, order = c(1, 0, 0))  # fit AR(1) model
+  stats <- coeftest(rts_ar1)
+  list(phi=stats["ar1", 1], pval=stats["ar1", 4])
+}
+
+f2 <- rollify(f, window = 30, na_value=list(phi=NA_real_, pval=NA_real_), unlist = FALSE)
+
+roll <- retport |> 
+  select(year, sp500) |> 
+  mutate(mylist=f2(sp500)) |> 
+  unnest_wider(col = mylist) |> 
+  mutate(signif=pval < .05)
+
+roll |> 
+  filter(!is.na(phi)) |> 
+  ggplot(aes(year, phi)) +
+  geom_line(colour="blue") +
+  geom_point(aes(colour=signif), size=1) +
+  geom_hline(yintercept = 0) +
+  scale_colour_manual(values=c("blue", "red")) +
+  scale_x_continuous(breaks=seq(1950, 2030, 5)) +
+  ggtitle("Rolling 30-year measure of mean reversion in annual S&P 500 total returns",
+          subtitle="Negative values can suggest mean reversion. Coefficients significantly different from zero at p < 0.05 (if any) marked in red") +
+  labs(x=NULL, y="phi (AR(1) coefficient)",
+       caption="Each observation is the AR(1) coefficient estimated from a (1, 0, 0) ARIMA model of annual investment returns over 30 years") +
+  theme_bw()  +
+  legend_none +
+  caption_left
+  
+
+```
+
 
 ## Correlation across asset classes
 

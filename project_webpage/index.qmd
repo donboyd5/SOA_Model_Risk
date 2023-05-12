@@ -10,19 +10,39 @@ editor_options:
 
 -   Progress to date
 
--   Selected assumptions and issues:
+-   Feedback desired:
 
-    -   We focus on annual periods as being appropriate for pension funds (not monthly, weekly, daily, ...)
+    -   We focus on annual periods as being appropriate for pension funds (not daily, weekly, monthly, ...)
     
     -   We focus on longer time frames as being appropriate for pension funds -- e.g., (10, 20, 30, 40 years)
     
-    -   We have not yet chosen pension-related measures for evaluating differences across model structures and parameterizations
-
-    -   Technical: Calibration of probability-distribution returns to random normal
+    -   Calibration - We attempt to generate returns that are calibrated to:
     
-    -   Other?
+        -   Have the same exact mean and standard deviation as the comparison normal distribution, and
+        
+        -   Match other desired characteristics exactly (e.g., excess kurtosis),
+        
+        -   Explanation: Suppose we want to compare two distributions of returns and their impact on pension funding: (1) 7% mean, 10% standard deviation fat-tailed returns with excess kurtosis of 0.3, and (2) 7% mean, 10% standard deviation normally distributed returns. We could take two approaches:
+        
+          (a) Generate each set of returns from probability distributions (or by other methods) that have theoretical or expected values for the measures of interest, but don't necessarily hit those values. For example, we might generate values for the first that have mean=7.2%, standard deviation=10.3%, and excess kurtosis=0.4, while values for the second might have mean=6.8% and standard deviation=9.8%. Differences for some measures, such as excess kurtosis, can be substantial even in large samples.; or
+          
+          (b) Treat the above as a first step, and calibrate the results or regenerate returns so that the desired measures are hit exactly or nearly so, while maintaining distributional objectives. Thus, we would calibrate the generated returns in the first case to have mean=7.0%, standard deviation=10.0%, and excess kurtosis=0.30, and calibrate the second to have mean=7.0% and standard deviation=10.0%.
+        
+        -   We have been seeking to do "b". This has the advantage of allowing apples-to-apples comparisons to a normal distribution,
+        
+        -   And the disadvantage of understating variability associated with a given set of parameters.
+    
+    -   We have not yet chosen pension-related measures for evaluating differences across model structures and parameterizations
+    
+    -   Other discussion items?
 
 -   What's ahead
+
+    -   Pension model
+    
+    -   More-complex ESG
+    
+    -   Impact of investment return model-choice and model parameters on pension model variables of interest
 
 
 

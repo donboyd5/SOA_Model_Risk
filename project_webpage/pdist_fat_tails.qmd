@@ -1,12 +1,14 @@
 ---
 output: html_document
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 # Generating investment returns from fat-tailed probability distributions
 
-One probability distribution that can generate time-independent fat-tailed returns is the Student's t distribution.
+The Student's t distribution often is used to generate time-independent fat-tailed returns. Like the normal distribution, it is bell-shaped and symmetric about the mean. It has three parameters: mean, standard deviation, and a degrees-of-freedom parameter (often denoted by ν) that controls the "fat-tailedness" of the distribution. The smaller the degrees of freedom, the more fat-tailed the distribution is, and as the degrees of freedom become large, the distribution approaches the normal distribution.
+
+Linear transformations of random variables drawn from the t distribution will not change the shape of the distribution of the transformed variable.
 
 ```{r}
 #| label: includes
@@ -19,33 +21,19 @@ source(here::here("r", "functions.r"))
 
 ```
 
-The t distribution has a degrees-of-freedom parameter that controls the "fat-tailedness" of the distribution.
+## Degrees of freedom and kurtosis
 
-## Choosing the degrees of freedom given targets for mean, standard deviation, and excess kurtosis
+There is a direct relationship between the degrees of freedom parameter and excess kurtosis, a statistical measure of fat-tailedness:
 
-To determine the degrees of freedom for a t-distribution given the desired mean, standard deviation, and kurtosis, we use the relationship between the degrees of freedom (ν) and the kurtosis (γ2).
+excess kurtosis xk = 6 / (ν - 4)
 
-For a t-distribution, kurtosis is defined as:
+(Based on the formula for kurtosis in National Institute of Standards and Technology. \"NIST/SEMATECH e-Handbook of Statistical Methods: Section 1.3.6.6.4. t Distribution.\" National Institute of Standards and Technology, 2021. <https://www.itl.nist.gov/div898/handbook/eda/section3/eda3664.htm>.)
 
-γ2 = (6(ν-2)) / (ν-4), for ν \> 4
+Thus, for a target excess kurtosis value, xk, degrees of freedom are:
 
-First, we need to find the excess kurtosis, which is the difference between the kurtosis of the desired distribution and the kurtosis of a normal distribution, which is 3. Denote the excess kurtosis as γ2_excess:
+ν = 6 / xk + 4
 
-γ2_excess = γ2 - 3
-
-Now, we use the relationship between the degrees of freedom and excess kurtosis:
-
-γ2_excess = (6(ν-2)) / (ν-4)
-
-Rearranging to solve for ν (degrees of freedom):
-
-ν = (12 + 6γ2_excess + 2γ2_excess\^2) / (3 + γ2_excess)
-
-If, for example, we are solving for the degrees of freedom needed to generate random values from a t distribution with excess kurtosis of 3, we would have:
-
-ν = (12 + 6 \* 3 + 2 \* 3\^2) / (3 + 3)
-
-ν = 8
+According to [this source](https://www.randomservices.org/random/expect/Skew.html) (item 6), "Since kurtosis is defined in terms of an even power of the standard score, it's invariant under linear transformations."
 
 The relationship between degrees of freedom and kurtosis is only valid when ν \> 4. If the calculated degrees of freedom fall outside this range, we may need to consider alternative distributions or methods to achieve the desired distribution characteristics.
 
@@ -53,51 +41,212 @@ The relationship between degrees of freedom and kurtosis is only valid when ν \
 
 The t-distribution's mean and standard deviation can be controlled through shifting and scaling. The mean and standard deviation do not affect the degrees of freedom, which determine the kurtosis and overall shape of the distribution.
 
-Casella, George, and Roger L. Berger. *Statistical Inference*. 2nd ed. Australia ; Pacific Grove, CA: Thomson Learning, 2002. <https://mybiostats.files.wordpress.com/2015/03/casella-berger.pdf>.
+As the t distributon's degrees of freedom increase, its peak increases while its tails get lighter. The combined effect, as measured by Pearson's kurtosis coefficient, is to reduce kurtosis.
 
+If the calculated degrees of freedom are less than or equal to 4, the kurtosis is not finite.
 
-```{r}
-#| label: kurtosis
-#| include: false
-
-
-```
 
 ```{r}
 #| label: data
+#| eval: true
 #| include: false
 
 set.seed(constants$seed)
-#set.seed(1234)
 
 nyears <- 50
 nsims <- 1000
 
 ir_mean_target <- constants$ir_mean_target
 ir_sd_target <- constants$ir_sd_target
+ir_xkurt <- 0.60 # desired excess kurtosis
+ir_df <- t_dfreedom(ir_xkurt)
+ir_mean_target; ir_sd_target
+ir_xkurt; ir_df
+
+f <- function(seed){
+  set.seed(seed)
+  tvec <- rt(nyears * nsims, ir_df)
+  xkurt <- e1071::kurtosis(tvec)
+  # tscaled <- scale_dist(tvec, 0, 1)
+  # x_std <- (tvec - ir_mean_target) / ir_sd_target
+  ks_result <- ks.test(tvec, "pt", ir_df)
+  return(tibble(seed=seed, xkurt=xkurt, ksp=ks_result$p.value))
+}
+
+df <- map_dfr(1:200, f)
+skim(df)
+
+```
+
+
+### Distribution of excess kurtosis from samples with different seeds
+
+```{r}
+#| label: kurtosis-distribution
+#| eval: true
+#| include: true
+
+df |> 
+  ggplot(aes(xkurt)) +
+  geom_histogram(fill = "blue", color = "black") +
+  scale_x_continuous(breaks=seq(-1, 1, .02)) +
+  geom_vline(xintercept = ir_xkurt) +
+  ggtitle(paste0("Distribution of excess kurtosis from 200 samples with degrees of freedom = ", f_comma(ir_df, accuracy=0.1)),
+          paste0("Target value for excess kurtosis = ", f_comma(ir_xkurt, accuracy=0.01))) +
+  theme_bw()
+
+
+```
+
+
+### Calibrated t distribution compared to normal distribution
+
+```{r}
+#| label: calibration
+#| eval: true
+#| include: false
+
+
+df |> filter(row_number()==iclosest(ir_xkurt, xkurt))
+
+bestseed <- df |> filter(row_number()==iclosest(ir_xkurt, xkurt)) |> pull(seed)
+
+set.seed(bestseed)
+ir1 <- rt(nyears * nsims, ir_df)
+
+ir <- scale_dist(ir1, ir_mean_target, ir_sd_target)
+# mean(ir); sd(ir)
+xkurt_est <- e1071::kurtosis(ir)
+
+```
+
+
+#### Histogram with normal density overlay
+
+```{r}
+#| label: hist
+#| include: true
+
+title1 <- paste0("Histogram of investment returns generated from a sample of ", f_comma(length(ir), accuracy=1), " observations")
+title2 <- paste0("Drawn from a t distribution with mean= ",
+                 f_pct(ir_mean_target, accuracy=.1), 
+                 " standard deviation= ", f_pct(ir_sd_target, accuracy=.1),
+                 " and excess kurtosis= ", f_comma(xkurt_est, accuracy=0.001),
+                 ", calibrated to be exact.",
+                 "\nNormal density overlay")
+
+#create histogram and overlay normal curve
+p <- tibble(ir=ir) |> 
+  ggplot(aes(x=ir)) +
+  geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
+  stat_function(fun = dnorm, args = list(mean=mean(ir), sd=sd(ir)), col="black") +
+  geom_vline(xintercept = mean(ir)) +
+  labs(x="investment return", y="density") +
+  scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(ir)), labels = scales::label_percent(accuracy=.1),
+                     limits=c(-.6, .6)) +
+  ggtitle(title1,
+          subtitle=title2) +
+  theme_bw()
+p
+
+```
+
+
+
+```{r}
+#| label: qqplot
+#| eval: true
+#| include: true
+
+title1 <- paste0("q-q plot of investment returns generated from a sample of ", f_comma(length(ir), accuracy=1), " observations")
+title2 <- paste0("Drawn from a t distribution with mean= ",
+                 f_pct(ir_mean_target, accuracy=.1), 
+                 " standard deviation= ", f_pct(ir_sd_target, accuracy=.1),
+                 " and excess kurtosis= ", f_comma(xkurt_est, accuracy=0.001),
+                 ", calibrated to be exact.")
+# title1
+# title2
+
+# quantile(t4, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1))
+
+p <- tibble(sample=ir) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = ir_mean_target, linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .05), ir_mean_target),
+                     labels=label_percent(accuracy=0.1)) +
+  ggtitle(label = title1, subtitle = title2) +
+  theme_bw()
+
+p
+
+# stubs <- crossing(year=1:nyears, sim=1:nsims)
+# 
+# df <- stubs |> 
+#   mutate(ir=ir)
+# glimpse(df)
+# skim(df)
+
+```
+
+
+
+
+```{r}
+#| label: old-stuff
+#| eval: false
+#| include: false
+
+
+# Casella, George, and Roger L. Berger. *Statistical Inference*. 2nd ed. Australia ; Pacific Grove, CA: Thomson Learning, 2002. <https://mybiostats.files.wordpress.com/2015/03/casella-berger.pdf>.
+# 
+# Kurtosis (γ2) = 3 + 6/(ν-4), for ν \> 4
+# 
+# Lindsey, J. K. (2004). Introduction to Applied Statistics: A Modelling Approach. Oxford University Press.
+# 
+# Stuart, A., Ord, J. K., & Arnold, S. (1999). Kendall's Advanced Theory of Statistics: Volume 1: Distribution Theory (6th ed.). London: Edward Arnold.
+
 
 # ir_mean_target <- .07
 # ir_sd_target <- .10
 
 # t_random <- rt(nyears * nsims, dfreedom)
 
-set.seed(1234)
-ir_mean_target <- .07
-ir_sd_target <- .10
-dfreedom <- 3
+# set.seed(1234)
+# ir_mean_target <- .07
+# ir_sd_target <- .10
+# dfreedom <- 3
 
-trandom <- rt(nyears * nsims, dfreedom)
-mean(trandom)
-sd(trandom)
-kurt <- kurtosis(trandom)
-excess_kurt <- kurt - 3
-excess_kurt
+# trandom <- rt(nyears * nsims, ir_df)
+# mean(trandom)
+# sd(trandom)
+# xkurt <- e1071::kurtosis(trandom)
+# xkurt
+# 
+# t2 <- scale_dist(trandom, ir_mean_target, ir_sd_target)
+# mean(t2)
+# sd(t2)
+# e1071::kurtosis(t2)
+
+
+# (m4 <- sum((trandom - mean(trandom))^4) / length(trandom))
+# (m2 <- sum((trandom - mean(trandom))^2) / length(trandom))
+# m4 / m2^2 -3
+# e1071::kurtosis(trandom, type=1) # 1 textbook; 2 SAS, SPSS; 3 mintab, bmdp
+# e1071::kurtosis(trandom, type=2) 
+# e1071::kurtosis(trandom, type=3) 
+# moments::kurtosis(trandom) - 3  # moments uses type 1
+# 
+# (am <- all.moments(trandom, order.max=4 ))
+# am[5] / (am[3]^2) - 3
 
 # Scale and shift the random numbers to the desired mean and standard deviation
-sdadjust <- ir_sd_target / sd(trandom)
-muadjust <- (ir_mean_target - sdadjust * mean(trandom)) / sdadjust
 
-ir <- (trandom + muadjust) * sdadjust
 # mean(ir)
 # sd(ir)
 # irkurt <- kurtosis(ir)
@@ -181,36 +330,26 @@ ir <- (trandom + muadjust) * sdadjust
 # tks <- ks.test(t_adj, "pt", best_df)
 # tks$p.value
 
-stubs <- crossing(year=1:nyears, sim=1:nsims)
 
-df <- stubs |> 
-  mutate(ir=ir)
-glimpse(df)
-skim(df)
 
-```
+# mean(t3)
+# sd(t3)
+# xkurt <- e1071::kurtosis(t3)
+# xkurt
 
-```{r}
-#| label: hist
-#| include: true
+# t301 <- scale_dist(t3, 0, 1)
+# mean(t301); sd(t301)
+# 
+# ks_result <- ks.test(t301, "pt", ir_df)
+# 
+# # Show the test results
+# cat("Kolmogorov-Smirnov test statistic:", ks_result$statistic, "\n")
+# cat("p-value:", ks_result$p.value, "\n")
+# # If the p-value is greater than a chosen significance level (e.g., 0.05), you can conclude that the adjusted values are not significantly different from the t-distribution. 
+# ks_result$p.value * 100
 
-title1 <- paste0("Investment returns drawn from the t distribution, calibrated to: mean ",
-                 f_pct(mean(ir), accuracy=.1),
-                 " and standard deviation ",
-                 f_pct(sd(ir), accuracy=.1))
 
-#create histogram and overlay normal curve
-p <- df |> 
-  ggplot(aes(x=ir)) +
-  geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
-  stat_function(fun = dnorm, args = list(mean=mean(df$ir), sd=sd(df$ir)), col="black") +
-  geom_vline(xintercept = mean(ir)) +
-  labs(x="investment return", y="density") +
-  scale_x_continuous(breaks=c(seq(-10, 10, .2), mean(df$ir)), labels = scales::label_percent(accuracy=.1),
-                     limits=c(-.6, .6)) +
-  ggtitle(title1,
-          subtitle="Overlaid normal curve has same mean and standard deviation") +
-  theme_bw()
-p
+
 
 ```
+

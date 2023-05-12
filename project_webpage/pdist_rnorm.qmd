@@ -7,6 +7,9 @@ editor_options:
 
 Simple time-independent random normal distribution portfolio-returns.
 
+We have calibrated generated investment returns via a linear transformation so that they hit the desired mean and standard deviation exactly (or nearly so).
+
+
 ```{r}
 #| label: includes
 #| include: false
@@ -39,21 +42,29 @@ ir_sd_target <- constants$ir_sd_target
 ir_actual <- rnorm(nyears * nsims, mean = ir_mean_target, sd=ir_sd_target)
 
 # adjust the values to have the EXACT mean and sd we want
-ir <- ir_mean_target + (ir_actual - mean(ir_actual)) * ir_sd_target / sd(ir_actual)
+# ir <- ir_mean_target + (ir_actual - mean(ir_actual)) * ir_sd_target / sd(ir_actual)
+ir <- scale_dist(ir_actual, ir_mean_target, ir_sd_target)
+mean(ir); sd(ir)
+
 saveRDS(ir, here::here("data", "ir_norm.rds"))
 
-mean(ir_actual); mean(ir)
-sd(ir_actual); sd(ir)
-
-stubs <- crossing(year=1:nyears, sim=1:nsims)
-
-df <- stubs |> 
-  mutate(ir=ir)
-glimpse(df)
-skim(df)
+# mean(ir_actual); mean(ir)
+# sd(ir_actual); sd(ir)
+# 
+# stubs <- crossing(year=1:nyears, sim=1:nsims)
+# 
+# df <- stubs |> 
+#   mutate(ir=ir)
+# glimpse(df)
+# skim(df)
 
 
 ```
+
+
+## Comparisons to normal distribution with same mean and standard deviation
+
+### Histogram with density plot overlay
 
 
 ```{r}
@@ -66,7 +77,7 @@ title1 <- paste0("Investment returns drawn from the normal distribution, calibra
                  " and standard deviation ",
                  f_pct(sd(ir), accuracy=.1))
 
-df |> 
+tibble(ir=ir) |> 
   ggplot(aes(x=ir)) +
   geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
   stat_function(fun = dnorm, args = list(mean=mean(ir), sd=sd(ir)), col="black") +
@@ -77,6 +88,43 @@ df |>
   ggtitle(title1,
           subtitle="Overlaid normal curve has same mean and standard deviation") +
   theme_bw()
+
+```
+
+
+### q-q plot to show behavior in the tails more clearly
+
+
+```{r}
+#| label: q-q-plot
+#| include: true
+
+title1 <- paste0("q-q plot of investment returns generated from a sample of ", f_comma(length(ir), accuracy=1), " observations")
+title2 <- paste0("Drawn from a normal distribution with mean= ",
+                 f_pct(ir_mean_target, accuracy=.1), 
+                 " standard deviation= ", f_pct(ir_sd_target, accuracy=.1),
+                 ", calibrated to be exact.")
+# title1
+# title2
+# 
+# quantile(ir, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1))
+
+p <- tibble(sample=ir) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = ir_mean_target, linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .05), ir_mean_target),
+                     labels=label_percent(accuracy=0.1)) +
+  ggtitle(label = title1, subtitle = title2) +
+  theme_bw()
+
+p
+
 
 ```
 
