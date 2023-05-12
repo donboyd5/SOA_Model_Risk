@@ -563,6 +563,10 @@ data_tsibble |>
 ## Mean reversion
 
 ```{r}
+#| label: plot-rolling-phi
+#| eval: true
+#| include: true
+
 
 f <- function(vec){
   rts <- ts(vec, start = 1)
