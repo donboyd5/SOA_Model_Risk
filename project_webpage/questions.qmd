@@ -1,0 +1,16 @@
+# Questions and feedback desired (after progress report)
+
+-   We focus on annual periods as being appropriate for pension funds (not daily, weekly, monthly, ...)
+
+-   We focus on longer time frames as being appropriate for pension funds -- e.g., (10, 20, 30, 40 years)
+
+-   Calibration - We want to compare results under different models and model parameterizations in an apples-to-apples way. To accomplish this, we calibrate generated investment returns to closely match desired parameters. We have two questions:
+
+    -   Does it make sense to do this?
+
+    -   Are we doing it in a good way? (The method depends on the approach used to generate investment returns.)
+
+    The questions will be come clearer in later sections.
+
+-   We have not yet chosen pension-related measures for evaluating differences across model structures and parameterizations, but they're a good discussion topic
+

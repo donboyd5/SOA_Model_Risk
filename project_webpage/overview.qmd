@@ -10,10 +10,10 @@ For the full project document, see the [Appendix](appdx_project_doc.qmd#Project%
 
 -   Key question: to what extent can ESG model structure or parameters lead to meaningful alternative conclusions about pension-related risks?
 
--   Provide advice to pension fund practitioners on questions to ask about ESG and pension models they use to evaluate pension risks.\
-
+-   Provide advice to pension fund practitioners on questions to ask about ESG and pension models they use to evaluate pension risks.
 
 This web page tracks our development and analysis of investment returns under alternative approaches and their impact on pension outcomes using a simple pension model.
 
 The project report will be a separate document that addresses full project goals and will incorporate key results from this web page.
 
+Here is our [draft report outline](https://docs.google.com/document/d/1k3hEVMMExy-2aFCZvplcFOnFeZ5tGMRP?rtpof=true&authuser=donboyd5%40gmail.com&usp=drive_fs).

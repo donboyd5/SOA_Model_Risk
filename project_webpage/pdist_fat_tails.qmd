@@ -51,8 +51,6 @@ If the calculated degrees of freedom are less than or equal to 4, the kurtosis i
 #| eval: true
 #| include: false
 
-set.seed(constants$seed)
-
 nyears <- 50
 nsims <- 1000
 
@@ -62,6 +60,15 @@ ir_xkurt <- 0.60 # desired excess kurtosis
 ir_df <- t_dfreedom(ir_xkurt)
 ir_mean_target; ir_sd_target
 ir_xkurt; ir_df
+
+```
+
+
+
+```{r}
+#| label: tdist-samples
+#| eval: false
+#| include: false
 
 f <- function(seed){
   set.seed(seed)
@@ -73,8 +80,11 @@ f <- function(seed){
   return(tibble(seed=seed, xkurt=xkurt, ksp=ks_result$p.value))
 }
 
-df <- map_dfr(1:200, f)
+df <- map_dfr(1:1000, f)
 skim(df)
+
+saveRDS(df, here::here("data", "tdist_samples_50k.rds"))
+
 
 ```
 
@@ -86,13 +96,21 @@ skim(df)
 #| eval: true
 #| include: true
 
+df <- readRDS(here::here("data", "tdist_samples_50k.rds"))
+
+title1 <- paste0("Distribution of excess kurtosis from ",
+                 f_comma(nrow(df)), " samples of 50,000 returns")
+
+title2 <- paste0("Degrees of freedom = ", f_comma(ir_df, accuracy=0.1),
+                 ".  Target value for excess kurtosis = ", f_comma(ir_xkurt, accuracy=0.01))
+
 df |> 
   ggplot(aes(xkurt)) +
-  geom_histogram(fill = "blue", color = "black") +
+  geom_histogram(fill = "lightblue", color = "black") +
   scale_x_continuous(breaks=seq(-1, 1, .02)) +
   geom_vline(xintercept = ir_xkurt) +
-  ggtitle(paste0("Distribution of excess kurtosis from 200 samples with degrees of freedom = ", f_comma(ir_df, accuracy=0.1)),
-          paste0("Target value for excess kurtosis = ", f_comma(ir_xkurt, accuracy=0.01))) +
+  ggtitle(title1,
+          subtitle=title2) +
   theme_bw()
 
 
@@ -109,7 +127,7 @@ df |>
 
 df |> filter(row_number()==iclosest(ir_xkurt, xkurt))
 
-bestseed <- df |> filter(row_number()==iclosest(ir_xkurt, xkurt)) |> pull(seed)
+(bestseed <- df |> filter(row_number()==iclosest(ir_xkurt, xkurt)) |> pull(seed))
 
 set.seed(bestseed)
 ir1 <- rt(nyears * nsims, ir_df)
@@ -117,6 +135,7 @@ ir1 <- rt(nyears * nsims, ir_df)
 ir <- scale_dist(ir1, ir_mean_target, ir_sd_target)
 # mean(ir); sd(ir)
 xkurt_est <- e1071::kurtosis(ir)
+
 
 ```
 
@@ -127,15 +146,14 @@ xkurt_est <- e1071::kurtosis(ir)
 #| label: hist
 #| include: true
 
-title1 <- paste0("Histogram of investment returns generated from a sample of ", f_comma(length(ir), accuracy=1), " observations")
-title2 <- paste0("Drawn from a t distribution with mean= ",
+title1 <- paste0(f_comma(length(ir), accuracy=1), " investment returns from the t distribution")
+title2 <- paste0("Calibrated to mean ",
                  f_pct(ir_mean_target, accuracy=.1), 
-                 " standard deviation= ", f_pct(ir_sd_target, accuracy=.1),
-                 " and excess kurtosis= ", f_comma(xkurt_est, accuracy=0.001),
-                 ", calibrated to be exact.",
-                 "\nNormal density overlay")
+                 " ,standard deviation ", f_pct(ir_sd_target, accuracy=.1),
+                 " and excess kurtosis ", f_comma(xkurt_est, accuracy=0.001),
+                 ".  Normal density overlay")
 
-#create histogram and overlay normal curve
+# create histogram and overlay normal curve
 p <- tibble(ir=ir) |> 
   ggplot(aes(x=ir)) +
   geom_histogram(aes(y = after_stat(density)), bins=30, fill='lightblue', col='grey90') +
@@ -146,11 +164,10 @@ p <- tibble(ir=ir) |>
                      limits=c(-.6, .6)) +
   ggtitle(title1,
           subtitle=title2) +
-  theme_bw()
+  theme_bw(base_size = 10)
 p
 
 ```
-
 
 
 ```{r}
@@ -158,14 +175,13 @@ p
 #| eval: true
 #| include: true
 
-title1 <- paste0("q-q plot of investment returns generated from a sample of ", f_comma(length(ir), accuracy=1), " observations")
-title2 <- paste0("Drawn from a t distribution with mean= ",
+title1 <- paste0("q-q plot of ", f_comma(length(ir), accuracy=1), " investment returns from the t distribution")
+title2 <- paste0("Calibrated to mean ",
                  f_pct(ir_mean_target, accuracy=.1), 
-                 " standard deviation= ", f_pct(ir_sd_target, accuracy=.1),
-                 " and excess kurtosis= ", f_comma(xkurt_est, accuracy=0.001),
-                 ", calibrated to be exact.")
+                 ", standard deviation ", f_pct(ir_sd_target, accuracy=.1),
+                 ", and excess kurtosis ", f_comma(xkurt_est, accuracy=0.001))
 # title1
-# title2
+# d
 
 # quantile(t4, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1))
 
@@ -176,12 +192,13 @@ p <- tibble(sample=ir) |>
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = ir_mean_target, linetype="dashed") +
   geom_vline(xintercept = 0) +
-  scale_x_continuous(breaks=seq(-4, 4, 0.5),
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
                      labels=label_number(accuracy=0.1)) +
-  scale_y_continuous(breaks=c(seq(-1, 1, .05), ir_mean_target),
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), ir_mean_target),
                      labels=label_percent(accuracy=0.1)) +
   ggtitle(label = title1, subtitle = title2) +
-  theme_bw()
+  theme_bw(base_size = 11)
 
 p
 

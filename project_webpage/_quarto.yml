@@ -28,6 +28,8 @@ format:
     number-sections: true
     toc-depth: 5
     theme: cosmo
+    fig-width: 8
+    fig-height: 6
   # pdf:
   #   documentclass: scrreprt
 
@@ -40,6 +42,7 @@ book:
   chapters:
     - index.qmd
     - overview.qmd
+    - questions.qmd
     - part: "Facts about investment returns"
       chapters:
       - ir_measures.qmd
@@ -53,7 +56,7 @@ book:
       - pdist_intro.qmd
       - pdist_rnorm.qmd
       - pdist_fat_tails.qmd
-      - pdist_time_corr.qmd
+      - pdist_mean_reversion.qmd
     - part: "Economic scenario generators"
       chapters:      
       - esg_intro.qmd      
@@ -68,7 +71,7 @@ book:
       - penmod_intro.qmd  
     - part: "Impact of model structure and parameterization on key pension model outputs"
       chapters:
-      - results_intro.qmd        
+      - results_intro.qmd
     - part: "Appendix"
       chapters:
       - appdx_project_doc.qmd

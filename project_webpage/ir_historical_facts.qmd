@@ -443,15 +443,15 @@ p <- retlong |>
   ggplot(aes(sample=value)) +
   stat_qq_line() + 
   stat_qq(colour="blue", size=0.75) +
-  scale_x_continuous(labels=label_number(accuracy=0.1)) +
-  scale_y_continuous(labels=label_percent(accuracy=0.1)) +
+  scale_x_continuous(labels=label_number(accuracy=0.1), limits=c(-4, 4), breaks=seq(-4, 4, .5)) +
+  scale_y_continuous(labels=label_percent(accuracy=0.1), breaks=seq(-2, 2, .1)) +
   # geom_hline(yintercept = 0, colour="grey80") +
   # geom_vline(xintercept = 0, colour="grey80") +
   facet_wrap(~name, ncol = 2, scales="free_y") +
-  theme_bw() +
+  theme_bw(base_size=10) +
   labs(title="q-q plots of annual investment returns for individual assets",
        subtitle = "Relative to normal distribution",
-       x = "theoretical quantiles for normal distribution",
+       x = "theoretical quantiles for standard normal distribution",
        y = "investment returns")
 p
 
@@ -462,6 +462,8 @@ p
 ```{r}
 #| label: plot-qq-portfolios
 #| include: true
+#| fig-width: 8
+#| fig-height: 6
 
 # https://math.illinois.edu/system/files/inline-files/Proj9AY1516-report2.pdf
 
@@ -472,15 +474,15 @@ p <- retlong |>
   ggplot(aes(sample=value)) +
   stat_qq_line() + 
   stat_qq(colour="blue", size=0.75) +
-  scale_x_continuous(labels=label_number(accuracy=0.1)) +
-  scale_y_continuous(labels=label_percent(accuracy=0.1)) +
+  scale_x_continuous(labels=label_number(accuracy=0.1), limits=c(-4, 4), breaks=seq(-4, 4, .5)) +
+  scale_y_continuous(labels=label_percent(accuracy=0.1), breaks=seq(-2, 2, .1)) +
   # geom_hline(yintercept = 0, colour="grey80") +
   # geom_vline(xintercept = 0, colour="grey80") +
   facet_wrap(~name, ncol = 2, scales="free_y") +
-  theme_bw() +
+  theme_bw(base_size=10) +
   labs(title="q-q plots of annual investment returns for selected portfolios",
        subtitle = "Relative to normal distribution",
-       x = "theoretical quantiles for normal distribution",
+       x = "theoretical quantiles for standard normal distribution",
        y = "investment returns")
   
 p
@@ -562,20 +564,19 @@ data_tsibble |>
 
 ## Mean reversion
 
+The following plot shows a measure of mean reversion for S&P 500 total returns.
+
+The measure is the coefficient on the AR(1) term from an ARIMA(1, 0, 0) model of total returns. When the AR(1) coefficient is negative, it indicates a mean-reverting process. This means that if a value is above the mean, the next value will tend to be closer to the mean, and vice versa. The magnitude of the coefficient indicates the speed of mean reversion: the larger the absolute value of the negative coefficient, the faster the process reverts to the mean. This coefficient is sometimes called *phi*.
+
+In the plot below, the measure is calculated on a 30-year rolling basis: Each observation is the AR(1) coefficient estimated from an ARIMA(1, 0, 0) model of annual investment returns over the previous 30 years.
+
+
 ```{r}
 #| label: plot-rolling-phi
 #| eval: true
 #| include: true
 
-
-f <- function(vec){
-  rts <- ts(vec, start = 1)
-  rts_ar1 <- Arima(rts, order = c(1, 0, 0))  # fit AR(1) model
-  stats <- coeftest(rts_ar1)
-  list(phi=stats["ar1", 1], pval=stats["ar1", 4])
-}
-
-f2 <- rollify(f, window = 30, na_value=list(phi=NA_real_, pval=NA_real_), unlist = FALSE)
+f2 <- rollify(ar1, window = 30, na_value=list(phi=NA_real_, pval=NA_real_), unlist = FALSE)
 
 roll <- retport |> 
   select(year, sp500) |> 
@@ -591,11 +592,11 @@ roll |>
   geom_hline(yintercept = 0) +
   scale_colour_manual(values=c("blue", "red")) +
   scale_x_continuous(breaks=seq(1950, 2030, 5)) +
-  ggtitle("Rolling 30-year measure of mean reversion in annual S&P 500 total returns",
-          subtitle="Negative values can suggest mean reversion. Coefficients significantly different from zero at p < 0.05 (if any) marked in red") +
-  labs(x=NULL, y="phi (AR(1) coefficient)",
-       caption="Each observation is the AR(1) coefficient estimated from a (1, 0, 0) ARIMA model of annual investment returns over 30 years") +
-  theme_bw()  +
+  ggtitle("Rolling 30-year measure of mean reversion in annual S&P 500 total returns. Negative values suggest mean reversion.",
+          subtitle="Coefficients significantly different from zero at p < 0.05 (if any) are marked in red") +
+  labs(x=NULL, y="phi",
+       caption="Each observation is the AR(1) coefficient estimated from an ARIMA(1, 0, 0) model of annual investment returns over 30 years") +
+  theme_bw(base_size = 8)  +
   legend_none +
   caption_left
   

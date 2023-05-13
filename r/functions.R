@@ -61,6 +61,16 @@ t_dfreedom <- function(xkurt){
 }
 
 
+# statistical -------------------------------------------------------------
+
+ar1 <- function(vec){
+  rts <- ts(vec, start = 1)
+  rts_ar1 <- Arima(rts, order = c(1, 0, 0))  # fit AR(1) model
+  stats <- coeftest(rts_ar1)
+  list(phi=stats["ar1", 1], pval=stats["ar1", 4])
+}
+
+fphi <- function(vec) ar(vec, aic=FALSE, order.max = 1)$ar
 
 
 # functions related to investment returns ---------------------------------

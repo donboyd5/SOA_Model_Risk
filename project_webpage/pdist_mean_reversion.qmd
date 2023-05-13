@@ -1,0 +1,173 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Investment returns correlated over time
+
+<!-- A multivariate normal distribution with returns correlated over time, parameterized by mean, standard deviation, and a correlation matrix. -->
+
+
+```{r}
+#| label: includes
+#| include: false
+
+source(here::here("r", "libraries.r"))
+source(here::here("r", "libraries_ts.r"))
+source(here::here("r", "constants.r"))
+source(here::here("r", "functions.r"))
+
+```
+
+
+```{r}
+#| label: parameters
+#| include: false
+
+
+# Define parameters
+ir_mean_target <- 0.07
+ir_sd_target <- 0.10
+
+phi <- -0.20  # the coefficient on AR(1) term
+
+nyears <- 50  # number of years to simulate
+nsims <- 1000
+
+```
+
+
+
+```{r}
+#| label: functions
+#| include: false
+
+gmat <- function(seed){
+  set.seed(seed)
+  m <- matrix(nrow=nsims, ncol=nyears)
+  y1 <- rnorm(nsims, mean=ir_mean_target, sd=ir_sd_target) # year 1
+  # y1 <- scale_dist(y1, mu, sd) # scale year 1
+  m[, 1] <- y1
+  
+  for (t in 2:nyears) {
+    e <- rnorm(nsims, mean = 0, sd = ir_sd_target)
+    # e <- scale_dist(e, 0, sd)
+    m[, t] <- ir_mean_target + phi * (m[, t-1] - ir_mean_target) + e
+  }
+  m
+}
+
+
+fmphi <- function(m) median(apply(m, 1, fphi))
+
+f <- function(seed){
+  m <- gmat(seed)
+  mdnphi <- fmphi(m)
+  tbl <- tibble(seed=!!seed, meanmat=mean(m), sdmat=sd(m),
+                mdnphi=!!mdnphi) |> 
+    mutate(
+      errsq=(ir_mean_target - meanmat)^2 +
+        (ir_sd_target - sdmat)^2 +
+        (phi - mdnphi)^2)
+  
+  return(tbl)
+}
+
+```
+
+
+```{r}
+#| label: ONETIME-bestseed
+#| eval: false
+#| include: false
+
+
+mean(m); sd(m)
+quantile(colMeans(m))
+apply(m, 2, sd)
+ar1(m[2, ])$phi
+fmphi(m)
+
+system.time(df <- map_dfr(1:10000, f, .progress=TRUE))
+skim(df)
+df
+df |> filter(row_number()==iclosest(0, df$errsq))
+
+saveRDS(df, here::here("data", "meanrevert_samples_50k.rds"))
+
+```
+
+
+
+```{r}
+#| label: get-best
+#| eval: true
+#| include: false
+
+df <- readRDS(here::here("data", "meanrevert_samples_50k.rds"))
+df |> filter(row_number()==iclosest(0, df$errsq))
+(bestseed <- df |> filter(row_number()==iclosest(0, df$errsq)) |> pull(seed))
+
+m <- gmat(bestseed)
+mean(m)
+sd(m)
+fmphi(m)
+# f(6549)
+
+# mod <- ar(m[3, ], aic=FALSE, order.max = 1)
+# str(mod)
+# mod$ar
+
+df1 <- as_tibble(m) |> 
+  mutate(sim=row_number()) |> 
+  pivot_longer(-sim, names_to = "year", values_to = "ir") |> 
+  mutate(year=str_remove(year, "V") |> as.integer())
+glimpse(df1)
+skim(df1)
+count(df1, year)
+count(df1, sim) |> ht()
+
+```
+
+
+```{r}
+#| label: qqplot-best
+#| eval: true
+#| include: true
+
+p <- df1 |> 
+  # filter(sim==1) |> 
+  ggplot(aes(sample=ir)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = ir_mean_target, linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .05), ir_mean_target),
+                     labels=label_percent(accuracy=0.1)) +
+  ggtitle(label = "qqplot of mean-reverting returns", subtitle = "phi= -0.20") +
+  theme_bw()
+p
+```
+
+
+
+```{r}
+#| label: tsplot-sim
+#| eval: true
+#| include: true
+
+df1 |> 
+  filter(sim==1) |> 
+  ggplot(aes(year, ir)) +
+  geom_line() +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = ir_mean_target, linetype="dashed") +
+  theme_bw()
+
+
+```
+
