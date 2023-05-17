@@ -1,0 +1,400 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Asset accumulation
+
+```{r}
+#| label: includes
+#| include: false
+
+source(here::here("r", "libraries.r"))
+source(here::here("r", "libraries_ts.r"))
+source(here::here("r", "constants.r"))
+source(here::here("r", "functions.r"))
+
+```
+
+
+```{r}
+#| label: parameters
+#| eval: true
+#| include: false
+
+nsims <- 1000
+nyears <- 50
+ir_mean_target <- 0.07
+ir_sd_target <- 0.10
+ir_xkurt_target <- 0.60
+ir_phi_target <- -0.20
+
+
+```
+
+
+```{r}
+#| label: rnorm
+#| eval: true
+#| include: false
+
+set.seed(1234)
+ir_norm <- rnorm(nsims * nyears) |> scale_dist(ir_mean_target, ir_sd_target)
+ir_norm <- matrix(ir_norm, nrow = nsims, ncol = nyears)
+dim(ir_norm)
+mean(ir_norm); sd(ir_norm)
+e1071::kurtosis(ir_norm)
+
+```
+
+
+```{r}
+#| label: tdist
+#| eval: true
+#| include: false
+
+df <- readRDS(here::here("data", "tdist_samples_50k.rds"))
+
+df |> filter(row_number()==iclosest(ir_xkurt_target, xkurt))
+
+(bestseed <- df |> filter(row_number()==iclosest(ir_xkurt_target, xkurt)) |> pull(seed))
+
+set.seed(bestseed)
+(ir_df <- t_dfreedom(ir_xkurt_target))
+ir1 <- rt(nyears * nsims, ir_df)
+ir_tdist <- scale_dist(ir1, ir_mean_target, ir_sd_target)
+ir_tdist <- matrix(ir_tdist, nrow = nsims, ncol = nyears)
+
+mean(ir_tdist); sd(ir_tdist)
+(xkurt_est <- e1071::kurtosis(ir_tdist))
+
+```
+
+
+```{r}
+#| label: mean_revert
+#| eval: true
+#| include: false
+
+df <- readRDS(here::here("data", "meanrevert_samples_50k.rds"))
+
+best_results <- df |> 
+  filter(row_number()==iclosest(value=ir_phi_target, vec=phi))
+(bestseed <- best_results$seed)
+
+ir_meanrev <- mr_mat(bestseed, nyears, nsims, ir_phi_target,
+                   ir_mean_target, ir_sd_target)
+
+# mean(ir_meanrev)
+# sd(ir_meanrev)
+# apply(ir_meanrev, 1, fphi) |> median()
+# apply(ir_meanrev, 1, fphi) |> quantile()
+
+```
+
+
+```{r}
+#| label: stack
+#| eval: true
+#| include: false
+
+stackw <- bind_rows(
+  as_tibble(ir_norm) |> mutate(type="normal", sim=row_number()),
+  as_tibble(ir_tdist) |> mutate(type="tdist", sim=row_number()),
+  as_tibble(ir_meanrev) |> mutate(type="meanrev", sim=row_number())) |> 
+  rename_with(.fn=~str_replace(.x, "V", "year"))
+
+# glimpse(stackw)
+
+# make a long file
+stackl <- stackw |> 
+  pivot_longer(starts_with("year"),
+               names_to = "year",
+               values_to = "ir") |> 
+  mutate(year=str_remove(year, "year") |> as.integer())
+# glimpse(stackl)
+# count(stackl, type)
+# count(stackl, year) |> ht()
+# count(stackl, sim) |> ht()
+
+```
+
+
+```{r}
+#| label: assets
+#| eval: true
+#| include: false
+
+# create a year zero
+yzero <- stackl |> 
+  expand(type, sim) |> 
+  mutate(year=0, ir=0)
+
+aa <- bind_rows(yzero, stackl) |> 
+  arrange(type, sim, year) |> 
+  mutate(aa=cumprod(1 + ir), .by=c(type, sim))
+
+aa |> filter(year==1, sim==1)
+
+glimpse(aa)
+
+
+aa |> 
+  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+  summarise(aa=median(aa), .by=c(type, year)) |> 
+  pivot_wider(names_from = type, values_from = aa)
+  
+aa |> 
+  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+  summarise(aa=p25(aa), .by=c(type, year)) |> 
+  pivot_wider(names_from = type, values_from = aa)
+
+aa |> 
+  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+  summarise(aa=p75(aa), .by=c(type, year)) |> 
+  pivot_wider(names_from = type, values_from = aa)
+
+aa |> 
+  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+  summarise(aa=pany(aa, .1), .by=c(type, year)) |> 
+  pivot_wider(names_from = type, values_from = aa)
+
+```
+
+
+```{r}
+#| label: aa-boxplots
+#| eval: true
+#| include: true
+
+# skim(aa)
+
+brks <- c(100, 
+          seq(1000, 10000, 1000), 
+          seq(10e3, 20e3, 2e3)) |> unique()
+# brks
+
+p <- aa |> 
+  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+  mutate(year=factor(year),
+         type=factor(type, levels=c("normal", "tdist", "meanrev")),
+         aa=aa * 100) |> 
+  ggplot(aes(x=year, y=aa, fill=type)) + 
+  geom_boxplot() +
+  # scale_y_continuous(breaks=brks) +
+  scale_y_log10() +
+  labs(y="assets", caption="Note: log 10 scale") +
+  ggtitle("Asset accumulation at various years for 3 sets of investment returns, all with mean 7.0% and sd 10.0%",
+          subtitle="(1) normal distribution, (2) t distribution, excess kurtosis=0.60, and (3) mean-reverting series, phi=-0.20") +
+  theme_bw(base_size = 9) +
+  legend_notitle +
+  caption_left
+p
+
+
+```
+
+
+
+```{r}
+#| label: aa-plots-ratios
+#| eval: true
+#| include: true
+
+ptiles <- c(0, .001, .01, .05, .1, .25, .5, .75, .9, .95, .99, .999, 1)
+
+aaratios <- aa |> 
+  filter(year %in% seq(0, 50, 5)) |>
+  summarise(ptiles=list(quantile(aa, probs = ptiles)), .by=c(type, year)) |> 
+  unnest_longer(col=ptiles) |> 
+  mutate(nptile=str_remove(ptiles_id, "%") |> as.numeric(),
+         ratio=ptiles / ptiles[type=="normal"],
+         .by=c(year, ptiles_id))
+  
+
+p <- aaratios |> 
+  filter(nptile >0, nptile < 100) |> 
+  filter(type != "normal") |> 
+  mutate(year=factor(year),
+         pdiff=ratio - 1) |> 
+  ggplot(aes(x=year, y=pdiff, colour=type)) +
+  geom_col(aes(fill=type), width=0.2, position = position_dodge(width=0.5)) +
+  # geom_point(position = position_dodge(width=0.75)) +
+  geom_hline(yintercept = 0) +
+  scale_y_continuous(name=NULL, breaks=seq(-1, 1, .1), labels = label_percent(accuracy=1)) +
+  labs(x="# of years", caption="t distribution excess kurtosis = 0.60; mean reversion phi = -0.20") +
+  facet_wrap(~nptile) +
+  ggtitle("Assets accumulated with non-normal investment returns, % above or below assests accumulated with normal returns",
+          subtitle="At different percentile points, alternative accumulation periods. Mean = 7.0%, sd=10.0%") +
+  theme_bw(base_size=9) +
+  legend_notitle +
+  caption_left
+
+p
+
+```
+
+
+```{r}
+#| label: prep-bootstrap
+#| eval: false
+#| include: false
+
+set.seed(constants$seed)
+set.seed(99999)
+nsims <- 1000
+nyears <- 50
+bs <- meboot(rts, reps = nsims)
+str(bs)
+head(bs$x); head(rts)
+m1 <- bs$ensemble
+dim(m1)
+
+# get random start years
+(maxstart <- nrow(m1) - nyears + 1) # the latest year we can start in
+starts <- sample(1:maxstart, nsims, replace=TRUE)
+
+# create a new submatrix with nyears rows for each column, starting in the random year
+f <- function(i, m){
+  m[starts[i]:(starts[i] + nyears - 1), i]
+}
+# ncols <- 4
+(ncols <- ncol(m1))
+ml <- purrr::map(1:ncols, f, m1) # create a list
+m2 <- matrix(unlist(ml), ncol=ncols, byrow=FALSE)  # convert the list to a matrix
+
+# check
+col <- 9; starts[col]; m1[starts[col]:(starts[col] + 3), col]; ml[[col]]; m2[, col]
+
+# transpose the matrix and save
+ir_bstrap <- t(m2)
+dim(ir_bstrap)
+# saveRDS(m, here::here("data", "hist_bstrap_50k.rds"))
+
+
+# ir_bstrap <- readRDS(here::here("data", "hist_bstrap_50k.rds"))
+
+dim(ir_bstrap)
+nsims <- dim(ir_bstrap)[1]
+nyears <- dim(ir_bstrap)[2]
+mbs <- mean(ir_bstrap)
+sdbs <- sd(ir_bstrap)
+e1071::kurtosis(ir_bstrap)
+
+
+set.seed(1234)
+ir_norm <- rnorm(nsims * nyears) |> scale_dist(mbs, sdbs)
+ir_norm <- matrix(ir_norm, nrow = nsims, ncol = nyears)
+dim(ir_norm)
+mean(ir_norm); sd(ir_norm)
+e1071::kurtosis(ir_norm)
+
+
+stackw <- bind_rows(
+  as_tibble(ir_norm) |> mutate(type="normal", sim=row_number()),
+  as_tibble(ir_bstrap) |> mutate(type="bootstrap", sim=row_number())) |> 
+  rename_with(.fn=~str_replace(.x, "V", "year"))
+
+glimpse(stackw)
+
+# make a long file
+stackl <- stackw |> 
+  pivot_longer(starts_with("year"),
+               names_to = "year",
+               values_to = "ir") |> 
+  mutate(year=str_remove(year, "year") |> as.integer())
+glimpse(stackl)
+count(stackl, type)
+count(stackl, year) |> ht()
+count(stackl, sim) |> ht()
+
+
+# create a year zero
+yzero <- stackl |> 
+  expand(type, sim) |> 
+  mutate(year=0, ir=0)
+
+aabs <- bind_rows(yzero, stackl) |> 
+  arrange(type, sim, year) |> 
+  mutate(aa=cumprod(1 + ir), .by=c(type, sim))
+
+
+```
+
+
+
+
+```{r}
+#| label: aa-boxplots-bootstrap
+#| eval: false
+#| include: false
+
+# skim(aa)
+
+brks <- c(100, 
+          seq(1000, 10000, 1000), 
+          seq(10e3, 20e3, 2e3)) |> unique()
+# brks
+
+p <- aabs |> 
+  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+  mutate(year=factor(year),
+         type=factor(type, levels=c("normal", "bootstrap")),
+         aa=aa * 100) |> 
+  ggplot(aes(x=year, y=aa, fill=type)) + 
+  geom_boxplot() +
+  # scale_y_continuous(breaks=brks) +
+  scale_y_log10() +
+  labs(y="assets", caption="Note: log 10 scale") +
+  ggtitle("Asset accumulation at various years for 3 sets of investment returns, all with mean 7.0% and sd 10.0%",
+          subtitle="(1) normal distribution, (2) t distribution, excess kurtosis=0.60, and (3) mean-reverting series, phi=-0.20") +
+  theme_bw(base_size = 9) +
+  legend_notitle +
+  caption_left
+p
+
+
+```
+
+
+
+
+```{r}
+#| label: aa-plots-ratios-bootstrap
+#| eval: false
+#| include: false
+
+ptiles <- c(0, .001, .01, .05, .1, .25, .5, .75, .9, .95, .99, .999, 1)
+
+aaratios <- aabs |> 
+  filter(year %in% seq(0, 50, 5)) |>
+  summarise(ptiles=list(quantile(aa, probs = ptiles)), .by=c(type, year)) |> 
+  unnest_longer(col=ptiles) |> 
+  mutate(nptile=str_remove(ptiles_id, "%") |> as.numeric(),
+         ratio=ptiles / ptiles[type=="normal"],
+         .by=c(year, ptiles_id))
+  
+
+p <- aaratios |> 
+  filter(nptile >0, nptile < 100) |> 
+  filter(type != "normal") |> 
+  mutate(year=factor(year),
+         pdiff=ratio - 1) |> 
+  ggplot(aes(x=year, y=pdiff, colour=type)) +
+  geom_col(aes(fill=type), width=0.2, position = position_dodge(width=0.5)) +
+  # geom_point(position = position_dodge(width=0.75)) +
+  geom_hline(yintercept = 0) +
+  scale_y_continuous(name=NULL, breaks=seq(-5, 5, .25), labels = label_percent(accuracy=1)) +
+  labs(x="# of years", caption="t distribution excess kurtosis = 0.60; mean reversion phi = -0.20") +
+  facet_wrap(~nptile) +
+  ggtitle("Assets accumulated with non-normal investment returns, % above or below normal returns",
+          subtitle="At different percentile points, alternative accumulation periods. Mean = 7.0%, sd=10.0%") +
+  theme_bw() +
+  legend_notitle +
+  caption_left
+
+p
+
+```
+
+

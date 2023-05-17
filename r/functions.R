@@ -70,10 +70,47 @@ ar1 <- function(vec){
   list(phi=stats["ar1", 1], pval=stats["ar1", 4])
 }
 
-fphi <- function(vec) ar(vec, aic=FALSE, order.max = 1)$ar
+fphi <- function(vec) {ar(vec, aic=FALSE, order.max = 1)$ar}
 
 
 # functions related to investment returns ---------------------------------
+
+
+# gmat2 <- function(seed, nsims, nyears, ir_mean_target, ir_sd_target, phi){
+#   set.seed(seed)
+#   m <- matrix(nrow=nsims, ncol=nyears)
+#   y1 <- rnorm(nsims, mean=ir_mean_target, sd=ir_sd_target) # year 1
+#   # y1 <- scale_dist(y1, mu, sd) # scale year 1
+#   m[, 1] <- y1
+#   
+#   for (t in 2:nyears) {
+#     e <- rnorm(nsims, mean = 0, sd = ir_sd_target)
+#     # e <- scale_dist(e, 0, sd)
+#     m[, t] <- ir_mean_target + phi * (m[, t-1] - ir_mean_target) + e
+#   }
+#   m
+# }
+
+
+
+mr_mat <- function(seed, nyears=50, nsims=1000, ir_phi_target,
+                   ir_mean_target, ir_sd_target){
+  # generate a matrix of mean-reverting sims, for a given seed
+  set.seed(seed)
+  # generate the innovations for the matrix all at once
+  # m_innov <- matrix(rnorm(nyears*nsims, ir_mean_target, ir_sd_target), nrow=nsims)
+  f <- function(i){
+    # y0 <- arima.sim(n = nyears, list(ar = phi), innov = m_innov[i, ])
+    y0 <- arima.sim(n = nyears, list(ar = ir_phi_target))
+    # c(scale_dist(y0, ir_mean_target, ir_sd_target))
+    y0
+  }
+  ml <- map(1:nsims, f)
+  m <- matrix(unlist(ml), nrow = length(ml), byrow = TRUE)
+  m <- scale_dist(m, ir_mean_target, ir_sd_target)
+  m
+}
+
 
 
 frontier_tbl <- function(frontobj){

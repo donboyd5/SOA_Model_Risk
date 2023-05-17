@@ -73,14 +73,15 @@ ir_xkurt; ir_df
 f <- function(seed){
   set.seed(seed)
   tvec <- rt(nyears * nsims, ir_df)
-  xkurt <- e1071::kurtosis(tvec)
-  # tscaled <- scale_dist(tvec, 0, 1)
   # x_std <- (tvec - ir_mean_target) / ir_sd_target
-  ks_result <- ks.test(tvec, "pt", ir_df)
+  # Kolmogorov-Smirnov test should be on standardized t distribution , before we scale ut
+  ks_result <- ks.test(tvec, "pt", ir_df) 
+  # tvec <- scale_dist(tvec, ir_mean_target, ir_sd_target)
+  xkurt <- e1071::kurtosis(tvec) # kurtosis should not be changed by the scaling
   return(tibble(seed=seed, xkurt=xkurt, ksp=ks_result$p.value))
 }
 
-df <- map_dfr(1:1000, f)
+system.time(df <- map_dfr(1:1000, f, .progress=TRUE))
 skim(df)
 
 saveRDS(df, here::here("data", "tdist_samples_50k.rds"))
@@ -99,7 +100,7 @@ saveRDS(df, here::here("data", "tdist_samples_50k.rds"))
 df <- readRDS(here::here("data", "tdist_samples_50k.rds"))
 
 title1 <- paste0("Distribution of excess kurtosis from ",
-                 f_comma(nrow(df)), " samples of 50,000 returns")
+                 f_comma(nrow(df)), " samples of 50,000 investment returns")
 
 title2 <- paste0("Degrees of freedom = ", f_comma(ir_df, accuracy=0.1),
                  ".  Target value for excess kurtosis = ", f_comma(ir_xkurt, accuracy=0.01))
@@ -133,8 +134,8 @@ set.seed(bestseed)
 ir1 <- rt(nyears * nsims, ir_df)
 
 ir <- scale_dist(ir1, ir_mean_target, ir_sd_target)
-# mean(ir); sd(ir)
-xkurt_est <- e1071::kurtosis(ir)
+mean(ir); sd(ir)
+(xkurt_est <- e1071::kurtosis(ir))
 
 
 ```

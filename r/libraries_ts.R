@@ -13,3 +13,6 @@ library(RcppRoll)
 library(slider)
 library(tibbletime)
 library(tidyquant)
+
+library(tseries)
+library(meboot)

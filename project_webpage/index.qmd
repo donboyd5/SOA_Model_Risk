@@ -4,20 +4,22 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Draft agenda
+# Preface
 
--   Project overview and plans
+<!-- # Draft agenda -->
 
--   Preview: Questions and feedback desired (for discussion after progress report)
+<!-- -   Project overview and plans -->
 
--   Progress to date
+<!-- -   Preview: Questions and feedback desired (for discussion after progress report) -->
 
--   What's ahead (not for today)
+<!-- -   Progress to date -->
 
-    -   Pension model
+<!-- -   What's ahead (not for today) -->
 
-    -   More-complex ESG
+<!--     -   Pension model -->
 
-    -   Impact of investment return model-choice and model parameters on pension model variables of interest
+<!--     -   More-complex ESG -->
 
-**NOTE: This web page includes far more information than will be in in the final report.**
+<!--     -   Impact of investment return model-choice and model parameters on pension model variables of interest -->
+
+<!-- **NOTE: This web page includes far more information than will be in in the final report.** -->
