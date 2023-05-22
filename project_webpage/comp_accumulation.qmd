@@ -27,6 +27,7 @@ nyears <- 50
 ir_mean_target <- 0.07
 ir_sd_target <- 0.10
 ir_xkurt_target <- 0.60
+ir_skew_target <- -0.50
 ir_phi_target <- -0.20
 
 
@@ -43,13 +44,14 @@ ir_norm <- rnorm(nsims * nyears) |> scale_dist(ir_mean_target, ir_sd_target)
 ir_norm <- matrix(ir_norm, nrow = nsims, ncol = nyears)
 dim(ir_norm)
 mean(ir_norm); sd(ir_norm)
+e1071::skewness(ir_norm)
 e1071::kurtosis(ir_norm)
 
 ```
 
 
 ```{r}
-#| label: tdist
+#| label: fat-tdist
 #| eval: true
 #| include: false
 
@@ -67,6 +69,22 @@ ir_tdist <- matrix(ir_tdist, nrow = nsims, ncol = nyears)
 
 mean(ir_tdist); sd(ir_tdist)
 (xkurt_est <- e1071::kurtosis(ir_tdist))
+e1071::skewness(ir_tdist)
+
+```
+
+
+```{r}
+#| label: skewed
+#| eval: true
+#| include: false
+
+ir_skew <- readRDS(here::here("data", "ir_skewed_negative.rds"))
+ir_skew <- matrix(ir_skew, nrow = nsims, ncol = nyears)
+dim(ir_skew)
+mean(ir_skew); sd(ir_skew)
+(skew <- e1071::skewness(ir_skew))
+(skew_xkurt <- e1071::kurtosis(ir_skew))
 
 ```
 
@@ -87,7 +105,7 @@ ir_meanrev <- mr_mat(bestseed, nyears, nsims, ir_phi_target,
 
 # mean(ir_meanrev)
 # sd(ir_meanrev)
-# apply(ir_meanrev, 1, fphi) |> median()
+(mdnphi <- apply(ir_meanrev, 1, fphi) |> median())
 # apply(ir_meanrev, 1, fphi) |> quantile()
 
 ```
@@ -98,20 +116,31 @@ ir_meanrev <- mr_mat(bestseed, nyears, nsims, ir_phi_target,
 #| eval: true
 #| include: false
 
+fmat <- function(mat, type){
+  colnames(mat) <- paste0("year", 1:ncol(mat))
+  as_tibble(mat) |>
+    mutate(type=!!type, sim=row_number())
+}
+fmat(ir_norm, "normal")
+
 stackw <- bind_rows(
-  as_tibble(ir_norm) |> mutate(type="normal", sim=row_number()),
-  as_tibble(ir_tdist) |> mutate(type="tdist", sim=row_number()),
-  as_tibble(ir_meanrev) |> mutate(type="meanrev", sim=row_number())) |> 
-  rename_with(.fn=~str_replace(.x, "V", "year"))
+  fmat(ir_norm, "normal"),
+  fmat(ir_tdist, "fattails"),
+  fmat(ir_skew, "negskew"),
+  fmat(ir_meanrev, "meanrev")
+  )
 
 # glimpse(stackw)
+# skim(stackw)
+count(stackw, type)
 
 # make a long file
 stackl <- stackw |> 
   pivot_longer(starts_with("year"),
                names_to = "year",
                values_to = "ir") |> 
-  mutate(year=str_remove(year, "year") |> as.integer())
+  mutate(year=str_remove(year, "year") |> as.integer(),
+         type=factor(type, levels=c("normal", "fattails", "negskew", "meanrev")))
 # glimpse(stackl)
 # count(stackl, type)
 # count(stackl, year) |> ht()
@@ -139,25 +168,25 @@ aa |> filter(year==1, sim==1)
 glimpse(aa)
 
 
-aa |> 
-  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
-  summarise(aa=median(aa), .by=c(type, year)) |> 
-  pivot_wider(names_from = type, values_from = aa)
-  
-aa |> 
-  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
-  summarise(aa=p25(aa), .by=c(type, year)) |> 
-  pivot_wider(names_from = type, values_from = aa)
-
-aa |> 
-  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
-  summarise(aa=p75(aa), .by=c(type, year)) |> 
-  pivot_wider(names_from = type, values_from = aa)
-
-aa |> 
-  filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
-  summarise(aa=pany(aa, .1), .by=c(type, year)) |> 
-  pivot_wider(names_from = type, values_from = aa)
+# aa |> 
+#   filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+#   summarise(aa=median(aa), .by=c(type, year)) |> 
+#   pivot_wider(names_from = type, values_from = aa)
+#   
+# aa |> 
+#   filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+#   summarise(aa=p25(aa), .by=c(type, year)) |> 
+#   pivot_wider(names_from = type, values_from = aa)
+# 
+# aa |> 
+#   filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+#   summarise(aa=p75(aa), .by=c(type, year)) |> 
+#   pivot_wider(names_from = type, values_from = aa)
+# 
+# aa |> 
+#   filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
+#   summarise(aa=pany(aa, .1), .by=c(type, year)) |> 
+#   pivot_wider(names_from = type, values_from = aa)
 
 ```
 
@@ -174,18 +203,28 @@ brks <- c(100,
           seq(10e3, 20e3, 2e3)) |> unique()
 # brks
 
+title1 <- "Asset accumulation at various years for 3 sets of investment returns, all with mean 7.0% and sd 10.0%"
+title2a <- "(1) normal"
+(title2b <- paste0(", (2) fat tails with excess kurtosis=", f_comma(xkurt_est, accuracy=0.01)))
+(title2c <- paste0(", (3) skewed with skewness=", f_comma(skew, accuracy=0.01),
+                  ", excess kurtosis=", f_comma(skew_xkurt, accuracy=0.01)))
+(title2d <- paste0(", (4) mean reversion with median phi=", f_comma(mdnphi, accuracy=0.01)))
+
+(title2 <- paste0(title2a, title2b, title2c, title2d))
+
+
 p <- aa |> 
   filter(year %in% c(0, 5, 10, 20, 30, 40, 50)) |> 
   mutate(year=factor(year),
-         type=factor(type, levels=c("normal", "tdist", "meanrev")),
+         # type=factor(type, levels=c("normal", "tdist", "meanrev")),
          aa=aa * 100) |> 
   ggplot(aes(x=year, y=aa, fill=type)) + 
   geom_boxplot() +
   # scale_y_continuous(breaks=brks) +
   scale_y_log10() +
   labs(y="assets", caption="Note: log 10 scale") +
-  ggtitle("Asset accumulation at various years for 3 sets of investment returns, all with mean 7.0% and sd 10.0%",
-          subtitle="(1) normal distribution, (2) t distribution, excess kurtosis=0.60, and (3) mean-reverting series, phi=-0.20") +
+  ggtitle(title1,
+          subtitle=title2) +
   theme_bw(base_size = 9) +
   legend_notitle +
   caption_left
@@ -197,7 +236,7 @@ p
 
 
 ```{r}
-#| label: aa-plots-ratios
+#| label: aa-plots-pdiffs
 #| eval: true
 #| include: true
 
@@ -205,12 +244,20 @@ ptiles <- c(0, .001, .01, .05, .1, .25, .5, .75, .9, .95, .99, .999, 1)
 
 aaratios <- aa |> 
   filter(year %in% seq(0, 50, 5)) |>
-  summarise(ptiles=list(quantile(aa, probs = ptiles)), .by=c(type, year)) |> 
-  unnest_longer(col=ptiles) |> 
-  mutate(nptile=str_remove(ptiles_id, "%") |> as.numeric(),
-         ratio=ptiles / ptiles[type=="normal"],
-         .by=c(year, ptiles_id))
+  summarise(ptile=list(quantile(aa, probs = ptiles)), .by=c(type, year)) |> 
+  unnest_longer(col=ptile) |> 
+  mutate(nptile=str_remove(ptile_id, "%") |> as.numeric(),
+         ratio=ptile / ptile[type=="normal"],
+         .by=c(year, ptile_id))
   
+# capt <- "Mean = ~7.0%, sd= ~10.0% for all. Fat tails (t dist.) excess kurtosis = ~0.60; mean reversion phi = ~-0.20"
+
+capt <- paste0("Mean = ~7.0%, sd= ~10.0% for all. ",
+               "Fat tails excess kurtosis = ~", f_comma(xkurt_est, accuracy=0.01),
+               "; skewed=skewness ~", f_comma(skew, accuracy=0.01), 
+               " plus excess kurtosis ~", f_comma(skew_xkurt, accuracy=0.01), 
+               "; mean reversion phi = ~", f_comma(mdnphi, accuracy=0.01))
+
 
 p <- aaratios |> 
   filter(nptile >0, nptile < 100) |> 
@@ -222,17 +269,122 @@ p <- aaratios |>
   # geom_point(position = position_dodge(width=0.75)) +
   geom_hline(yintercept = 0) +
   scale_y_continuous(name=NULL, breaks=seq(-1, 1, .1), labels = label_percent(accuracy=1)) +
-  labs(x="# of years", caption="t distribution excess kurtosis = 0.60; mean reversion phi = -0.20") +
+  labs(x="# of years", caption=capt) +
   facet_wrap(~nptile) +
-  ggtitle("Assets accumulated with non-normal investment returns, % above or below assests accumulated with normal returns",
-          subtitle="At different percentile points, alternative accumulation periods. Mean = 7.0%, sd=10.0%") +
-  theme_bw(base_size=9) +
+  ggtitle("Assets accumulated with non-normal investment returns",
+          subtitle="% above or below accumulation with normal returns in the same year at the same percentile") +
+  theme_bw(base_size=11) +
   legend_notitle +
   caption_left
 
 p
 
 ```
+
+
+
+
+```{r}
+#| label: aa-plots-pdiffs-vs-normal50th
+#| eval: true
+#| include: true
+
+ptiles <- c(0, .001, .01, .05, .1, .25, .5, .75, .9, .95, .99, .999, 1)
+
+aaratios <- aa |> 
+  filter(year %in% seq(0, 50, 5)) |>
+  summarise(ptile=list(quantile(aa, probs = ptiles)), .by=c(type, year)) |> 
+  unnest_longer(col=ptile) |> 
+  mutate(nptile=str_remove(ptile_id, "%") |> as.numeric(),
+         ptile_normal50=ptile[type=="normal" & nptile==50],
+         ratio=ptile / ptile_normal50,
+         pdiff=ratio - 1,
+         .by=c(year))
+
+capt <- paste0("Mean = ~7.0%, sd= ~10.0% for all. ",
+               "Fat tails excess kurtosis = ~", f_comma(xkurt_est, accuracy=0.01),
+               "; skewed=skewness ~", f_comma(skew, accuracy=0.01), 
+               " plus excess kurtosis ~", f_comma(skew_xkurt, accuracy=0.01), 
+               "; mean reversion phi = ~", f_comma(mdnphi, accuracy=0.01))
+
+
+p <- aaratios |> 
+  filter(nptile >0, nptile < 100) |> 
+  # filter(type != "normal") |> 
+  mutate(year=factor(year)) |> 
+  ggplot(aes(x=year, y=pdiff, colour=type)) +
+  geom_col(aes(fill=type), width=0.2, position = position_dodge(width=0.5)) +
+  # geom_point(position = position_dodge(width=0.75)) +
+  geom_hline(yintercept = 0) +
+  scale_y_continuous(name=NULL, labels = label_percent(accuracy=1)) + # breaks=seq(-10, 10, .25), 
+  labs(x="# of years", caption=capt) +
+  facet_wrap(~nptile, scales = "free_y") +
+  ggtitle("Assets accumulated with normal & non-normal investment returns",
+          subtitle="% above or below 50th percentile accumulation with normal returns, in the same year\nCAUTION: vertical scale varies across panels") +
+  theme_bw(base_size=10) +
+   theme(axis.text.x = element_text(angle = -90, vjust = 0, hjust=0.5)) +
+  legend_notitle +
+  caption_left
+
+p
+
+```
+
+
+
+
+```{r}
+#| label: aa-plots-minus-normal-median
+#| eval: true
+#| include: true
+
+
+ptiles <- c(0, .001, .01, .05, .1, .25, .5, .75, .9, .95, .99, .999, 1)
+
+aaratios <- aa |> 
+  filter(year %in% seq(0, 50, 5)) |>
+  summarise(ptile=list(quantile(aa, probs = ptiles)), .by=c(type, year)) |> 
+  unnest_longer(col=ptile) |> 
+  mutate(nptile=str_remove(ptile_id, "%") |> as.numeric()) |> 
+  # get the normal 50th ptile, put on all obs
+  # also, how far is each obs from what we see at normal50, as % of normal50, within year
+  mutate(ptile_normal50=ptile[type=="normal" & nptile==50],
+         norm50diff=ptile / ptile_normal50 - 1,
+         .by=year) |> 
+  # how much more or less is this difference than the normal diff, within year, ptile
+  mutate(ddiff=norm50diff - norm50diff[type=="normal"], .by = c(year, nptile))
+
+
+capt <- paste0("Mean = ~7.0%, sd= ~10.0% for all. ",
+               "Fat tails excess kurtosis = ~", f_comma(xkurt_est, accuracy=0.01),
+               "; skewed=skewness ~", f_comma(skew, accuracy=0.01), 
+               " plus excess kurtosis ~", f_comma(skew_xkurt, accuracy=0.01), 
+               "; mean reversion phi = ~", f_comma(mdnphi, accuracy=0.01))
+
+title1 <- "Non-normal minus normal assets at each ptile-year, as % of normal at 50th ptile in that year"
+
+p <- aaratios |> 
+  filter(nptile >0, nptile < 100) |> 
+  filter(type != "normal") |> 
+  mutate(year=factor(year)) |> 
+  ggplot(aes(x=year, y=ddiff, colour=type)) +
+  geom_col(aes(fill=type), width=0.2, position = position_dodge(width=0.5)) +
+  # geom_point(position = position_dodge(width=0.75)) +
+  geom_hline(yintercept = 0) +
+  scale_y_continuous(name=NULL, labels = label_percent(accuracy=1)) + # breaks=seq(-10, 10, .25), 
+  labs(x="# of years", caption=capt) +
+  facet_wrap(~nptile, scales = "free_y") +
+  ggtitle(title1,
+          subtitle="Example: if normal 50th assets = 100, normal 1st ptile = 80, mean revert 1st ptile=85, then value=5/100 = 5%\nCAUTION: vertical scale varies across panels") +
+  theme_bw(base_size=10) +
+  theme(axis.text.x = element_text(angle = -90, vjust = 0, hjust=0.5)) +
+  legend_notitle +
+  caption_left
+
+p
+
+```
+
 
 
 ```{r}

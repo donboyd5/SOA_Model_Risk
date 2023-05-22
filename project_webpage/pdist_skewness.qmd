@@ -1,0 +1,745 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Negatively skewed (or left-skewed) investment returns
+
+A left-skewed distribution has a longer left tail, which implies that there are more extremely negative returns than extremely positive ones. In other words, while most returns might be relatively modest, there is a significant risk of large losses. The bulk of the return distribution is likely to be on the right side (positive return side) but with a long tail extending to the left (negative return side). This means that while most of the time the returns are positive, when negative returns do occur, they can be quite large. In addition, the mean return is less than the median return.
+
+A common measure of skewness is the ratio of the third moment (ie., (x - mean(x)^3)) to {the second moment (variance) raised to the 3/2 power}; there are several variants on this measure that adjust for sample size. When it is negative the distribution is skewed left.
+
+Unlike fat-tailedness, where there is general agreement that returns on many assets are fat tailed, there is no general agreement on skewedness. There is some evidence that some short-term assets are negatively skewed, but little agreement about the long run.
+
+Generating skewed returns is challenging. One useful paper is:
+
+Choi, Sun-Yong, and Ji-Hun Yoon. “Modeling and Risk Analysis Using Parametric Distributions with an Application in Equity-Linked Securities.” Mathematical Problems in Engineering 2020 (March 26, 2020): 1–20. https://doi.org/10.1155/2020/9763065.
+
+A simple and common approach is to combine two normal distributions with different standard deviations. The one with a lower standard deviation represents the majority of returns and the other with a higher standard deviation represents the tail. I used optimization approaches to select means, standard deviations, and the fraction of observations that come from one distribution vs. the other, with the goal of achieving a target mean, standard deviation, and skewness in the resulting mixed distribution. I found that this resulted in implausible distributions with extremely high kurtosis (fat tailedness). While it would be possible to target kurtosis, too, I did not examine that.
+
+An alternative approach is to draw returns from a gamma distribution, which is positively skewed, and then shift it to be negatively skewed, but it can be more difficult to achieve desired targets. I did investigate this but not extensively and was not pleased with early results.
+
+The approach I use below is to generate returns from the exponential generalized Beta type 2 distribution - the approach is described here (accessible public version): https://www.academia.edu/18163044/Empirical_analysis_of_asset_returns_with_skewness_kurtosis_and_outliers_Evidence_from_30_Dow_Jones_industrial_stocks
+
+and also here
+
+Chiang, Thomas C., and Jiandong Li. “Modeling Asset Returns with Skewness, Kurtosis, and Outliers.” In Handbook of Financial Econometrics and Statistics, edited by Cheng-Few Lee and John C. Lee, 2177–2215. New York, NY: Springer New York, 2015. https://doi.org/10.1007/978-1-4614-7750-1_80.
+
+I used the R package gamlss.dist. I selected the parameters for the distribution using an optimization approach, choosing parameters that minimized the following sum: (1) calculated skewness minus target skewness (-0.90), squared, plus (2) calcuated excess kurtosis minus target excess kurtosis (+0.60), after scaling the distribution to mean 7%  and standard deviation 12%.
+
+Unfortunately it has not been possible to hit this combination of skewness and excess kurtosis, even after 2,000 optimization runs.
+
+
+
+```{r}
+#| label: includes
+#| eval: true
+#| include: false
+
+source(here::here("r", "libraries.r"))
+source(here::here("r", "libraries_ts.r"))
+source(here::here("r", "constants.r"))
+source(here::here("r", "functions.r"))
+
+```
+
+
+```{r}
+#| label: targets
+#| eval: true
+#| include: false
+
+# Define the target moments
+target_mean <- 0.07
+target_sd <- 0.10
+target_kurtosis <- 0.60
+target_skewness <- -0.90
+
+```
+
+
+```{r}
+#| label: ONETIME-gamll.dist
+#| eval: false
+#| include: false
+
+library(gamlss.dist)
+library(nloptr)
+library(MASS)
+
+obj <- function(x){
+  set.seed(seed)
+  names(x) <- c("nu", "tau")
+  z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- scale_dist(z, .07, .10)
+  skew <- e1071::skewness(z)
+  xkurt <- e1071::kurtosis(z, type=1)
+  sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+}
+
+# x0 <- c(nu=2, tau=4)
+seed <- 20
+# x0 <- c(nu=3, tau=500)
+# x0 <- c(nu=1, tau=1)
+x0 <- c(nu=3, tau=200000)
+obj(x0)
+
+a <- proc.time()
+res <- nloptr(x0=x0,
+              eval_f=obj,
+              lb=c(0, 0),
+              ub=c(200, 10e6),
+              # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+              # bad: NLOPT_LN_COBYLA
+              # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+              opts = list("algorithm"="NLOPT_LN_NELDERMEAD",
+                          maxeval=100,  
+                          # "xtol_rel"=1.0e-4
+                          "ftol_abs"=1e-10))
+b <- proc.time()
+b - a
+
+f <- function(seed){
+  print(seed)
+  
+  objfn <- function(x){
+    set.seed(fseed)
+    names(x) <- c("nu", "tau")
+    z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+    z <- scale_dist(z, .07, .10)
+    skew <- e1071::skewness(z)
+    xkurt <- e1071::kurtosis(z, type=1)
+    sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+  }
+  
+  
+  a <- proc.time()
+  fseed <- seed
+  x0 <- c(nu=3, tau=200000)
+  obj0 <- objfn(x0)
+  if(obj0 >= .2851) {
+    return(NULL)
+    # return(tibble(seed=fseed, obj0=obj0, x0=list(x0), iter=0, xbest=list(x0), objbest=obj0)) 
+  }
+  print("optimizing...")
+  
+  res <- nloptr(x0=x0,
+              eval_f=objfn,
+              lb=c(0, 0),
+              ub=c(200, 10e6),
+              # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+              # bad: NLOPT_LN_COBYLA
+              # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+              opts = list("algorithm"="NLOPT_LN_NELDERMEAD",
+                          maxeval=100,  
+                          # "xtol_rel"=1.0e-4
+                          "ftol_abs"=1e-10))
+  b <- proc.time()
+  # print(paste0("time: ", b - a))
+  print(paste0("objective: ", res$objective))
+  tibble(seed=seed, obj0=obj0, x0=list(x0), iter=res$iterations, xbest=list(res$solution), objbest=res$objective)
+}
+
+# results <- purrr::map_dfr(1, f, .progress=TRUE)
+
+# 14
+
+system.time(df2 <- purrr::map(.x=c(468, 1001:2000), .f=f) |> list_rbind())
+
+bestseed <- 1050  # 468
+bestx <- df2 |> filter(seed==bestseed) |> pull(xbest) |> unlist()
+# bestx <- c(2.83328247070312, 355557.250976562)
+names(bestx) <- c("nu", "tau")
+set.seed(bestseed)
+z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=bestx["nu"], tau=bestx["tau"])
+z <- scale_dist(z, .07, .10)
+(skew <- e1071::skewness(z))
+(xkurt <- e1071::kurtosis(z, type=1))
+(err1 <- (skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+saveRDS(z, here::here("data", "ir_skewed_negative.rds"))
+# 
+# 
+# str(res)
+# res
+# res$solution
+# obj(res$solution)
+# x <- res$solution
+# names(x) <- c("nu", "tau")
+# set.seed(seed)
+# z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+# z <- scale_dist(z, .07, .10)
+# (skew <- e1071::skewness(z))
+# (xkurt <- e1071::kurtosis(z, type=1))
+# (err1 <- (skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+# sqrt(err1)
+# 
+# saveRDS(z, here::here("data", "ir_skewed_negative.rds"))
+
+truehist(z)
+mean(z); sd(z)
+
+tibble(sample=z) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(z), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(z)),
+                     labels=label_percent(accuracy=0.1))
+
+```
+
+
+```{r}
+#| label: skew-get-data
+#| eval: true
+#| include: false
+
+ir <- readRDS(here::here("data", "ir_skewed_negative.rds"))
+
+(mean(ir))
+(sd(ir))
+(skewness <- e1071::skewness(ir))
+(xkurt <- e1071::kurtosis(ir, type=1))
+
+```
+
+
+
+```{r}
+#| label: skew-histogram
+#| eval: true
+#| include: true
+
+title1 <- paste0("Histogram plus normal overlay of ", f_comma(length(ir), accuracy=1), " investment returns from a negatively skewed distribution")
+title2 <- paste0("After calibration distribution has mean ",
+                 f_pct(mean(ir), accuracy=.1), 
+                 ", standard deviation ", f_pct(sd(ir), accuracy=.1),
+                 ", skewness ", f_comma(skewness, accuracy=0.001),
+                 ", and excess kurtosis ", f_comma(xkurt, accuracy=0.001))
+
+nobs <- 1000
+normal_density <- tibble(value=seq(min(ir), max(ir), length.out=nobs),
+                         density = dnorm(seq(min(ir), max(ir), length.out = nobs),
+                                         mean(ir), sd(ir)))
+
+p <- tibble(ir=ir) |> 
+  ggplot(aes(x = ir)) + 
+  geom_histogram(aes(y = after_stat(density)),
+                 binwidth = .01, fill = "lightblue", alpha = 0.7) +
+  geom_line(aes(x = value, y = density), color = "red", linewidth = 1,
+            data = normal_density) +
+  geom_vline(aes(xintercept=mean(ir))) +
+  scale_x_continuous(breaks=seq(-1, 1, .10), labels=label_percent(accuracy=1)) +
+  theme_bw() +
+  labs(title=title1,
+       subtitle = title2,
+       x = "% return",
+       y = "density") +
+  theme_bw(base_size = 10)
+
+p
+
+```
+
+
+```{r}
+#| label: skew-qqplot
+#| eval: true
+#| include: true
+
+
+title1 <- paste0("q-q plot of ", f_comma(length(ir), accuracy=1), " investment returns from a negatively skewed distribution")
+title2 <- paste0("After calibration distribution has mean ",
+                 f_pct(mean(ir), accuracy=.1), 
+                 ", standard deviation ", f_pct(sd(ir), accuracy=.1),
+                 ", skewness ", f_comma(skewness, accuracy=0.001),
+                 ", and excess kurtosis ", f_comma(xkurt, accuracy=0.001))
+# title1
+# d
+
+# quantile(t4, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1))
+
+p <- tibble(sample=ir) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(ir), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(ir)),
+                     labels=label_percent(accuracy=0.1)) +
+  ggtitle(label = title1, subtitle = title2) +
+  theme_bw(base_size = 10)
+
+p
+
+
+```
+
+
+```{r}
+#| label: OLD-skew-gamma-test
+#| eval: false
+#| include: false
+
+# shape0 <- 10 # as shape increases, distribution looks more like a normal distribution
+(shape0 <- (2 / target_skewness)^2)
+(rate0 <- shape0 / target_mean)  # initial guess
+
+# The Gamma distribution is always right-skewed. To obtain a left-skewed distribution, we subtract the generated random variables from a constant, which we call shift. This effectively "flips" the distribution around the shift value.
+(shift0 <- target_mean + sqrt(target_mean / shape0))  # initial guess
+
+# Rate: This parameter, often denoted as beta, is the rate parameter of the distribution (the reciprocal of the scale parameter). It essentially stretches or squeezes the distribution along the x-axis.
+
+# shape and rate parameters are adjusted iteratively to match the desired standard deviation, and the shift parameter is adjusted to match the desired mean. they must be positive real.
+
+# Skewness = 2 / sqrt(shape)
+set.seed(256)
+gret1 <- rgamma(n=50000, shape = shape0, rate = rate0 - 200)
+gret <- gret1
+
+gret <- .65 - gret1 # changes mean and 
+mean(gret)
+sd(gret)
+e1071::skewness(gret)
+e1071::kurtosis(gret)
+
+hist(gret)
+
+ir <- gret
+title1 <- paste0("q-q plot of ", f_comma(length(ir), accuracy=1), " investment returns from a negatively skewed distribution")
+title2 <- paste0("With, after calibration, mean ",
+                 f_pct(mean(ir), accuracy=.1), 
+                 ", standard deviation ", f_pct(sd(ir), accuracy=.1),
+                 ", and skewness ", f_comma(skewness, accuracy=0.001))
+tibble(sample=ir) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(ir), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(ir)),
+                     labels=label_percent(accuracy=0.1)) +
+  ggtitle(label = title1, subtitle = title2) +
+  theme_bw(base_size = 11)
+
+
+# (shape0 <- (2 / target_skewness)^2)
+# (rate0 <- shape0 / target_mean)
+# (shift0 <- target_mean + sqrt(target_mean / shape0))  
+# set.seed(123)
+# gret1 <- rgamma(n=50000, shape = shape0, rate = rate0 - 200)
+# gret <- gret1
+# 
+# gret <- .65 - gret1 # changes mean and 
+# mean(gret) .089
+# sd(gret) .141
+# e1071::skewness(gret) -.501
+
+
+
+# Initialize variables
+set.seed(123)
+
+gendata <- function(shape, rate, shift) {
+  gamma_returns <- rgamma(shape = shape, rate = rate)
+  
+  # Subtract from shift to create left-skew
+  shifted_returns <- shift - gamma_returns
+  return(shifted_returns)
+}
+
+
+obj <- function(x){
+  names(x) <- c("shape", "rate", "shift")
+  set.seed(123)
+  data <- gendata(x["shape"], x["rate"])
+  
+  wtdsse <- (mean(data) - target_mean)^2 +
+    (sd(data) - target_sd)^2 +
+    ((skewness(data) - target_skewness)^2)
+  sqrt(wtdsse) / 3
+}
+
+
+
+```
+
+
+
+```{r}
+#| label: OLD-rgamma
+#| eval: false
+#| include: false
+
+# Set the parameters of the gamma distribution
+shape <- 2
+rate <- 1
+
+# Generate a sample from the gamma distribution
+set.seed(123) # for reproducibility
+pos_skew_returns <- rgamma(1000, shape = shape, rate = rate)
+
+# Transform the sample to reverse the skewness
+neg_skew_returns <- -pos_skew_returns
+
+# Now neg_skew_returns is a negatively skewed distribution of 1000 annual investment returns
+
+hist(neg_skew_returns)
+
+# Define the target moments
+target_mean <- 0.07
+target_sd <- 0.10
+target_skewness <- -0.50
+
+# shape0 <- 10 # as shape increases, distribution looks more like a normal distribution
+(shape0 <- (2 / target_skewness)^2)
+(rate0 <- shape0 / target_mean)  # initial guess
+
+# The Gamma distribution is always right-skewed. To obtain a left-skewed distribution, we subtract the generated random variables from a constant, which we call shift. This effectively "flips" the distribution around the shift value.
+(shift0 <- target_mean + sqrt(target_mean / shape0))  # initial guess
+
+# Rate: This parameter, often denoted as beta, is the rate parameter of the distribution (the reciprocal of the scale parameter). It essentially stretches or squeezes the distribution along the x-axis.
+
+# shape and rate parameters are adjusted iteratively to match the desired standard deviation, and the shift parameter is adjusted to match the desired mean. they must be positive real.
+
+# Skewness = 2 / sqrt(shape)
+set.seed(123)
+gret1 <- rgamma(n=1000, shape = shape0, rate = rate0 - 100)
+gret <- gret1
+
+gret <- 0.1361438 - gret1 # changes mean and 
+mean(gret)
+sd(gret)
+e1071::skewness(gret)
+
+hist(gret)
+
+
+# Initialize variables
+set.seed(123)
+mean1 <- 0.09 #  0.10
+mean2 <- 0.05 # .03
+sd1 <- 0.03
+sd2 <- 0.17 # 0.20
+p <- 0.5
+
+
+gendata <- function(shape, rate, shift) {
+  gamma_returns <- rgamma(shape = shape, rate = rate)
+  
+  # Subtract from shift to create left-skew
+  shifted_returns <- shift - gamma_returns
+  return(shifted_returns)
+}
+
+
+obj <- function(x){
+  names(x) <- c("shape", "rate", "shift")
+  set.seed(123)
+  data <- gendata(x["shape"], x["rate"])
+  
+  wtdsse <- (mean(data) - target_mean)^2 +
+    (sd(data) - target_sd)^2 +
+    ((skewness(data) - target_skewness)^2)*10
+  sqrt(wtdsse) / 3
+}
+
+
+
+
+n <- 50000
+seed <- 2
+x0 <- c(mean1=mean1, sd1=sd1, mean2=mean2, sd2=sd2, p=p)
+x0
+(mean_mixture <- p*mean1 + (1-p)*mean2)
+(SD_mixture <- sqrt(p*(sd1^2 + mean1^2) + (1-p)*(sd2^2 + mean2^2) - (p*mean1 + (1-p)*mean2)^2))
+data0 <- generate_data(x0["mean1"], x0["sd1"], x0["mean2"], x0["sd2"], x0["p"])
+mean(data0)
+sd(data0)
+skewness(data0)
+obj(x0)
+
+xlb <- c(0.0, 0.0, 0.0, 0.0, 0.0)
+names(xlb) <- c("mean1", "sd1", "mean2", "sd2", "p")
+
+xub <- c(0.30, 0.50, 0.30, 0.50, 1.0)
+names(xlb) <- c("mean1", "sd1", "mean2", "sd2", "p")
+
+
+res <- nloptr(x0=x0,
+              eval_f=obj,
+              # eval_g_ineq=g,
+              lb=xlb,
+              ub=xub,
+              opts = list("algorithm"="NLOPT_LN_COBYLA",
+                          maxeval=1000,
+                          "xtol_rel"=1.0e-8))
+
+res
+str(res)
+res$solution
+
+(x <- res$solution)
+names(x) <- c("mean1", "sd1", "mean2", "sd2", "p")
+data <- generate_data(x["mean1"], x["sd1"], x["mean2"], x["sd2"], x["p"])
+
+x; x0
+
+obj(x); obj(x0)
+mean(data); mean(data0)
+sd(data); sd(data0)
+skewness(data); skewness(data0)
+
+
+```
+
+
+
+```{r}
+#| label: OLD-iterations
+#| eval: false
+#| include: false
+
+
+n <- 50000  # number of data points
+
+# start with a guess for the parameters
+sd1 <- 0.05
+sd2 <- 0.20
+p <- 0.80
+mean_target <- 0.07
+sd_target <- 0.10
+skew_target <- -0.5
+lambda <- -0.5  # skewness parameter
+
+# generate initial data
+set.seed(1234)
+x <- rnorm(n, mean = mean_target, sd = sd1)
+y <- rnorm(n, mean = mean_target, sd = sd2)
+z1 <- ifelse(runif(n) < p, x, y)
+mean(z1); sd(z1)
+e1071::skewness(z1); e1071::kurtosis(z1, type=1)
+
+# adjust the mean and standard deviation
+z2 <- (z1 - mean(z1)) * (sd_target / sd(z1)) + mean_target
+mean(z2); sd(z2)
+e1071::skewness(z2); e1071::kurtosis(z2, type=1)
+
+# apply the skewness transformation
+z <- z2 + lambda * (z2 - mean(z2))^2
+mean(z); sd(z)
+e1071::skewness(z); e1071::kurtosis(z, type=1)
+
+vec <- z
+mean(vec)
+sd(vec)
+e1071::skewness(vec)
+e1071::kurtosis(vec, type=1)
+
+tibble(sample=z) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(z), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(z)),
+                     labels=label_percent(accuracy=0.1))
+
+
+# iterate until the statistics are within the desired range
+for (i in 1:1000) {
+    x <- rnorm(n, mean = mean(z), sd = sd1)
+    y <- rnorm(n, mean = mean(z), sd = sd2)
+    z_new <- ifelse(runif(n) < p, x, y)
+    z_new <- (z_new - mean(z_new)) * (sd_target / sd(z_new)) + mean_target
+    z_new <- z_new + lambda * (z_new - mean(z_new))^2
+  
+    if (abs(mean(z_new) - mean_target) < 0.01 && 
+        abs(sd(z_new) - sd_target) < 0.01 && 
+        abs(e1071::skewness(z_new) - skew_target) < 0.01) {
+        z <- z_new
+        break
+    }
+}
+
+# display the statistics of the final distribution
+print(paste("Mean:", mean(z)))
+print(paste("Standard deviation:", sd(z)))
+print(paste("Skewness:", skewness::skewness(z)))
+print(paste("Kurtosis:", moments::kurtosis(z) - 3))  # excess kurtosis
+
+```
+
+
+
+```{r}
+#| label: OLD-gamil.dist
+#| eval: false
+#| include: false
+
+y <- rEGB2(200, mu=5, sigma=2, nu=1, tau=4)
+
+truehist(y)
+hist(y)
+
+# mu=5, sigma=2, nu=1, tau=4
+mu <- .07
+sigma <- .1
+nu <- 2
+tau <- 4
+
+z <- rEGB2(50000, mu=mu, sigma=sigma, nu=nu, tau=tau)
+
+vec <- z + (mu) - mean(z)
+vec <- scale_dist(z, .07, .1)
+mean(vec)
+sd(vec)
+e1071::skewness(vec) # -0.86
+e1071::kurtosis(vec, type=1) # 1.73
+truehist(vec)
+
+tibble(sample=vec) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(vec), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(vec)),
+                     labels=label_percent(accuracy=0.1))
+
+
+```
+
+
+
+
+```{r}
+#| label: OLD-ONETIME-skewness-mixture
+#| eval: false
+#| include: false
+
+library(nloptr)
+
+# Initialize variables
+set.seed(123)
+mean1 <- 0.09 #  0.10
+mean2 <- 0.05 # .03
+sd1 <- 0.03
+sd2 <- 0.17 # 0.20
+p <- 0.5
+
+
+generate_data <- function(mean1, sd1, mean2, sd2, p) {
+  # Generate two sets of normally distributed returns
+  returns1 <- rnorm(n, mean = mean1, sd = sd1) 
+  returns2 <- rnorm(n, mean = mean2, sd = sd2) 
+  
+  # Generate a set of Bernoulli random variables which will be used to select from the two returns
+  selector <- rbinom(n, size = 1, prob = p)
+
+  # Create the mixture of the two returns
+  mixture <- selector * returns1 + (1 - selector) * returns2
+  return(mixture)
+}
+
+
+obj <- function(x){
+  names(x) <- c("mean1", "sd1", "mean2", "sd2", "p")
+  set.seed(seed)
+  data <- generate_data(x["mean1"], x["sd1"], x["mean2"], x["sd2"], x["p"])
+  
+  wtdsse <- (mean(data) - target_mean)^2 +
+    (sd(data) - target_sd)^2 +
+    ((skewness(data) - target_skewness)^2)
+  sqrt(wtdsse) / 3
+}
+
+
+n <- 50000
+seed <- 2
+x0 <- c(mean1=mean1, sd1=sd1, mean2=mean2, sd2=sd2, p=p)
+x0
+
+xlb <- c(0.0, 0.0, 0.0, 0.0, 0.0)
+names(xlb) <- c("mean1", "sd1", "mean2", "sd2", "p")
+
+xub <- c(0.30, 0.50, 0.30, 0.50, 1.0)
+names(xlb) <- c("mean1", "sd1", "mean2", "sd2", "p")
+
+n <- 50000
+seed <- 888
+# use seed 888
+a <- proc.time()
+res <- nloptr(x0=x0,
+              eval_f=obj,
+              # eval_g_ineq=g,
+              lb=xlb,
+              ub=xub,
+              # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+              # bad: NLOPT_LN_COBYLA
+              # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+              opts = list("algorithm"="NLOPT_LN_PRAXIS",
+                          maxeval=1000,
+                          "xtol_rel"=1.0e-8))
+b <- proc.time()
+b - a
+
+res
+str(res)
+res$solution
+
+(x <- res$solution)
+names(x) <- c("mean1", "sd1", "mean2", "sd2", "p")
+data <- generate_data(x["mean1"], x["sd1"], x["mean2"], x["sd2"], x["p"])
+
+x; x0
+
+obj(x); obj(x0)
+mean(data); mean(data0)
+sd(data); sd(data0)
+skewness(data); skewness(data0)
+hist(data)
+
+length(data)
+saveRDS(data, here::here("data", "ir_skewed_negative.rds"))
+
+# obj value
+# NLOPT_LN_BOBYQA      0.001387172
+# NLOPT_LN_NELDERMEAD  0.000308
+# NLOPT_LN_SBPLX       2.674696e-07
+# NLOPT_LN_PRAXIS      4.10735471614837e-07; 1.183505e-07
+
+# (mean_mixture <- p*mean1 + (1-p)*mean2)
+# (SD_mixture <- sqrt(p*(sd1^2 + mean1^2) + (1-p)*(sd2^2 + mean2^2) - (p*mean1 + (1-p)*mean2)^2))
+# data0 <- generate_data(x0["mean1"], x0["sd1"], x0["mean2"], x0["sd2"], x0["p"])
+# mean(data0)
+# sd(data0)
+# skewness(data0)
+# obj(x0)
+
+
+```
+
+

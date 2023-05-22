@@ -6,10 +6,43 @@ editor_options:
 
 # Stylized facts for investment returns
 
+## Bernhard Pfaff
 
-## Equities
+Pfaff, Bernhard. Financial Risk Modelling and Portfolio Optimization with R. Second edition. Southern Gate, Chichester, West Sussex, UK: Wiley, 2016. https://englianhu.files.wordpress.com/2017/09/financial-risk-modelling-and-portfolio-optimization-with-r-2nd-edt.pdf.
 
-The following are stylized facts from: Economic Scenario Generator Work Group. "Economic Scenario Generator (ESG) Stylized Facts for Equities." Presented at the National Association of Insurance Commissioners (NAIC) Life Actuarial (A) Task Force (LATF), September 29, 2022. <https://content.naic.org/sites/default/files/call_materials/ESGWG%20-%20Stylized%20Facts%20for%20Equity%20v2%2020220929%20final.pdf>.).
+### Univariate returns
+
+Time series data of returns, in **particular daily return series**, are in general not independent and identically distributed (iid). This fact is not jeopardized by low absolute values of the first-order autocorrelation coefficient.
+
+-   The volatility of return processes is not constant with respect to time.
+
+-   The absolute or squared returns are highly autocorrelated.
+
+-   The distribution of financial market returns is leptokurtic. The occurrence of extreme events is more likely compared to the normal distribution.
+
+-   Extreme returns are observed closely in time (volatility clustering).
+
+-   The empirical distribution of returns is skewed to the left; negative returns are more likely to occur than positive ones.
+
+### Multivariate returns
+
+The previous subsection presented the stylized facts for univariate financial market returns. From the portfolio point of view the characteristics of multivariate return series are of interest. Here we will focus on these stylized facts:
+
+-   The absolute value of cross-correlations between return series is less pronounced and contemporaneous correlations are in general the strongest.
+
+-   In contrast, the absolute or squared returns do show high cross-correlations. This empirical finding is similar to the univariate case.
+
+-   Contemporaneous correlations are not constant over time.
+
+-   Extreme observations in one return series are often accompanied by extremesin the other return series.
+
+## Economic Scenario Generator Work Group
+
+### Equities
+
+The following are stylized facts from:
+
+Economic Scenario Generator Work Group. "Economic Scenario Generator (ESG) Stylized Facts for Equities." Presented at the National Association of Insurance Commissioners (NAIC) Life Actuarial (A) Task Force (LATF), September 29, 2022. <https://content.naic.org/sites/default/files/call_materials/ESGWG%20-%20Stylized%20Facts%20for%20Equity%20v2%2020220929%20final.pdf>.).
 
 1.  Equity indices (indeed, all asset classes) tend to exhibit consistent risk/reward relationships over long time horizons.
 
@@ -28,4 +61,3 @@ The following are stylized facts from: Economic Scenario Generator Work Group. "
 8.  Equity returns have both a price and dividend component, and they behave differently---dividend returns tend to be more stable than price returns.
 
 9.  Returns between different equity indices are generally positively correlated over long time horizons. This correlation may increase sharply in bear markets, but it tends to revert to normative levels in a short period of time.
-

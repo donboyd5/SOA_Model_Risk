@@ -520,7 +520,7 @@ data_tsibble <- retlong |>
 
 data_tsibble |> 
   filter(type=="asset") |> 
-  ACF(value, lag_max=10) |> 
+  feasts::ACF(value, lag_max=10) |> 
   ggplot(aes(x=lag, y=acf)) +
   geom_point(colour="blue") +
   geom_line(colour="blue", linewidth=1.25)  +
@@ -547,7 +547,7 @@ data_tsibble |>
 
 data_tsibble |> 
   filter(type=="portfolio") |> 
-  ACF(value, lag_max=10) |> 
+  feasts::ACF(value, lag_max=10) |> 
   ggplot(aes(x=lag, y=acf)) +
   geom_point(colour="blue") +
   geom_line(colour="blue", linewidth=1.25)  +
@@ -755,6 +755,63 @@ points |>
 
 
 ```
+
+
+### Efficient long-only portfolio q-q plot
+
+```{r}
+
+rts <- ts(returns |> dplyr::select(sp500))
+
+(return_5050 <- returns |> 
+    filter(year %in% analysis_years) |> 
+    mutate(port5050=.5 * sp500 + .5 * baacorp) |> 
+    pull(port5050) |> 
+    mean())
+i5050 <- iclosest(return_5050, efflist$effdf$mean)
+(w5050 <- efflist$effdf |> 
+    filter(obs == i5050) |> 
+    rename_with(.fn= ~str_remove(.x, "w."), .cols=starts_with("w.")) |> 
+    mutate(across(c(sp500, tbill3, ustbond, baacorp, realestate, gold),
+                  ~ .x * (abs(.x) > 1e-12)))) # force weights to be at least 1e-12, else zero
+tmp <- efflist$effdf
+
+effport <- returns |> 
+  mutate(porteff5050=w5050$sp500 * sp500 +
+           w5050$tbill3 * tbill3 +
+           w5050$ustbond * ustbond +
+           w5050$baacorp * baacorp +
+           w5050$realestate * realestate +
+           w5050$gold * gold)
+
+pdata <- effport |> 
+  filter(year %in% analysis_years)
+
+xkurt <- e1071::kurtosis(pdata$porteff5050, type=1)
+
+p <- pdata |> 
+  ggplot(aes(sample=porteff5050)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(pdata$porteff5050), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     limits=c(-4, 4),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-2, 2, .05), mean(pdata$porteff5050)),
+                     labels=label_percent(accuracy=0.1)) +
+  ggtitle(label = "Efficient long-only portfolio with same mean as 50-50 stocks-bonds, 1950-22", 
+          subtitle = paste0("Excess kurtosis = ", f_comma(xkurt, accuracy=.01))) +
+  theme_bw(base_size = 11)
+
+p
+
+
+```
+
+
 
 ## Impact of periodicity on summary measures of investment returns
 
