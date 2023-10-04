@@ -53,13 +53,153 @@ source(here::here("r", "functions.r"))
 target_mean <- 0.07
 target_sd <- 0.10
 target_kurtosis <- 0.60
-target_skewness <- -0.90
+target_skewness <- -0.70
+
+nsims <- 1000
+nyears <- 50
 
 ```
 
 
 ```{r}
-#| label: ONETIME-gamll.dist
+#| label: ONETIME-jsu
+#| eval: false
+#| include: false
+
+library(gamlss.dist)
+library(nloptr)
+library(MASS)
+
+# This is a reparameterization of the original Johnson Su distribution, Johnson (1954), so the parameters mu and sigma are the mean and the standard deviation of the distribution. The parameter nu determines the skewness of the distribution with nu>0 indicating positive skewness and nu<0 negative. The parameter tau determines the kurtosis of the distribution. tau should be positive and most likely in the region from zero to 1. As tau goes to 0 (and for nu=0) the distribution approaches the the Normal density function. The distribution is appropriate for leptokurtic data that is data with kurtosis larger that the Normal distribution one.
+
+
+f <- function(seed, skweight){
+  print(seed)
+  
+  objfn <- function(x){
+  set.seed(fseed)
+  names(x) <- c("nu", "tau")
+  z <- rJSU(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- scale_dist(z, .07, .10)
+  skew <- e1071::skewness(z)
+  xkurt <- e1071::kurtosis(z, type=1)
+  ((xkurt - target_kurtosis)^2) +
+    ((skew - target_skewness)^2)*skweight 
+    # (skew > - .5)*10 +
+    # (xkurt > .62)*10 +
+    # (xkurt < .58)*10
+  }
+
+  
+  a <- proc.time()
+  fseed <- seed
+  x0 <- c(nu=-52, tau=4.75)
+  obj0 <- objfn(x0)
+  if(obj0 >= 1e9) {
+    return(NULL)
+  }
+  
+  print("optimizing...")
+  
+  res <- nloptr(x0=x0,
+              eval_f=objfn,
+              lb=c(-Inf, 1), # nu, tau
+              ub=c(-40, 10),
+              # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+              # bad: NLOPT_LN_COBYLA
+              # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+              # NLOPT_GN_DIRECT_L_RAND
+              opts = list(algorithm="NLOPT_LN_NELDERMEAD",
+                          maxeval=300,  
+                          # xtol_rel=1.0e-4
+                          ftol_abs=1e-10))
+  b <- proc.time()
+  # print(paste0("time: ", b - a))
+  print(paste0("objective: ", res$objective))
+  
+  x <- res$solution
+  names(x) <- c("nu", "tau")
+  set.seed(fseed)
+  z <- rJSU(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- scale_dist(z, .07, .10)
+  tibble(seed=seed, 
+         obj0=obj0,
+         obj=res$objective,
+         skew=e1071::skewness(z),
+         xkurt=e1071::kurtosis(z, type=1),
+         skweight=skweight,
+         iter=res$iterations, 
+         nu=x["nu"],
+         tau=x["tau"],
+         x0=list(x0), 
+         x=list(x), 
+         res=list(res),
+         z=list(z) # don't convert to list until after we've done calcs with z
+         )
+}
+
+
+# results <- purrr::map_dfr(1, f, .progress=TRUE)
+# 14
+
+# fseed <- 1
+# x0 <- c(nu=-1, tau=1)
+# objfn(x0)
+
+system.time(df2 <- purrr::map(c(900:1000), .f=f, skweight=.02) |> list_rbind())
+
+df2 |> arrange(obj)
+
+best <- df2 |> filter(obj==min(obj)) 
+
+# |> pull(res)
+res <- res[[1]]
+res
+res$solution
+
+z <- best$z[[1]]
+(skew <- e1071::skewness(z))
+(xkurt <- e1071::kurtosis(z, type=1))
+sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+saveRDS(z, here::here("data", "ir_skewed_negative.rds"))
+
+truehist(z)
+mean(z); sd(z)
+
+tibble(sample=z) |> 
+  ggplot(aes(sample=sample)) +
+  stat_qq_line() + 
+  stat_qq(colour="blue", size=0.75) +
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = mean(z), linetype="dashed") +
+  geom_vline(xintercept = 0) +
+  scale_x_continuous(name="theoretical quantiles for standard normal distribution",
+                     breaks=seq(-4, 4, 0.5),
+                     labels=label_number(accuracy=0.1)) +
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(z)),
+                     labels=label_percent(accuracy=0.1))
+
+
+
+
+# NLOPT_GN_DIRECT 0.35542024935517
+# NLOPT_GN_DIRECT_L 0.364560461828547
+# NLOPT_GN_CRS2_LM 0.365691015074638
+# NLOPT_GN_AGS
+# NLOPT_GN_ISRES 0.389397073241526
+# NLOPT_GN_ESCH 0.426160329186913
+
+# NLOPT_GN_CRS2_LM 0.6088
+# NLOPT_GN_ESCH
+# NLOPT_GN_DIRECT_L_RAND 0.319103276636476
+# NLOPT_GN_DIRECT_L_NOSCAL
+# NLOPT_GN_ORIG_DIRECT
+
+```
+
+
+```{r}
+#| label: ONETIME-EGB2
 #| eval: false
 #| include: false
 
@@ -117,7 +257,7 @@ f <- function(seed){
   fseed <- seed
   x0 <- c(nu=3, tau=200000)
   obj0 <- objfn(x0)
-  if(obj0 >= .2851) {
+  if(obj0 >= .11) {
     return(NULL)
     # return(tibble(seed=fseed, obj0=obj0, x0=list(x0), iter=0, xbest=list(x0), objbest=obj0)) 
   }
@@ -144,12 +284,14 @@ f <- function(seed){
 
 # 14
 
-system.time(df2 <- purrr::map(.x=c(468, 1001:2000), .f=f) |> list_rbind())
+system.time(df2 <- purrr::map(.x=c(3, 11:50), .f=f) |> list_rbind())
 
-bestseed <- 1050  # 468
+
+bestseed <- 38  # 468
 bestx <- df2 |> filter(seed==bestseed) |> pull(xbest) |> unlist()
 # bestx <- c(2.83328247070312, 355557.250976562)
 names(bestx) <- c("nu", "tau")
+bestx
 set.seed(bestseed)
 z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=bestx["nu"], tau=bestx["tau"])
 z <- scale_dist(z, .07, .10)
@@ -195,6 +337,7 @@ tibble(sample=z) |>
 ```
 
 
+
 ```{r}
 #| label: skew-get-data
 #| eval: true
@@ -202,10 +345,11 @@ tibble(sample=z) |>
 
 ir <- readRDS(here::here("data", "ir_skewed_negative.rds"))
 
-(mean(ir))
-(sd(ir))
+ir <- matrix(ir, nrow = nsims, ncol = nyears)
+dim(ir)
+mean(ir); sd(ir)
 (skewness <- e1071::skewness(ir))
-(xkurt <- e1071::kurtosis(ir, type=1))
+(xkurt <- e1071::kurtosis(ir))
 
 ```
 
@@ -228,7 +372,7 @@ normal_density <- tibble(value=seq(min(ir), max(ir), length.out=nobs),
                          density = dnorm(seq(min(ir), max(ir), length.out = nobs),
                                          mean(ir), sd(ir)))
 
-p <- tibble(ir=ir) |> 
+p <- tibble(ir=c(ir)) |> 
   ggplot(aes(x = ir)) + 
   geom_histogram(aes(y = after_stat(density)),
                  binwidth = .01, fill = "lightblue", alpha = 0.7) +
@@ -265,7 +409,7 @@ title2 <- paste0("After calibration distribution has mean ",
 
 # quantile(t4, probs = c(0, 0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99, 1))
 
-p <- tibble(sample=ir) |> 
+p <- tibble(sample=c(ir)) |> 
   ggplot(aes(sample=sample)) +
   stat_qq_line() + 
   stat_qq(colour="blue", size=0.75) +
@@ -276,11 +420,161 @@ p <- tibble(sample=ir) |>
                      breaks=seq(-4, 4, 0.5),
                      labels=label_number(accuracy=0.1)) +
   scale_y_continuous(breaks=c(seq(-1, 1, .1), mean(ir)),
+                     limits=c(-.6, .7),
                      labels=label_percent(accuracy=0.1)) +
   ggtitle(label = title1, subtitle = title2) +
   theme_bw(base_size = 10)
 
 p
+
+
+```
+
+```{r}
+#| label: test
+#| eval: false
+#| include: false
+
+
+bestseed <- 1050  # 468
+bestx <- df2 |> filter(seed==bestseed) |> pull(xbest) |> unlist()
+# bestx <- c(2.83328247070312, 355557.250976562)
+names(bestx) <- c("nu", "tau")
+bestx # 2.892883e+00 2.035706e+05 
+
+x <- bestx
+x <- bestx * c(1, 1000)
+x <- bestx * c(1e6, .01)
+
+x <- c(1.5, 4)
+x <- c(1.45, 3.5)
+x <- c(1.45, 1.5)
+
+x <- c(0.75, 1.25)
+x <- c(1.25, 8)
+
+# skew less neg when nu increases, xkurt more positive
+# skew more neg when tau increases, xkurt more pos
+
+for(i in 2000:2005){
+  set.seed(i)
+  names(x) <- c("nu", "tau")
+  z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- scale_dist(z, .07, .10)
+  skew <- e1071::skewness(z)
+  xkurt <- e1071::kurtosis(z, type=1)
+  fval <- sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+  print(c(skew, xkurt, fval))
+}
+
+
+set.seed(bestseed)
+z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=bestx["nu"], tau=bestx["tau"])
+z <- scale_dist(z, .07, .10)
+(skew <- e1071::skewness(z))
+(xkurt <- e1071::kurtosis(z, type=1))
+(err1 <- (skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+
+(mean(ir))
+(sd(ir))
+(skewness <- e1071::skewness(ir))
+(xkurt <- e1071::kurtosis(ir, type=1))
+
+objfn <- function(x){
+  set.seed(fseed)
+  names(x) <- c("nu", "tau")
+  z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- scale_dist(z, .07, .10)
+  skew <- e1071::skewness(z)
+  xkurt <- e1071::kurtosis(z, type=1)
+  sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+}
+
+
+fseed <- 77777
+taulb <- 0
+tauub <- 1e5 # taulb * 10
+x0 <- c(3, (taulb + tauub) / 2)
+names(x0) <- c("nu", "tau")
+x0
+objfn(x0)
+
+a <- proc.time()
+res <- nloptr(x0=x0,
+            eval_f=objfn,
+            lb=c(0, taulb),
+            ub=c(4, tauub),
+            # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+            # bad: NLOPT_LN_COBYLA
+            # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+            
+            # global NLOPT_GN_DIRECT_L NLOPT_GN_DIRECT
+            # NLOPT_GN_CRS2_LM NLOPT_G_MLSL_LDS
+            opts = list(algorithm="NLOPT_LN_NELDERMEAD",
+                        maxeval=300,  
+                        xtol_rel=1.0e-14))
+                        # "ftol_rel"=1e-16))
+b <- proc.time()
+b - a
+res
+# NLOPT_GN_DIRECT 0.35542024935517
+# NLOPT_GN_DIRECT_L 0.364560461828547
+# NLOPT_GN_CRS2_LM 0.365691015074638
+# NLOPT_GN_AGS
+# NLOPT_GN_ISRES 0.389397073241526
+# NLOPT_GN_ESCH 0.426160329186913
+
+# NLOPT_GN_CRS2_LM 0.6088
+# NLOPT_GN_ESCH
+# NLOPT_GN_DIRECT_L_RAND 0.319103276636476
+# NLOPT_GN_DIRECT_L_NOSCAL
+# NLOPT_GN_ORIG_DIRECT
+
+f <- function(x){
+  set.seed(fseed)
+  names(x) <- c("nu", "tau")
+  z1 <- rEGB2(5e3, mu = 0.07, sigma = 0.1, nu = x["nu"], tau = x["tau"])
+  skew <- e1071::skewness(z1)
+  xkurt <- e1071::kurtosis(z1, type=1)
+  # err <- (xkurt - target_kurtosis)^2
+  # err <- (skew - target_skewness)^2
+  err <- (skew - target_skewness)^2 + ((xkurt - target_kurtosis)^2)*.1
+  # print(xkurt)
+  err
+}
+
+fseed <- 2345
+tt <- 1e12
+x0 <- c(nu=3, tau=tt)
+a <- proc.time()
+res <- nloptr(x0=x0,
+              eval_f=f,
+              lb=c(0, tt),
+              ub=c(4, tt*10),
+            # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+            # bad: NLOPT_LN_COBYLA
+            # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+            
+            # global NLOPT_GN_DIRECT_L NLOPT_GN_DIRECT
+            # NLOPT_GN_CRS2_LM NLOPT_G_MLSL_LDS
+            opts = list(algorithm="NLOPT_LN_SBPLX",
+                        maxeval=300,  
+                        xtol_rel=1.0e-10))
+b <- proc.time()
+b - a
+res
+
+set.seed(fseed)
+z1 <- rEGB2(5e3, mu = 0.07, sigma = 0.1, nu = res$solution[1], tau = res$solution[2])
+(skew <- e1071::skewness(z1))
+(xkurt <- e1071::kurtosis(z1, type=1))
+err <- (xkurt - target_kurtosis)^2
+err
+
+ skew <- e1071::skewness(z1)
+  xkurt <- e1071::kurtosis(z1, type=1)
+
 
 
 ```
@@ -742,4 +1036,175 @@ saveRDS(data, here::here("data", "ir_skewed_negative.rds"))
 
 ```
 
+
+```{r}
+#| label: test2
+#| eval: false
+#| include: false
+
+library(nloptr)
+library(fBasics)
+
+# Define the target moments
+target_mean <- 0.07
+target_sd <- 0.10
+target_kurtosis <- 0.60
+target_skewness <- -0.70
+
+# rgld(n, lambda1 = 0, lambda2 = -1, lambda3 = -1/8, lambda4 = -1/8)
+
+objfn <- function(x){
+  set.seed(fseed)
+  names(x) <- c("lambda1", "lambda2", "lambda3", "lambda4")
+  z <- rgld(50000, 
+            lambda1 = x["lambda1"], 
+            lambda2 = x["lambda2"],
+            lambda3 = x["lambda3"],
+            lambda4 = x["lambda4"])
+  z <- scale_dist(z, .07, .10)
+  skew <- e1071::skewness(z)
+  xkurt <- e1071::kurtosis(z, type=1)
+  sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+}
+
+
+fseed <- 11123
+# x0 <- c(lambda1 = 0, lambda2 = -1, lambda3 = -1/8, lambda4 = -1/8)
+x0 <- c(-10, -10, -10, -10)
+names(x0) <- c("lambda1", "lambda2", "lambda3", "lambda4")
+
+objfn(x0)
+
+a <- proc.time()
+res <- nloptr(x0=x0,
+            eval_f=objfn,
+            lb=rep(-Inf, length(x0)),
+            ub=c(0, -1e-4, -1e-7, -1e-7),
+            # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+            # bad: NLOPT_LN_COBYLA
+            # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+            
+            # global NLOPT_GN_DIRECT_L NLOPT_GN_DIRECT NLOPT_GN_ISRES
+            # NLOPT_GN_CRS2_LM NLOPT_G_MLSL_LDS NLOPT_GN_ESCH
+            opts = list(algorithm="NLOPT_LN_PRAXIS",
+                        maxeval=1000,  
+                        xtol_rel=1.0e-12))
+                        # "ftol_rel"=1e-16))
+b <- proc.time()
+b - a
+res
+# str(res)
+
+x <- res$solution
+names(x) <- c("lambda1", "lambda2", "lambda3", "lambda4")
+z <- rgld(50000, 
+          lambda1 = x["lambda1"], 
+          lambda2 = x["lambda2"],
+          lambda3 = x["lambda3"],
+          lambda4 = x["lambda4"])
+z <- scale_dist(z, .07, .10)
+mean(z); sd(z)
+(skew <- e1071::skewness(z))
+(xkurt <- e1071::kurtosis(z, type=1))
+sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+
+
+# NLOPT_GN_DIRECT 0.35542024935517
+# NLOPT_GN_DIRECT_L 0.364560461828547
+# NLOPT_GN_CRS2_LM 0.365691015074638
+# NLOPT_GN_AGS
+# NLOPT_GN_ISRES 0.389397073241526
+# NLOPT_GN_ESCH 0.426160329186913
+
+# NLOPT_GN_CRS2_LM 0.6088
+# NLOPT_GN_ESCH
+# NLOPT_GN_DIRECT_L_RAND 0.319103276636476
+# NLOPT_GN_DIRECT_L_NOSCAL
+# NLOPT_GN_ORIG_DIRECT
+
+```
+
+
+```{r}
+#| label: test3
+#| eval: false
+#| include: false
+
+library(gamlss.dist)
+library(nloptr)
+library(MASS)
+library(fBasics)
+
+# Define the target moments
+target_mean <- 0.07
+target_sd <- 0.10
+target_kurtosis <- 0.60
+target_skewness <- -0.70
+
+# This is a reparameterization of the original Johnson Su distribution, Johnson (1954), so the parameters mu and sigma are the mean and the standard deviation of the distribution. The parameter nu determines the skewness of the distribution with nu>0 indicating positive skewness and nu<0 negative. The parameter tau determines the kurtosis of the distribution. tau should be positive and most likely in the region from zero to 1. As tau goes to 0 (and for nu=0) the distribution approaches the the Normal density function. The distribution is appropriate for leptokurtic data that is data with kurtosis larger that the Normal distribution one.
+
+
+obj <- function(x){
+  set.seed(fseed)
+  names(x) <- c("nu", "tau")
+  # z <- rEGB2(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- rJSU(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+  z <- scale_dist(z, .07, .10)
+  skew <- e1071::skewness(z)
+  xkurt <- e1071::kurtosis(z, type=1)
+  sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+}
+
+
+fseed <- 3
+# x0 <- c(lambda1 = 0, lambda2 = -1, lambda3 = -1/8, lambda4 = -1/8)
+x0 <- c(nu=-1, tau=1)
+obj(x0)
+
+
+a <- proc.time()
+res <- nloptr(x0=x0,
+            eval_f=obj,
+            lb=c(-Inf, 0.2),
+            ub=c(0, 20),
+            # good: NLOPT_LN_PRAXIS NLOPT_LN_SBPLX,  NLOPT_LN_NELDERMEAD, NLOPT_LN_BOBYQA
+            # bad: NLOPT_LN_COBYLA
+            # can't: NLOPT_LD_MMA, NLOPT_LD_CCSAQ needs grad
+            
+            # global NLOPT_GN_DIRECT_L NLOPT_GN_DIRECT NLOPT_GN_ISRES
+            # NLOPT_GN_CRS2_LM NLOPT_G_MLSL_LDS NLOPT_GN_ESCH
+            opts = list(algorithm="NLOPT_LN_PRAXIS",
+                        maxeval=100,  
+                        xtol_rel=1.0e-12))
+                        # "ftol_rel"=1e-16))
+b <- proc.time()
+b - a
+res
+# str(res)
+
+x <- res$solution
+names(x) <- c("nu", "tau")
+x
+set.seed(fseed)
+z <- rJSU(50000, mu=0.07, sigma=0.1, nu=x["nu"], tau=x["tau"])
+z <- scale_dist(z, .07, .10)
+mean(z); sd(z)
+(skew <- e1071::skewness(z))
+(xkurt <- e1071::kurtosis(z, type=1))
+sqrt((skew - target_skewness)^2 + (xkurt - target_kurtosis)^2)
+
+
+# NLOPT_GN_DIRECT 0.35542024935517
+# NLOPT_GN_DIRECT_L 0.364560461828547
+# NLOPT_GN_CRS2_LM 0.365691015074638
+# NLOPT_GN_AGS
+# NLOPT_GN_ISRES 0.389397073241526
+# NLOPT_GN_ESCH 0.426160329186913
+
+# NLOPT_GN_CRS2_LM 0.6088
+# NLOPT_GN_ESCH
+# NLOPT_GN_DIRECT_L_RAND 0.319103276636476
+# NLOPT_GN_DIRECT_L_NOSCAL
+# NLOPT_GN_ORIG_DIRECT
+```
 

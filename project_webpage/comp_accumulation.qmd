@@ -30,7 +30,6 @@ ir_xkurt_target <- 0.60
 ir_skew_target <- -0.50
 ir_phi_target <- -0.20
 
-
 ```
 
 
@@ -203,14 +202,14 @@ brks <- c(100,
           seq(10e3, 20e3, 2e3)) |> unique()
 # brks
 
-title1 <- "Asset accumulation at various years for 3 sets of investment returns, all with mean 7.0% and sd 10.0%"
+title1 <- "Asset accumulation at various years for 4 sets of investment returns, all with mean 7.0% and sd 10.0%"
 title2a <- "(1) normal"
-(title2b <- paste0(", (2) fat tails with excess kurtosis=", f_comma(xkurt_est, accuracy=0.01)))
-(title2c <- paste0(", (3) skewed with skewness=", f_comma(skew, accuracy=0.01),
-                  ", excess kurtosis=", f_comma(skew_xkurt, accuracy=0.01)))
-(title2d <- paste0(", (4) mean reversion with median phi=", f_comma(mdnphi, accuracy=0.01)))
+title2b <- paste0(", (2) fat tails with excess kurtosis=", f_comma(xkurt_est, accuracy=0.01))
+title2c <- paste0(", (3) skewed with skewness=", f_comma(skew, accuracy=0.01),
+                  ", excess kurtosis=", f_comma(skew_xkurt, accuracy=0.01))
+title2d <- paste0(", (4) mean reversion with median phi=", f_comma(mdnphi, accuracy=0.01))
 
-(title2 <- paste0(title2a, title2b, title2c, title2d))
+title2 <- paste0(title2a, title2b, title2c, title2d)
 
 
 p <- aa |> 
@@ -225,7 +224,7 @@ p <- aa |>
   labs(y="assets", caption="Note: log 10 scale") +
   ggtitle(title1,
           subtitle=title2) +
-  theme_bw(base_size = 9) +
+  theme_bw(base_size = 8) +
   legend_notitle +
   caption_left
 p
@@ -273,7 +272,7 @@ p <- aaratios |>
   facet_wrap(~nptile) +
   ggtitle("Assets accumulated with non-normal investment returns",
           subtitle="% above or below accumulation with normal returns in the same year at the same percentile") +
-  theme_bw(base_size=11) +
+  theme_bw(base_size=10) +
   legend_notitle +
   caption_left
 
@@ -300,6 +299,8 @@ aaratios <- aa |>
          ratio=ptile / ptile_normal50,
          pdiff=ratio - 1,
          .by=c(year))
+
+write.xlsx(aaratios, here::here("data", "temp.xlsx"), sheetName = "Sheet1", colNames = TRUE, rowNames = TRUE, append = FALSE)
 
 capt <- paste0("Mean = ~7.0%, sd= ~10.0% for all. ",
                "Fat tails excess kurtosis = ~", f_comma(xkurt_est, accuracy=0.01),

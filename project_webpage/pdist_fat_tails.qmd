@@ -197,6 +197,7 @@ p <- tibble(sample=ir) |>
                      breaks=seq(-4, 4, 0.5),
                      labels=label_number(accuracy=0.1)) +
   scale_y_continuous(breaks=c(seq(-1, 1, .1), ir_mean_target),
+                     limits=c(-.6, .7),
                      labels=label_percent(accuracy=0.1)) +
   ggtitle(label = title1, subtitle = title2) +
   theme_bw(base_size = 11)

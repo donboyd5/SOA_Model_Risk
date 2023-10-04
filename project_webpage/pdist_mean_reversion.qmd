@@ -169,7 +169,8 @@ p <- tibble(ir=c(m)) |>
   geom_vline(xintercept = 0) +
   scale_x_continuous(breaks=seq(-4, 4, 0.5),
                      labels=label_number(accuracy=0.1)) +
-  scale_y_continuous(breaks=c(seq(-1, 1, .05), ir_mean_target),
+  scale_y_continuous(breaks=c(seq(-1, 1, .1), ir_mean_target),
+                     limits=c(-.6, .7),
                      labels=label_percent(accuracy=0.1)) +
   ggtitle(label = "qqplot of mean-reverting returns", subtitle = subt) +
   theme_bw()
