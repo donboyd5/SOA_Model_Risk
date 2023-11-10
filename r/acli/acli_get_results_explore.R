@@ -8,6 +8,7 @@ source(here::here("r", "functions_utilities.r"))
 # locations ------------------------------------------------------------------
 ddir <- r"(E:\data\soa\acli)"
 # ddata <- here::here("airg", "data")
+(ddata <- path(ddir, "baseline"))
 
 # E:\data\soa\acli\baseline
 # baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm
@@ -15,110 +16,7 @@ ddir <- r"(E:\data\soa\acli)"
 
 # constants ---------------------------------------------------------------
 # airg_fn <- "2022-academy-interest-rate-generator.xls"
-base_dir <- "s_baseline"
-base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
-
-tau_m.06_dir <- "s_tau_m.06"
-tau_m.06_fn <- "tau_m.06_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
-
-tau_p.06_dir <- "s_tau_p.06"
-tau_p.06_fn <- "tau_p.06_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
-
-
-# file names and function needed to read data files ----
-sfnames <- "
-AGGR.csv, Aggressive or specialized equity
-BALANCED.csv, Diversified balanced allocation
-FIXED.csv, Diversified fixed income
-INT.csv, Diversified international equity
-SMALL.csv, Intermediate risk equity
-US.csv, Diversified large cap US equity
-IG_Long.csv, Intermediate govt long?
-"
-
-(fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
-
-dirget <- function(dirname, fnames){
-  ddata <- path(ddir, dirname)
-  fndf <- path(ddata, fnames$fname)
-  df1 <- vroom(fndf, 
-               col_types = cols(.default = col_double()),
-               col_names=FALSE, id="fname")
-  df1 |> 
-    mutate(scenario=dirname,
-           fname=path_file(fname)) |> 
-    left_join(fnames, by = join_by(fname)) |> 
-    relocate(scenario) |> 
-    lcnames()
-}
-
-
-# get the data ----
-
-df1 <- dirget(base_dir, fnames) |> 
-  mutate(sim=row_number(), .by=fname)
-# count(df1, sim) |> ht()
-
-df2 <- dirget(tau_m.06_dir, fnames) |> 
-  mutate(sim=row_number(), .by=fname)
-
-df3 <- dirget(tau_p.06_dir, fnames) |> 
-  mutate(sim=row_number(), .by=fname)
-
-
-stack <- bind_rows(df1, df2, df3)
-summary(stack) # make sure there are no NAs or oddball values (neg assets, for example)
-count(stack, scenario)
-count(stack, fname)
-
-stack |> 
-  mutate(cagr=x31^(1/30)-1) |> 
-  summarise(assets_mean=mean(x31), cagr_mean=mean(cagr), 
-            assets_sd=sd(x31), cagr_sd=sd(cagr),
-            .by=c(scenario, fname, fdesc)) |> 
-  arrange(fname, scenario)
-
-glimpse(stack)
-
-slong <- stack |> 
-  pivot_longer(cols=-c(scenario, fname, fdesc, sim)) |> 
-  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
-  select(-name) |> 
-  arrange(scenario, fname, sim, year)
-
-count(df1, fname)
-
-pdata <- slong |> 
-  filter(fname=="AGGR.csv") |> 
-  summarise(a50=p50(value),
-            a25=p25(value),
-            a75=p75(value),
-            .by=c(scenario, fname, fdesc, year))
-
-pdata |> 
-  ggplot(aes(year, a50, colour=scenario)) +
-  geom_point() +
-  geom_line()
-
-pdata |> 
-  ggplot(aes(year, a25, colour=scenario)) +
-  geom_point() +
-  geom_line()
-
-pdata |> 
-  pivot_longer(cols=c(a25, a50, a75)) |> 
-  ggplot(aes(year, value, colour=scenario)) +
-  geom_point() +
-  geom_line() +
-  scale_y_continuous(breaks=seq(0, 50, 5)) +
-  scale_x_continuous(breaks=seq(0, 50, 5)) +
-  facet_wrap(~name) +
-  ggtitle("Asset values by year, Aggressive equity",
-          subtitle="25th, 50th, and 75th percentiles") +
-  theme_bw()
-
-
-
+acli_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
 
 
 # key filenames for results -----------------------------------------------
@@ -138,7 +36,7 @@ pdata |>
 
 ## acli csv files ----
 (csvfiles <- dir_ls(path=ddata, glob="*.csv") |> 
-   path_file() |> 
+  path_file() |> 
    sort())
 
 # [1] "AGGR.csv"           "BALANCED.csv"       "CREDIT_SPREADS.csv" "EXCESS_RETURNS.csv" "FIXED.csv"         
@@ -200,5 +98,36 @@ setdiff(airgfiles, csvfiles)
 # [9] "UST_2y.csv"              "UST_30y.csv"             "UST_3y.csv"              "UST_5y.csv"             
 # [13] "UST_7y.csv"              "UST_Z1.csv"              "UST_Z2.csv"              "UST_Z3.csv"    
 
+
+# read data files ----
+sfnames <- "
+AGGR.csv, Aggressive or specialized equity
+BALANCED.csv, Diversified balanced allocation
+FIXED.csv, Diversified fixed income
+INT.csv, Diversified international equity
+SMALL.csv, Intermediate risk equity
+US.csv, Diversified large cap US equity"
+
+fnames <- read_csv(sfnames, col_names = c("fname", "fdesc"))
+
+test <- path(ddata, fnames$fname)
+df1 <- vroom(test, 
+             col_types = cols(.default = col_double()),
+             col_names=FALSE, id="fname")
+dim(df1)
+glimpse(df1)
+summary(df1)
+
+df2 <- df1 |> 
+  mutate(fname=path_file(fname)) |> 
+  left_join(fnames, by = join_by(fname))
+summary(df2)
+
+df2 |> 
+  summarise(X31=mean(X31), .by=c(fname, fdesc))
+
+df2 |> 
+  mutate(cagr=X31^(1/30)-1) |> 
+  summarise(assets=mean(X31), cagr=mean(cagr), .by=c(fname, fdesc))
 
 

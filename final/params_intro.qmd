@@ -1,0 +1,301 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Alternative parameterizations
+
+In the scenarios below, we vary key parameters individually or as a group (for example, varying one specific parameter for each of four equity funds).
+
+```{r}
+#| label: setup
+#| include: false
+
+source(here::here("r", "libraries.r"))
+source(here::here("r", "functions_utilities.r"))
+
+```
+
+
+```{r}
+#| label: constants
+#| include: false
+
+ddir <- r"(E:\data\soa\acli)"
+
+base_dir <- "s_baseline"
+base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
+
+
+# alternative parameter runds ----
+# equity tau -- long-run target volatility
+tau_m.06_dir <- "s_tau_m.06" # default minus .06
+# tau_m.06_fn <- "tau_m.06_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
+
+tau_p.06_dir <- "s_tau_p.06" # default plus .06
+# tau_p.06_fn <- "tau_p.06_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
+
+# equity phi -- strength of mean reversion in volatility
+phi_m.20_dir <- "s_phi_m.20" # default minus 0.20
+phi_p.20_dir <- "s_phi_p.20" # default plus 0.20
+
+
+# file names and descriptions ---
+sfnames <- "
+AGGR.csv, Aggressive or specialized equity
+BALANCED.csv, Diversified balanced allocation
+FIXED.csv, Diversified fixed income
+INT.csv, Diversified international equity
+SMALL.csv, Intermediate risk equity
+US.csv, Diversified large cap US equity
+IG_Long.csv, Intermediate govt long
+"
+
+(fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
+# create named vector
+(fnamesv <- setNames(fnames$fdesc, fnames$fname |> path_ext_remove() |> str_to_lower()))
+# fnamesv["aggr"]
+
+
+# parameterizations and descriptions ----
+scen_names1 <- "
+baseline, Baseline
+tau_m.06, Target volatility (tau) reduced by .06 for each equity fund
+tau_p.06, Target volatility (tau) increased by .06 for each equity fund
+phi_m.20, Speed of mean reversion in volatility (phi) reduced by .20 for each equity fund
+phi_p.20, Speed of mean reversion in volatility (phi) increased by .20 for each equity fund
+"
+(scen_names <- read_csv(scen_names1, col_names = c("scenario", "scendesc")))
+
+```
+
+```{r}
+#| label: functions
+#| include: false
+
+# dirname <- base_dir
+
+# function to read ESG output data files
+
+dirget <- function(dirname, fnames){
+  ddata <- path(ddir, dirname)
+  fndf <- path(ddata, fnames$fname)
+  df1 <- vroom(fndf, 
+               col_types = cols(.default = col_double()),
+               col_names=FALSE, id="fname")
+  
+  df2 <- df1 |> 
+    mutate(scenario=str_remove(dirname, "s_"),
+           fname=path_file(fname)) |> 
+    left_join(fnames, by = join_by(fname)) |> 
+    relocate(scenario) |> 
+    lcnames()
+  
+  df2
+}
+
+```
+
+```{r}
+#| label: get-data
+#| include: false
+
+base <- dirget(base_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+# count(df1, sim) |> ht()
+
+taum <- dirget(tau_m.06_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup <- dirget(tau_p.06_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim <- dirget(phi_m.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip <- dirget(phi_p.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+stack <- bind_rows(base, 
+                   taum, taup, 
+                   phim, phip) |> 
+  mutate(fnbase=path_ext_remove(fname) |> str_to_lower())
+summary(stack) # make sure there are no NAs or oddball values (neg assets, for example)
+count(stack, scenario)
+count(stack, fname, fnbase)
+
+# create a  long version of the stacked file, with year starting at 0
+slong <- stack |> 
+  select(-fname) |> 
+  pivot_longer(cols=-c(scenario, fnbase, fdesc, sim)) |> 
+  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
+  select(-name) |> 
+  arrange(scenario, fnbase, sim, year)
+
+glimpse(slong)
+
+```
+
+
+#### Summarize alternative variants
+```{r}
+#| label: tabdata
+#| include: false
+
+tabdata1 <- slong |> 
+  filter(year==30) |> 
+  summarise(n=n(),
+            res=list(quantile(value, na.rm=TRUE)), 
+            .by = c(scenario, fnbase, fdesc)) |> 
+  left_join(scen_names, by = join_by(scenario))
+
+tabdataw <- tabdata1 |> 
+  unnest_wider(col = c(res))
+
+tabdatal <- tabdata1 |> 
+  unnest_longer(col = c(res))
+
+```
+
+```{r}
+#| label: tab-amounts-show
+#| include: true
+
+# define the scenarios to keep - put them in the order we want to see them
+# scen_names
+scenarios <- c("baseline", "tau_m.06", "tau_p.06", "phi_m.20", "phi_p.20")
+
+# define the funds to keep - put them in the order we want to see them
+# fnames
+funds <- c("us", "int", "small", "aggr", "balanced")
+
+tabdata <- tabdatal |> 
+  filter(scenario %in% scenarios,
+         fnbase %in% funds,
+         res_id=="50%") |> 
+  mutate(scenario=factor(scenario, levels=scenarios),
+         fnbase=factor(fnbase, levels=funds)) |> 
+  arrange(fnbase) |> 
+  select(scenario, scendesc, fnbase, res) |> 
+  pivot_wider(names_from = fnbase, values_from = res) |> 
+  arrange(scenario)
+
+tabdata |> 
+  select(-scenario) |> 
+  gt() |> 
+  tab_header(
+    title = html("Asset values at year 30"),
+    subtitle = html("Selected scenarios and assets")
+    ) |>
+  cols_label(
+    scendesc="Scenario",
+    us=fnamesv["us"],
+    int=fnamesv["int"],
+    small=fnamesv["small"],
+    aggr=fnamesv["aggr"],
+    balanced=fnamesv["balanced"]
+    )|> 
+  fmt_number(columns=-scendesc,
+             decimals=2)|> 
+  fmt_currency(columns=-scendesc,
+               rows=1,
+               decimals=2)
+
+```
+
+
+```{r}
+#| label: tab-indexed-show
+#| include: true
+
+# define the scenarios to keep - put them in the order we want to see them
+# scen_names
+scenarios <- c("baseline", "tau_m.06", "tau_p.06", "phi_m.20", "phi_p.20")
+
+# define the funds to keep - put them in the order we want to see them
+# fnames
+funds <- c("us", "int", "small", "aggr", "balanced")
+
+tabdata1 <- tabdatal |> 
+  filter(scenario %in% scenarios,
+         fnbase %in% funds,
+         res_id=="50%") |> 
+  mutate(scenario=factor(scenario, levels=scenarios),
+         fnbase=factor(fnbase, levels=funds)) |> 
+  arrange(fnbase) |> 
+  select(scenario, scendesc, fnbase, res) |> 
+  pivot_wider(names_from = fnbase, values_from = res)
+
+baseline_row <- tabdata1 |> 
+  filter(scenario == "baseline")
+
+tabdata2 <- tabdata1 |> 
+  mutate(across(-c(scenario, scendesc), ~ . / baseline_row[[cur_column()]] - 1))|> 
+  arrange(scenario)
+
+tabdata2 |> 
+  select(-scenario) |> 
+  gt() |> 
+  tab_header(
+    title = html("Median asset values at year 30, % above or below each asset's baseline value"),
+    subtitle = html("Selected scenarios and assets")
+    ) |>
+  cols_label(
+    scendesc="Scenario",
+    us=fnamesv["us"],
+    int=fnamesv["int"],
+    small=fnamesv["small"],
+    aggr=fnamesv["aggr"],
+    balanced=fnamesv["balanced"]
+    )|> 
+  fmt_percent(columns=-scendesc,
+             decimals=1)
+
+```
+
+
+
+#### Long-run target volatility (tau τ)
+
+The average level the logarithm of volatility is expected to revert toward over the long term.
+
+Default values range from approximately 0.125 for U.S. diversified equity to 0.202 for aggressive equity.
+
+Preliminarily, we examine a scenario that reduces this parameter by .06 for each fund, and a scenario that increases it by .06 for each fund.
+
+```{r}
+#| label: tau-data
+#| include: false
+
+pdata <- slong |> 
+  filter(fnbase=="aggr") |> 
+  summarise(a50=p50(value),
+            a25=p25(value),
+            a75=p75(value),
+            .by=c(scenario, fnbase, fdesc, year))
+
+```
+
+
+```{r}
+#| label: show-tau
+#| include: true
+
+pdata |> 
+  pivot_longer(cols=c(a25, a50, a75)) |> 
+  ggplot(aes(year, value, colour=scenario)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(name="Assets", breaks=seq(0, 50, 5)) +
+  scale_x_continuous(name="Year", breaks=seq(0, 50, 5)) +
+  facet_wrap(~name) +
+  ggtitle("Aggressive equity fund, asset values by year",
+          subtitle="25th, 50th, and 75th percentiles") +
+  theme_bw()
+
+```
+
+
+## Speed of mean reversion in volatility (phi &phi;)
+

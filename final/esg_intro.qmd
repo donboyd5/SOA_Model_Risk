@@ -1,0 +1,35 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# An illustrative economic scenario generator
+
+The model used here has been adapted by us, based on previously developed economic scenario generators from the AAA/SOA and the American Academy of Life Insurers (ACLI). While we have adapted and used their work, they bear no responsibility for our analysis.
+
+In essence, we use an extended version of the Academy Interest Rate Generator (AIRG), with two new features, Heston Stochastic Variance and Shadow Mapping, that allow it to produce scenarios consistent with the heightened volatility and negative interest rates observed in the 2008 financial crisis.
+
+**Heston stochastic variance** allows the volatility of an asset’s price to be stochastic and mean-reverting, with correlation between the asset price and its variance. **Shadow mapping** is an adaptation to traditional interest rate models, which do not allow negative rates – it models a theoretical unobserved rate that can be negative, known as a shadow rate, and maps the shadow rate to observed rates.
+
+## Overview of the model
+
+### The interest rate generator
+
+### Equity fund generators
+
+## Key model parameters
+
+### Interest rate parameters
+
+### Equity fund parameters
+
+Each equity fund has the following main parameters.
+
+#### Long-run target volatility (tau τ)
+
+The average level the logarithm of volatility is expected to revert toward over the long term.
+
+Default values range from approximately 0.125 for U.S. diversified equity to 0.202 for aggressive equity. (Exponentiate to get equivalent values expressed as annual percentages: e.g., exp(0.125) - 1 = 13.3%)
+
+
