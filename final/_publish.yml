@@ -1,0 +1,4 @@
+- source: project
+  netlify:
+    - id: de02ec92-be3e-43ef-aba8-223ed1c1369a
+      url: 'https://model-risk-final.netlify.app'

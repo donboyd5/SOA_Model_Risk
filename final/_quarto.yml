@@ -7,6 +7,8 @@ project:
 # quarto publish netlify --no-browser --no-prompt
 # quarto publish netlify --no-render --no-browser --no-prompt
 
+# https://model-risk-final.netlify.app/
+
 execute:
   eval: true
   echo: false
