@@ -4,13 +4,20 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Alternative parameterizations
+# The model and alternative parameterizations
+
+## Key interest rate parameters
+
+
+## Key bond fund parameters
+
+
+## Key equity parameters
 
 Equity returns in the model follow a stochastic log volatility process in which the asset price follows a stochastic process, and the logarithm of volatility also follows a stochastic process.
 
 In the scenarios below, we vary key parameters individually or as a group (for example, varying one specific parameter for each of four equity asset classes).
 
-## Key equity parameters
 
 ![](images/clipboard-1220131238.png)
 
@@ -37,7 +44,7 @@ base_dir <- "s_baseline"
 base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
 
 
-# file names and descriptions ---
+# file names and descriptions ----
 sfnames <- "
 AGGR.csv, Aggressive or specialized equity
 BALANCED.csv, Diversified balanced allocation
@@ -45,7 +52,9 @@ FIXED.csv, Diversified fixed income
 INT.csv, Diversified international equity
 SMALL.csv, Intermediate risk equity
 US.csv, Diversified large cap US equity
-IG_Long.csv, Investment grade long corporates
+IG_1_5.csv, U.S. Corporate investment grade 1-5 year
+IG_Long.csv, U.S. Corporate investment grade 10-30 year
+HY.csv, U.S. Corporate high yield (Below investment grade)
 "
 
 (fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
@@ -76,23 +85,30 @@ rho_m.05_dir <- "s_rho_m.05" # default minus .05
 rho_p.05_dir <- "s_rho_p.05" # default plus .05
 rho_zero_dir <- "s_rho_zero" # rho set to zero
 
+# interest rate paremeterization directories ----
+itau1_m.50_dir <- "s_itau1_m.50" # default minus .50
+itau1_p.50_dir <- "s_itau1_p.50" # default plus .50
+
 # parameterizations and descriptions ----
 scen_names1 <- "
 baseline, Baseline
-tau_m.05, Target volatility (tau) reduced by .05 for each equity fund
-tau_p.05, Target volatility (tau) increased by .05 for each equity fund
-tau_p.10, Target volatility (tau) increased by .10 for each equity fund
-phi_m.05, Speed of mean reversion in volatility (phi) reduced by .05 for each equity fund
-phi_p.05, Speed of mean reversion in volatility (phi) increased by .05 for each equity fund
-phi_m.20, Speed of mean reversion in volatility (phi) reduced by .20 for each equity fund
-phi_p.20, Speed of mean reversion in volatility (phi) increased by .20 for each equity fund
-sigmav_m.05, Monthly sd of the log volatility process (sigma(v)) reduced by .05 for each equity fund
-sigmav_p.05, Monthly sd of the log volatility process (sigma(v)) increased by .05 for each equity fund
-rho_m.05, Correlation to random shock to vol and random return component (rho) reduced by .05 for each equity fund
-rho_p.05, Correlation to random shock to vol and random return component (rho) increased by .05 for each equity fund
-rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
+tau_m.05, Target volatility (tau): reduced by .05 for each equity fund
+tau_p.05, Target volatility (tau): increased by .05 for each equity fund
+tau_p.10, Target volatility (tau): increased by .10 for each equity fund
+phi_m.05, Speed of mean reversion in volatility (phi): reduced by .05 for each equity fund
+phi_p.05, Speed of mean reversion in volatility (phi): increased by .05 for each equity fund
+phi_m.20, Speed of mean reversion in volatility (phi): reduced by .20 for each equity fund
+phi_p.20, Speed of mean reversion in volatility (phi): increased by .20 for each equity fund
+sigmav_m.05, Monthly sd of the log volatility process (sigma(v)): reduced by .05 for each equity fund
+sigmav_p.05, Monthly sd of the log volatility process (sigma(v)): increased by .05 for each equity fund
+rho_m.05, Correlation of random volatility shock vol and random return component (rho): reduced by .05 for each equity fund
+rho_p.05, Correlation of random volatility shock and random return component (rho): increased by .05 for each equity fund
+itau1_p.50, Mean reversion point for the long rate (tau1): increased by 0.50
+itau1_m.50, Mean reversion point for the long rate (tau1): reduced by 0.50
 "
 (scen_names <- read_csv(scen_names1, col_names = c("scenario", "scendesc")))
+
+# rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
 
 ```
 
@@ -127,10 +143,12 @@ dirget <- function(dirname, fnames){
 #| label: get-data
 #| include: false
 
+# baseline ----
 base <- dirget(base_dir, fnames) |> 
   mutate(sim=row_number(), .by=fname)
 # count(df1, sim) |> ht()
 
+# equity parameters ----
 taum <- dirget(tau_m.05_dir, fnames) |> 
   mutate(sim=row_number(), .by=fname)
 
@@ -167,12 +185,24 @@ rhop <- dirget(rho_p.05_dir, fnames) |>
 rhoz <- dirget(rho_zero_dir, fnames) |> 
   mutate(sim=row_number(), .by=fname)
 
+# interest rate parameters ----
+itaum <- dirget(itau1_m.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+itaup <- dirget(itau1_p.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+
 stack <- bind_rows(base, 
+                   # equity fund parameterizations
                    taum, taup, taup10,
                    phim05, phip05,
                    phim20, phip20,
                    sigmavm, sigmavp,
-                   rhom, rhop, rhoz) |> 
+                   rhom, rhop, rhoz,
+                   # interest rate parameterizations
+                   itaum, itaup
+                   ) |> 
   mutate(fnbase=path_ext_remove(fname) |> str_to_lower())
 summary(stack) # make sure there are no NAs or oddball values (neg assets, for example)
 count(stack, scenario)
@@ -200,16 +230,18 @@ glimpse(slong)
 # define the scenarios to keep - put them in the order we want to see them
 # scen_names
 scenarios <- c("baseline", 
-               "tau_m.05", "tau_p.05", "tau_p.10",
+               "tau_m.05", "tau_p.05", # "tau_p.10",
                "phi_m.05", "phi_p.05", 
                "phi_m.20", "phi_p.20", 
                "sigmav_m.05", "sigmav_p.05",
-               "rho_m.05", "rho_p.05", "rho_zero"
+               "rho_m.05", "rho_p.05", #, "rho_zero"
+               "itau1_m.50", "itau1_p.50"
                )
 
 # define the funds to keep - put them in the order we want to see them
 # fnames
-efunds <- c("us", "int", "small", "aggr", "balanced", "ig_long")
+# efunds <- c("us", "int", "small", "aggr", "balanced", "ig_long")
+efunds <- c("us", "int", "small", "aggr", "ig_1_5", "ig_long", "hy")
 
 funds <- efunds
 
@@ -239,6 +271,7 @@ tabdatal <- tabdata1 |>
 ```{r}
 #| label: tab-amounts-show
 #| include: true
+#| column: page
 
 tabdata <- tabdatal |> 
   filter(scenario %in% scenarios,
@@ -264,8 +297,10 @@ tabdata |>
     int=fnamesv["int"],
     small=fnamesv["small"],
     aggr=fnamesv["aggr"],
-    balanced=fnamesv["balanced"],
-    ig_long=fnamesv["ig_long"]
+    # balanced=fnamesv["balanced"],
+    ig_1_5=fnamesv["ig_1_5"],
+    ig_long=fnamesv["ig_long"],
+    hy=fnamesv["hy"]
     )|> 
   fmt_number(columns=-scendesc,
              decimals=2)|> 
@@ -280,6 +315,7 @@ tabdata |>
 ```{r}
 #| label: tab-indexed-show
 #| include: true
+#| column: page
 
 tabdata1 <- tabdatal |> 
   filter(scenario %in% scenarios,
@@ -311,8 +347,10 @@ tabdata2 |>
     int=fnamesv["int"],
     small=fnamesv["small"],
     aggr=fnamesv["aggr"],
-    balanced=fnamesv["balanced"],
-    ig_long=fnamesv["ig_long"]
+    # balanced=fnamesv["balanced"],
+    ig_1_5=fnamesv["ig_1_5"],
+    ig_long=fnamesv["ig_long"],
+    hy=fnamesv["hy"]
     )|> 
   fmt_percent(columns=-scendesc,
              decimals=1)

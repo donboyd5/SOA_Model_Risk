@@ -49,9 +49,9 @@ book:
     - part: "Alternative parameterizations of the model"
       chapters:
       - params_intro.qmd      
-    - part: "A simple pension model"
-      chapters:
-      - penmod_intro.qmd  
+    # - part: "A simple pension model"
+    #   chapters:
+    #   - penmod_intro.qmd  
     # - part: "Appendix"
     #   chapters:
     #   - appdx_project_doc.qmd
