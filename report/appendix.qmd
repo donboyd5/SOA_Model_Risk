@@ -1,0 +1,69 @@
+---
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+# Appendix
+
+## Geometric Brownian Motion
+
+Geometric Brownian Motion (GBM) is a mathematical model used to describe the random evolution over time of financial asset prices, like stocks or commodities. It's widely used in financial mathematics and economics for modeling price dynamics under the assumption of a continuous market. The model combines the elements of growth trends (like those seen in stock prices increasing over time) and randomness (the daily up and down fluctuations in stock prices).
+
+The GBM model is defined by two parameters:
+
+-   **Drift (μ)**: This represents the expected return or the average rate of growth of the asset over time. It's the "systematic" part of the motion, indicating a general trend.
+
+-   **Volatility (σ)**: This captures the randomness or the variability in the return of the asset. It's the "stochastic" part of the motion, accounting for the asset's price fluctuations around the drift.
+
+The mathematical formulation of GBM for an asset price S(t) at time t is given by the stochastic differential equation:
+
+dS(t)=μS(t)dt+σS(t)dW(t)
+
+where:
+
+-   dS(t) is the change in the asset price,
+
+-   μ is the drift,
+
+-   σ is the volatility,
+
+-   dt is a small time increment, and
+
+-   dW(t) is the Wiener process (or Brownian motion) term, representing random shocks.
+
+One key feature of GBM is that the asset price remains positive throughout the simulation, making it a popular choice for modeling stock prices, which cannot go negative. The logarithm of the asset prices in GBM follows a normal distribution, leading to log-normal distribution of the prices themselves. This property is particularly useful for derivative pricing and risk management in financial markets.
+
+```{r}
+#| label: gbm
+
+# Parameters for GBM
+initial_price <- 100 # Initial asset price
+drift <- 0.05 # Upward drift rate (5% per year)
+volatility <- 0.2 # Volatility (20% per year)
+T <- 1 # Time period in years
+dt <- 1/252 # Time step in years, assuming 252 trading days per year
+steps <- T/dt # Number of steps
+
+# Generate random walk
+set.seed(123) # For reproducibility
+random_shocks <- rnorm(steps, mean = 0, sd = sqrt(dt))
+gbm_prices <- numeric(steps)
+gbm_prices[1] <- initial_price
+
+for (i in 2:length(gbm_prices)) {
+  gbm_prices[i] <- gbm_prices[i - 1] * exp((drift - 0.5 * volatility^2) * dt + volatility * random_shocks[i - 1])
+}
+
+# Plot the GBM path
+plot(gbm_prices, type = 'l', main = 'Geometric Brownian Motion with Upward Drift', 
+     ylab = 'Asset Price', xlab = 'Time Step', col = 'blue')
+
+
+# a good source for GBM, but not the source of the code above (which was ChatGPT) is
+# https://people.bath.ac.uk/masmdp/findir.bho/lec7b.pdf
+
+
+```
+
+
