@@ -6,22 +6,59 @@ editor_options:
 
 # The model and alternative parameterizations
 
-## Key interest rate parameters
+The model used here has been adapted by us, based on previously developed economic scenario generators from the AAA/SOA and the American Council of Life Insurers (ACLI). While we have adapted and used their work, they bear no responsibility for our analysis.
 
+The model has three main components: interest rates, bond fund returns, and equity fund returns. According to documentation and our preliminary analysis, there appears to be no linkage between interest rates and equity returns.
 
-## Key bond fund parameters
+It calculates values for each month, and can produce output that is monthly, quarterly, semi-annual or annual.
 
+All of our analysis below is based on annual results, for 30 years, for 1,000 simulations. (We use 30 years and 1,000 simulations to keep runtime low; for the report we plan to use more simulations and more years.)
 
-## Key equity parameters
+## Interest rates
+
+The model is an extended version of a Cox-Ingersoll-Ross (CIR) model.
+
+It extends the Academy Interest Rate Generator (AIRG) with two new features, Heston Stochastic Variance and Shadow Mapping, that allow it to produce scenarios consistent with the heightened volatility and negative interest rates observed in the 2008 financial crisis.
+
+**Heston stochastic variance** allows the volatility of an asset’s price to be stochastic and mean-reverting, with correlation between the asset price and its variance. **Shadow mapping** is an adaptation to traditional interest rate models, which do not allow negative rates – it models a theoretical unobserved rate that can be negative, known as a shadow rate, and maps the shadow rate to observed rates.
+
+The model generates U.S. Treasury yields for 3 months and for each year from 1 to 30 years.
+
+## Bond fund returns
+
+Bond fund returns are based on interest rates and credit spreads. We have not explored the model for bond fund returns.
+
+The model produces returns for a money market fund, 3 corporate investment grade categories (1-5 years, 5-10 years, and 10-30 years), and 3 government categories (1-5 years, 5-10 years, and 10-30 years).
+
+## Equity fund returns
 
 Equity returns in the model follow a stochastic log volatility process in which the asset price follows a stochastic process, and the logarithm of volatility also follows a stochastic process.
 
-In the scenarios below, we vary key parameters individually or as a group (for example, varying one specific parameter for each of four equity asset classes).
+The parameter values appear to be identical to the AIRG default parameter values.
 
+## Key interest rate parameters
+
+### Default values of key interest-rate parameters
+
+![](images/clipboard-3473630111.png)
+
+### Default extended parameters
+
+The extended parameters relate to the two extensions, affecting negative interest rates and also how volatility changes over time.
+
+![](images/clipboard-1964834546.png)
+
+According to the documentation,
+
+![](images/clipboard-1549359693.png)
+
+## Key equity parameters
+
+In the scenarios below, we vary key parameters individually or as a group (for example, varying one specific parameter for each of four equity asset classes).
 
 ![](images/clipboard-1220131238.png)
 
-## Fund-specific baseline values of key equity parameters
+### Fund-specific default values of key equity parameters
 
 ![](images/clipboard-1274317986.png)
 
@@ -357,7 +394,167 @@ tabdata2 |>
 
 ```
 
-## Quantiles of selected statistics
+## Model we use compared to AIRG model
+
+The following results are based on comparing the model we've obtained, with its baseline values, to the AIRG model, where the AIRG model's parameters are set to equal the ACLI-based model's parameters wherever possible.
+
+For specific parameters:
+
+-   Equity funds: the two models' parameters matched, without any adjustment
+
+-   Bond funds: the two models don't use the parameters, so no adjustments were made to the AIRG model
+
+-   Interest rates, basic: For the basic parameters, the defaults were the same, except that
+
+    -   The AIRG model's mean reversion parameter (tau1) had to be adjusted to match our model
+
+    -   The AIRG model had a Psi parameter that our model does not
+
+    -   The initial yield curve in the AIRG model was adjusted to equal the starting yield curve in our model
+
+-   Interest rates, extended: our model has additional interest rate parameters that the AIRG model does not have.
+
+-   Correlation matrix: where concepts are the same, the two models have the same correlation values
+
+The random numbers used in the two models are not the same and there is no practical way to adjust for this without writing a model from scratch. This should become less important as the number of simulations becomes large. We used 1,000 simulations and 30 years in this test run.
+
+```{r}
+#| label: get-results-prep
+#| include: false
+
+dirget2 <- function(ddata, fnames){
+  fndf <- path(ddata, fnames)
+  df1 <- vroom(fndf, 
+               col_types = cols(.default = col_double()),
+               col_names=FALSE, id="fname")
+  
+  scenario <- ifelse(str_detect(ddata, "using_airg"),
+                     "airg",
+                     "ourmodel")
+  
+  df2 <- df1 |> 
+    mutate(scenario=scenario,
+           fname=path_file(fname),
+           fname=str_remove(fname, "y")) |> 
+    relocate(scenario) |> 
+    lcnames()
+  
+  df2
+}
+
+# define the two sets of files
+# important files in common: aggr, us, 
+
+
+dd1 <- r"(E:\data\soa\airg\acli_baseline_using_airg)"
+fnames1 <- c("AGGR.csv", "INT.csv", "US.csv", "SMALL.csv", "UST_1y.csv", "UST_10y.csv", "UST_30y.csv")
+path(dd1, fnames1)
+
+dd2 <- r"(E:\data\soa\acli\s_baseline)"
+fnames2 <- c("AGGR.csv", "INT.csv", "US.csv", "SMALL.csv", "UST_1.csv", "UST_10.csv", "UST_30.csv")
+path(dd2, fnames2)
+
+# tmp <- dirget2(dd1,fnames1)
+# count(tmp, scenario)
+# count(tmp, fname)
+# 
+# tmp <- dirget2(dd2,fnames2)
+# count(tmp, scenario)
+# count(tmp, fname)
+
+```
+
+```{r}
+#| label: get-results
+#| include: false
+
+airg <- dirget2(dd1,fnames1)
+ourmod <- dirget2(dd2,fnames2)
+
+stack <- bind_rows(airg, ourmod) |> 
+  mutate(fname=path_ext_remove(fname) |> str_to_lower()) |> 
+  mutate(sim=row_number(), .by=c(scenario, fname))
+glimpse(stack)
+count(stack, fname, scenario)
+count(stack, sim) |> ht()
+
+slong2 <- stack |> 
+  pivot_longer(cols=-c(scenario, fname,  sim)) |> 
+  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
+  select(-name) |> 
+  arrange(scenario, fname, sim, year)
+glimpse(slong2)
+count(slong2, fname)
+
+# slong |> 
+#   filter(fname=="ust_1")
+
+```
+
+## Equity fund comparison
+
+```{r}
+#| label: equity-compare
+#| include: false
+
+p <- c(0, .05, .1, .25, .5, .75, .9, .95, 1)
+
+tabdata1 <- slong2 |> 
+  filter(!str_detect(fname, "ust_")) |> 
+  filter(year==30) |> 
+  summarise(n=n(),
+            res=list(quantile(value, na.rm=TRUE, probs=p)), 
+            .by = c(scenario, fname))
+
+tabdataw <- tabdata1 |> 
+  unnest_wider(col = c(res))
+
+tabdatal <- tabdata1 |> 
+  unnest_longer(col = c(res))
+
+# tabdatal |> 
+#   select(-n) |> 
+#   pivot_wider(names_from = scenario, values_from = res) |> 
+#   mutate(diff=ourmodel - airg,
+#          pctdiff=diff / airg)
+
+sfnames <- "
+us, Diversified large cap US equity
+small, Intermediate risk equity
+int, Diversified international equity
+aggr, Aggressive or specialized equity
+"
+groups <- read_csv(sfnames, col_names = c("fname", "label"))
+
+tab <- tabdatal |> 
+  select(-n) |> 
+  pivot_wider(names_from = scenario, values_from = res) |> 
+  mutate(diff=ourmodel - airg,
+         pctdiff=diff / airg) |>
+  mutate(fname=factor(fname, levels=groups$fname, labels=groups$label)) |> 
+  arrange(fname) |> 
+  gt(groupname_col = "fname") |> 
+    tab_header(
+    title = html("Quantiles of year-30 asset values, selected assets, based on starting value of $1"),
+    subtitle = html("Our model baseline compared with AIRG model baseline")
+    ) |>
+  cols_label(res_id="Quantile") |> 
+  fmt_number(columns = c(airg, ourmodel, diff),
+             decimals = 2) |> 
+  fmt_percent(columns=pctdiff,
+              decimals=1)
+
+
+```
+
+```{r}
+#| label: equity-compare-show
+#| include: true
+
+tab
+```
+
+<!-- ## Quantiles of selected statistics -->
 
 ```{r}
 #| label: tau-data
@@ -365,19 +562,21 @@ tabdata2 |>
 
 ```
 
-## Portfolios
+<!-- ## Portfolios -->
 
-## Long-run target volatility (tau τ)
+<!-- ## Long-run target volatility (tau τ) -->
 
-The average level the logarithm of volatility is expected to revert toward over the long term.
+<!-- The average level the logarithm of volatility is expected to revert toward over the long term. -->
 
-Default values range from approximately 0.125 for U.S. diversified equity to 0.202 for aggressive equity.
+<!-- Default values range from approximately 0.125 for U.S. diversified equity to 0.202 for aggressive equity. -->
 
-Preliminarily, we examine a scenario that reduces this parameter by .05 for each fund, and a scenario that increases it by .05 for each fund.
+<!-- Preliminarily, we examine a scenario that reduces this parameter by .05 for each fund, and a scenario that increases it by .05 for each fund. -->
 
 ```{r}
 #| label: tau-data
 #| include: false
+#| eval: false
+
 
 pdata <- slong |> 
   filter(fnbase=="aggr") |> 
@@ -406,7 +605,7 @@ pdata |>
 
 ```
 
-## Speed of mean reversion in volatility (phi φ)
+<!-- ## Speed of mean reversion in volatility (phi φ) -->
 
 ```{r}
 #| label: returns

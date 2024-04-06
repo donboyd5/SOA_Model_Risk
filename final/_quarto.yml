@@ -43,10 +43,10 @@ book:
   date-format: long
   chapters:
     - index.qmd
-    - part: "An example ESG model"
-      chapters:
-      - esg_intro.qmd
-    - part: "Alternative parameterizations of the model"
+    # - part: "An example ESG model"
+    #   chapters:
+    #   - esg_intro.qmd
+    - part: "The model and alternative parameterizations"
       chapters:
       - params_intro.qmd      
     # - part: "A simple pension model"
