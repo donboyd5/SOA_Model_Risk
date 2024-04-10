@@ -1,0 +1,4 @@
+- source: project
+  netlify:
+    - id: ba2d7b2f-bf9d-4dff-ae8c-7e5e64909638
+      url: 'https://soa-model-risk-management-report.netlify.app/'
