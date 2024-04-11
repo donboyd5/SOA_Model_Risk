@@ -4,8 +4,6 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Appendix
-
 ## Geometric Brownian Motion
 
 Geometric Brownian Motion (GBM) is a mathematical model used to describe the random evolution over time of financial asset prices, like stocks or commodities. It's widely used in financial mathematics and economics for modeling price dynamics under the assumption of a continuous market. The model combines the elements of growth trends (like those seen in stock prices increasing over time) and randomness (the daily up and down fluctuations in stock prices).
