@@ -1,0 +1,800 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# The model and alternative parameterizations
+
+The model used here has been adapted by us, based on previously developed economic scenario generators from the AAA/SOA and the American Council of Life Insurers (ACLI). While we have adapted and used their work, they bear no responsibility for our analysis.
+
+The model has three main components: interest rates, bond fund returns, and equity fund returns. According to documentation and our preliminary analysis, there appears to be no linkage between interest rates and equity returns.
+
+It calculates values for each month, and can produce output that is monthly, quarterly, semi-annual or annual.
+
+All of our analysis below is based on annual results, for 30 years, for 1,000 simulations. (We use 30 years and 1,000 simulations to keep runtime low; for the report we plan to use more simulations and more years.)
+
+## Interest rates
+
+The model is an extended version of a Cox-Ingersoll-Ross (CIR) model.
+
+It extends the Academy Interest Rate Generator (AIRG) with two new features, Heston Stochastic Variance and Shadow Mapping, that allow it to produce scenarios consistent with the heightened volatility and negative interest rates observed in the 2008 financial crisis.
+
+**Heston stochastic variance** allows the volatility of an asset’s price to be stochastic and mean-reverting, with correlation between the asset price and its variance. **Shadow mapping** is an adaptation to traditional interest rate models, which do not allow negative rates – it models a theoretical unobserved rate that can be negative, known as a shadow rate, and maps the shadow rate to observed rates.
+
+The model generates U.S. Treasury yields for 3 months and for each year from 1 to 30 years.
+
+## Bond fund returns
+
+Bond fund returns are based on interest rates and credit spreads. We have not explored the model for bond fund returns.
+
+The model produces returns for a money market fund, 3 corporate investment grade categories (1-5 years, 5-10 years, and 10-30 years), and 3 government categories (1-5 years, 5-10 years, and 10-30 years).
+
+## Equity fund returns
+
+Equity returns in the model follow a stochastic log volatility process in which the asset price follows a stochastic process, and the logarithm of volatility also follows a stochastic process.
+
+The parameter values appear to be identical to the AIRG default parameter values.
+
+## Key interest rate parameters
+
+### Default values of key interest-rate parameters
+
+![](images/clipboard-3473630111.png)
+
+### Default extended parameters
+
+The extended parameters relate to the two extensions, affecting negative interest rates and also how volatility changes over time.
+
+![](images/clipboard-1964834546.png)
+
+According to the documentation,
+
+![](images/clipboard-1549359693.png)
+
+## Key equity parameters
+
+In the scenarios below, we vary key parameters individually or as a group (for example, varying one specific parameter for each of four equity asset classes).
+
+![](images/clipboard-1220131238.png)
+
+### Fund-specific default values of key equity parameters
+
+![](images/clipboard-1274317986.png)
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+
+```
+
+
+```{r}
+#| label: constants
+#| include: false
+
+# ddir <- r"(E:\data\soa\acli)"
+# 
+# base_dir <- "s_baseline"
+# base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
+
+
+# file names and descriptions ----
+sfnames <- "
+AGGR.csv, Aggressive or specialized equity
+BALANCED.csv, Diversified balanced allocation
+FIXED.csv, Diversified fixed income
+INT.csv, Diversified international equity
+SMALL.csv, Intermediate risk equity
+US.csv, Diversified large cap US equity
+IG_1_5.csv, U.S. Corporate investment grade 1-5 year
+IG_Long.csv, U.S. Corporate investment grade 10-30 year
+HY.csv, U.S. Corporate high yield (Below investment grade)
+"
+
+(fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
+# create named vector
+(fnamesv <- setNames(fnames$fdesc, fnames$fname |> path_ext_remove() |> str_to_lower()))
+# fnamesv["aggr"]
+
+
+# alternative parameter runs ----
+# equity tau -- long-run target volatility
+tau_m.05_dir <- "s_tau_m.05" # default minus .05
+tau_p.05_dir <- "s_tau_p.05" # default plus .05
+tau_p.10_dir <- "s_tau_p.10" # default plus .10
+
+# equity phi -- strength of mean reversion in volatility
+phi_m.05_dir <- "s_phi_m.05" # default minus 0.05
+phi_p.05_dir <- "s_phi_p.05" # default plus 0.05
+
+phi_m.20_dir <- "s_phi_m.20" # default minus 0.20
+phi_p.20_dir <- "s_phi_p.20" # default plus 0.20
+
+# equity sigma(v) -- monthly standard deviation of the log volatility process
+sigmav_m.05_dir <- "s_sigmav_m.05" # default minus .05
+sigmav_p.05_dir <- "s_sigmav_p.05" # default plus .05
+
+# equity rho -- Correlation to random shock to vol and random return component
+rho_m.05_dir <- "s_rho_m.05" # default minus .05
+rho_p.05_dir <- "s_rho_p.05" # default plus .05
+rho_zero_dir <- "s_rho_zero" # rho set to zero
+
+# interest rate paremeterization directories ----
+itau1_m.50_dir <- "s_itau1_m.50" # default minus .50
+itau1_p.50_dir <- "s_itau1_p.50" # default plus .50
+
+# parameterizations and descriptions ----
+scen_names1 <- "
+baseline, Baseline
+tau_m.05, Target volatility (tau): reduced by .05 for each equity fund
+tau_p.05, Target volatility (tau): increased by .05 for each equity fund
+tau_p.10, Target volatility (tau): increased by .10 for each equity fund
+phi_m.05, Speed of mean reversion in volatility (phi): reduced by .05 for each equity fund
+phi_p.05, Speed of mean reversion in volatility (phi): increased by .05 for each equity fund
+phi_m.20, Speed of mean reversion in volatility (phi): reduced by .20 for each equity fund
+phi_p.20, Speed of mean reversion in volatility (phi): increased by .20 for each equity fund
+sigmav_m.05, Monthly sd of the log volatility process (sigma(v)): reduced by .05 for each equity fund
+sigmav_p.05, Monthly sd of the log volatility process (sigma(v)): increased by .05 for each equity fund
+rho_m.05, Correlation of random volatility shock vol and random return component (rho): reduced by .05 for each equity fund
+rho_p.05, Correlation of random volatility shock and random return component (rho): increased by .05 for each equity fund
+itau1_p.50, Mean reversion point for the long rate (tau1): increased by 0.50
+itau1_m.50, Mean reversion point for the long rate (tau1): reduced by 0.50
+"
+(scen_names <- read_csv(scen_names1, col_names = c("scenario", "scendesc")))
+
+# rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
+
+```
+
+```{r}
+#| label: functions
+#| include: false
+
+# dirname <- base_dir
+
+# function to read ESG output data files
+
+dirget <- function(dirname, fnames){
+  ddata <- path(ddir, dirname)
+  fndf <- path(ddata, fnames$fname)
+  df1 <- vroom(fndf, 
+               col_types = cols(.default = col_double()),
+               col_names=FALSE, id="fname")
+  
+  df2 <- df1 |> 
+    mutate(scenario=str_remove(dirname, "s_"),
+           fname=path_file(fname)) |> 
+    left_join(fnames, by = join_by(fname)) |> 
+    relocate(scenario) |> 
+    lcnames()
+  
+  df2
+}
+
+```
+
+```{r}
+#| label: get-data
+#| include: false
+
+# baseline ----
+base <- dirget(base_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+# count(df1, sim) |> ht()
+
+# equity parameters ----
+taum <- dirget(tau_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup <- dirget(tau_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup10 <- dirget(tau_p.10_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim05 <- dirget(phi_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip05 <- dirget(phi_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim20 <- dirget(phi_m.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip20 <- dirget(phi_p.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+sigmavm <- dirget(sigmav_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+sigmavp <- dirget(sigmav_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhom <- dirget(rho_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhop <- dirget(rho_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhoz <- dirget(rho_zero_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+# interest rate parameters ----
+itaum <- dirget(itau1_m.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+itaup <- dirget(itau1_p.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+
+stack <- bind_rows(base, 
+                   # equity fund parameterizations
+                   taum, taup, taup10,
+                   phim05, phip05,
+                   phim20, phip20,
+                   sigmavm, sigmavp,
+                   rhom, rhop, rhoz,
+                   # interest rate parameterizations
+                   itaum, itaup
+                   ) |> 
+  mutate(fnbase=path_ext_remove(fname) |> str_to_lower())
+summary(stack) # make sure there are no NAs or oddball values (neg assets, for example)
+count(stack, scenario)
+count(stack, fname, fnbase)
+
+# create a  long version of the stacked file, with year starting at 0
+slong <- stack |> 
+  select(-fname) |> 
+  pivot_longer(cols=-c(scenario, fnbase, fdesc, sim)) |> 
+  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
+  select(-name) |> 
+  arrange(scenario, fnbase, sim, year)
+
+glimpse(slong)
+
+```
+
+## Summary of alternative variants - year 30 median assets
+
+```{r}
+#| label: scenarios-funds
+#| include: false
+
+
+# define the scenarios to keep - put them in the order we want to see them
+# scen_names
+scenarios <- c("baseline", 
+               "tau_m.05", "tau_p.05", # "tau_p.10",
+               "phi_m.05", "phi_p.05", 
+               "phi_m.20", "phi_p.20", 
+               "sigmav_m.05", "sigmav_p.05",
+               "rho_m.05", "rho_p.05", #, "rho_zero"
+               "itau1_m.50", "itau1_p.50"
+               )
+
+# define the funds to keep - put them in the order we want to see them
+# fnames
+# efunds <- c("us", "int", "small", "aggr", "balanced", "ig_long")
+efunds <- c("us", "int", "small", "aggr", "ig_1_5", "ig_long", "hy")
+
+funds <- efunds
+
+```
+
+```{r}
+#| label: tabdata
+#| include: false
+
+tabdata1 <- slong |> 
+  filter(year==30) |> 
+  summarise(n=n(),
+            res=list(quantile(value, na.rm=TRUE)), 
+            .by = c(scenario, fnbase, fdesc)) |> 
+  left_join(scen_names, by = join_by(scenario))
+
+tabdataw <- tabdata1 |> 
+  unnest_wider(col = c(res))
+
+tabdatal <- tabdata1 |> 
+  unnest_longer(col = c(res))
+
+```
+
+### Asset levels - median assets at year 30
+
+```{r}
+#| label: tab-amounts-show
+#| include: true
+#| column: page
+
+tabdata <- tabdatal |> 
+  filter(scenario %in% scenarios,
+         fnbase %in% funds,
+         res_id=="50%") |> 
+  mutate(scenario=factor(scenario, levels=scenarios),
+         fnbase=factor(fnbase, levels=funds)) |> 
+  arrange(fnbase) |> 
+  select(scenario, scendesc, fnbase, res) |> 
+  pivot_wider(names_from = fnbase, values_from = res) |> 
+  arrange(scenario)
+
+tabdata |> 
+  select(-scenario) |> 
+  gt() |> 
+  tab_header(
+    title = html("Median asset values at year 30, based on starting value of $1"),
+    subtitle = html("Selected scenarios and assets")
+    ) |>
+  cols_label(
+    scendesc="Scenario",
+    us=fnamesv["us"],
+    int=fnamesv["int"],
+    small=fnamesv["small"],
+    aggr=fnamesv["aggr"],
+    # balanced=fnamesv["balanced"],
+    ig_1_5=fnamesv["ig_1_5"],
+    ig_long=fnamesv["ig_long"],
+    hy=fnamesv["hy"]
+    )|> 
+  fmt_number(columns=-scendesc,
+             decimals=2)|> 
+  fmt_currency(columns=-scendesc,
+               rows=1,
+               decimals=2)
+
+```
+
+### Assets relative to baseline levels - median assets at year 30
+
+```{r}
+#| label: tab-indexed-show
+#| include: true
+#| column: page
+
+tabdata1 <- tabdatal |> 
+  filter(scenario %in% scenarios,
+         fnbase %in% funds,
+         res_id=="50%") |> 
+  mutate(scenario=factor(scenario, levels=scenarios),
+         fnbase=factor(fnbase, levels=funds)) |> 
+  arrange(fnbase) |> 
+  select(scenario, scendesc, fnbase, res) |> 
+  pivot_wider(names_from = fnbase, values_from = res)
+
+baseline_row <- tabdata1 |> 
+  filter(scenario == "baseline")
+
+tabdata2 <- tabdata1 |> 
+  mutate(across(-c(scenario, scendesc), ~ . / baseline_row[[cur_column()]] - 1))|> 
+  arrange(scenario)
+
+tabdata2 |> 
+  select(-scenario) |> 
+  gt() |> 
+  tab_header(
+    title = html("Median asset values at year 30, % above or below each asset's baseline value"),
+    subtitle = html("Selected scenarios and assets")
+    ) |>
+  cols_label(
+    scendesc="Scenario",
+    us=fnamesv["us"],
+    int=fnamesv["int"],
+    small=fnamesv["small"],
+    aggr=fnamesv["aggr"],
+    # balanced=fnamesv["balanced"],
+    ig_1_5=fnamesv["ig_1_5"],
+    ig_long=fnamesv["ig_long"],
+    hy=fnamesv["hy"]
+    )|> 
+  fmt_percent(columns=-scendesc,
+             decimals=1)
+
+```
+
+## Model we use compared to AIRG model
+
+The following results are based on comparing the model we've obtained, with its baseline values, to the AIRG model, where the AIRG model's parameters are set to equal the ACLI-based model's parameters wherever possible.
+
+For specific parameters:
+
+-   Equity funds: the two models' parameters matched, without any adjustment
+
+-   Bond funds: the two models don't use the parameters, so no adjustments were made to the AIRG model
+
+-   Interest rates, basic: For the basic parameters, the defaults were the same, except that
+
+    -   The AIRG model's mean reversion parameter (tau1) had to be adjusted to match our model
+
+    -   The AIRG model had a Psi parameter that our model does not
+
+    -   The initial yield curve in the AIRG model was adjusted to equal the starting yield curve in our model
+
+-   Interest rates, extended: our model has additional interest rate parameters that the AIRG model does not have.
+
+-   Correlation matrix: where concepts are the same, the two models have the same correlation values
+
+The random numbers used in the two models are not the same and there is no practical way to adjust for this without writing a model from scratch. This should become less important as the number of simulations becomes large. We used 1,000 simulations and 30 years in this test run.
+
+```{r}
+#| label: get-results-prep
+#| include: false
+
+dirget2 <- function(ddata, fnames){
+  fndf <- path(ddata, fnames)
+  df1 <- vroom(fndf, 
+               col_types = cols(.default = col_double()),
+               col_names=FALSE, id="fname")
+  
+  scenario <- ifelse(str_detect(ddata, "using_airg"),
+                     "airg",
+                     "ourmodel")
+  
+  df2 <- df1 |> 
+    mutate(scenario=scenario,
+           fname=path_file(fname),
+           fname=str_remove(fname, "y")) |> 
+    relocate(scenario) |> 
+    lcnames()
+  
+  df2
+}
+
+# define the two sets of files
+# important files in common: aggr, us, 
+
+
+dd1 <- r"(E:\data\soa\airg\acli_baseline_using_airg)"
+fnames1 <- c("AGGR.csv", "INT.csv", "US.csv", "SMALL.csv", "UST_1y.csv", "UST_10y.csv", "UST_30y.csv")
+path(dd1, fnames1)
+
+dd2 <- r"(E:\data\soa\acli\s_baseline)"
+fnames2 <- c("AGGR.csv", "INT.csv", "US.csv", "SMALL.csv", "UST_1.csv", "UST_10.csv", "UST_30.csv")
+path(dd2, fnames2)
+
+# tmp <- dirget2(dd1,fnames1)
+# count(tmp, scenario)
+# count(tmp, fname)
+# 
+# tmp <- dirget2(dd2,fnames2)
+# count(tmp, scenario)
+# count(tmp, fname)
+
+```
+
+```{r}
+#| label: get-results
+#| include: false
+
+airg <- dirget2(dd1,fnames1)
+ourmod <- dirget2(dd2,fnames2)
+
+stack <- bind_rows(airg, ourmod) |> 
+  mutate(fname=path_ext_remove(fname) |> str_to_lower()) |> 
+  mutate(sim=row_number(), .by=c(scenario, fname))
+glimpse(stack)
+count(stack, fname, scenario)
+count(stack, sim) |> ht()
+
+slong2 <- stack |> 
+  pivot_longer(cols=-c(scenario, fname,  sim)) |> 
+  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
+  select(-name) |> 
+  arrange(scenario, fname, sim, year)
+glimpse(slong2)
+count(slong2, fname)
+
+# slong |> 
+#   filter(fname=="ust_1")
+
+```
+
+## Equity fund comparison
+
+```{r}
+#| label: equity-compare
+#| include: false
+
+p <- c(0, .05, .1, .25, .5, .75, .9, .95, 1)
+
+tabdata1 <- slong2 |> 
+  filter(!str_detect(fname, "ust_")) |> 
+  filter(year==30) |> 
+  summarise(n=n(),
+            res=list(quantile(value, na.rm=TRUE, probs=p)), 
+            .by = c(scenario, fname))
+
+tabdataw <- tabdata1 |> 
+  unnest_wider(col = c(res))
+
+tabdatal <- tabdata1 |> 
+  unnest_longer(col = c(res))
+
+# tabdatal |> 
+#   select(-n) |> 
+#   pivot_wider(names_from = scenario, values_from = res) |> 
+#   mutate(diff=ourmodel - airg,
+#          pctdiff=diff / airg)
+
+sfnames <- "
+us, Diversified large cap US equity
+small, Intermediate risk equity
+int, Diversified international equity
+aggr, Aggressive or specialized equity
+"
+groups <- read_csv(sfnames, col_names = c("fname", "label"))
+
+tab <- tabdatal |> 
+  select(-n) |> 
+  pivot_wider(names_from = scenario, values_from = res) |> 
+  mutate(diff=ourmodel - airg,
+         pctdiff=diff / airg) |>
+  mutate(fname=factor(fname, levels=groups$fname, labels=groups$label)) |> 
+  arrange(fname) |> 
+  gt(groupname_col = "fname") |> 
+    tab_header(
+    title = html("Quantiles of year-30 asset values, selected assets, based on starting value of $1"),
+    subtitle = html("Our model baseline compared with AIRG model baseline")
+    ) |>
+  cols_label(res_id="Quantile") |> 
+  fmt_number(columns = c(airg, ourmodel, diff),
+             decimals = 2) |> 
+  fmt_percent(columns=pctdiff,
+              decimals=1)
+
+
+```
+
+```{r}
+#| label: equity-compare-show
+#| include: true
+
+tab
+```
+
+<!-- ## Quantiles of selected statistics -->
+
+```{r}
+#| label: tau-data
+#| include: false
+
+```
+
+<!-- ## Portfolios -->
+
+<!-- ## Long-run target volatility (tau τ) -->
+
+<!-- The average level the logarithm of volatility is expected to revert toward over the long term. -->
+
+<!-- Default values range from approximately 0.125 for U.S. diversified equity to 0.202 for aggressive equity. -->
+
+<!-- Preliminarily, we examine a scenario that reduces this parameter by .05 for each fund, and a scenario that increases it by .05 for each fund. -->
+
+```{r}
+#| label: tau-data
+#| include: false
+#| eval: false
+
+
+pdata <- slong |> 
+  filter(fnbase=="aggr") |> 
+  summarise(a50=p50(value),
+            a25=p25(value),
+            a75=p75(value),
+            .by=c(scenario, fnbase, fdesc, year))
+
+```
+
+```{r}
+#| label: show-tau
+#| include: true
+
+pdata |> 
+  pivot_longer(cols=c(a25, a50, a75)) |> 
+  ggplot(aes(year, value, colour=scenario)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(name="Assets", breaks=seq(0, 50, 5)) +
+  scale_x_continuous(name="Year", breaks=seq(0, 50, 5)) +
+  facet_wrap(~name) +
+  ggtitle("Aggressive equity fund, asset values by year",
+          subtitle="25th, 50th, and 75th percentiles") +
+  theme_bw()
+
+```
+
+<!-- ## Speed of mean reversion in volatility (phi φ) -->
+
+```{r}
+#| label: returns
+#| eval: false
+#| include: false
+
+glimpse(slong)
+
+tmp <- slong |> 
+  arrange(scenario, fnbase, fdesc, sim, year) |> 
+  mutate(lret=log(value) - log(lag(value)), .by = c(scenario, fnbase, fdesc, sim))
+ht(tmp)
+
+tmp |> 
+  filter(scenario=="baseline", fnbase=="us", sim %in% 1:4) |> 
+  ggplot(aes(year, lret, colour=factor(sim))) +
+  geom_line() +
+  geom_point() +
+  geom_hline(yintercept = 0)
+
+calcs <- tmp |> 
+  filter(scenario=="baseline", fnbase=="us", year>0) |> 
+  summarise(mean=mean(lret), mdn=median(lret), sd=sd(lret), .by=year)
+
+calcs <- tmp |> 
+  filter(fnbase=="us", year>0) |> 
+  summarise(mean=mean(lret), mdn=median(lret), sd=sd(lret), .by=c(year, scenario))
+
+calcs |> 
+  ggplot(aes(year, mean, colour=scenario)) +
+  geom_line() +
+  geom_point()
+
+count(calcs, scenario)
+
+calcs |> 
+  # filter(scenario %in% c("baseline") | str_detect(scenario, "phi")) |>
+  filter(scenario %in% c("baseline") | str_detect(scenario, "rho")) |> 
+  ggplot(aes(year, mdn, colour=scenario)) +
+  geom_line() +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  ggtitle("Median log returns, selected scenarios") +
+  theme_bw()
+
+calcs |> 
+  filter(scenario %in% c("baseline") | str_detect(scenario, "phi")) |> 
+  ggplot(aes(year, sd, colour=scenario)) +
+  geom_line() +
+  geom_point() +
+  geom_hline(yintercept = 0) +
+  ggtitle("Standard deviation of log returns, selected scenarios") +
+  theme_bw()
+
+
+calcs |> 
+  ggplot(aes(year, sd)) +
+  geom_line() +
+  geom_point()
+
+tmp |> 
+  # filter(scenario %in% c("baseline") | str_detect(scenario, "phi")) |>
+  filter(scenario %in% c("baseline") | str_detect(scenario, "rho")) |> 
+  select(-c(fdesc, lret)) |> 
+  pivot_wider(names_from = scenario, values_from = value)
+
+
+
+```
+
+```{r}
+#| label: a1
+#| eval: false
+#| include: false
+
+
+# assets are last year's assets plus investment returns, plus contributions, minus benefit payments
+# liabilities last year growing by the discount rate, plus normal costs, minus benefit payments
+# payroll W increases annually by the assumed inflation rate 
+
+# private plan assumptions
+# Assets: $100 (funded ratio of 100%)
+# Liabilities: $100
+# Starting payroll: $19 (19% of actuarial liabilities)
+# Payroll growth rate: 4%
+# Benefit payout: $5.13, 27% of payroll
+# Benefit growth rate: 3%
+# Amortization: No amortization
+# Discount rate: 5%
+# Normal cost rate: $2.28, 12% of payroll
+# Contribution: normal cost plus difference between returns and discount rate
+
+nyears <- 30
+payrollgrow <- .04
+benpayout <- .27
+bengrow <- .03
+ncrate <- .12
+drate <- .05
+
+assets0 <- 100
+liab0 <- 100
+payroll0 <- .19 * liab0
+benefit0 <- benpayout * payroll0
+
+payroll <- payroll0 *  cumprod(c(1, 1 + rep(payrollgrow, nyears)))
+ncosts <- payroll * ncrate
+
+benefits <- benefit0 *  cumprod(c(1, 1 + rep(bengrow, nyears)))
+contributions <- ncosts
+
+ireturn <- c(0, rnorm(nyears, .05, .1))
+
+assets <- numeric(1 + nyears)
+assets[1] <- assets0
+liab <- numeric(1 + nyears)
+liab[1] <- liab0 
+ii <- numeric(1 + nyears)
+ii[0] <- 0
+for(y in 2:(nyears+1)){
+  ii[y] <- assets[y-1] * ireturn[y]
+  assets[y] <- assets[y - 1] + ii[y] + contributions[y] - benefits[y]
+  liab[y] <- liab[y-1] + ncosts[y] - benefits[y]
+}
+assets
+
+
+```
+
+```{r}
+#| label: a2
+#| eval: false
+#| include: false
+
+assets <- numeric(21)
+assets[1] <- 100
+ireturn <- c(rnorm(21, .05, .1))
+
+for(y in 2:21){
+  ii <- assets[y-1] * ireturn[y]
+  assets[y] <- assets[y - 1] + ii
+}
+assets
+
+```
+
+```{r}
+#| label: a3
+#| eval: false
+#| include: false
+
+# items that are the same for all years and sims
+nyears <- 30
+payrollgrow <- .04
+benpayout <- .27
+bengrow <- .03
+ncrate <- .12
+drate <- .05
+
+assets0 <- 100
+liab0 <- 100
+payroll0 <- .19 * liab0
+benefit0 <- benpayout * payroll0
+
+payroll <- payroll0 *  cumprod(c(1, 1 + rep(payrollgrow, nyears)))
+ncosts <- payroll * ncrate
+
+benefits <- benefit0 *  cumprod(c(1, 1 + rep(bengrow, nyears)))
+contributions <- ncosts
+
+# Set the dimensions of the matrix
+nsims <- 1000
+nyears <- 21
+
+# Create a matrix of random numbers Subtract 1 from ncols since the first column will be zeros
+returns <- matrix(rnorm(nsims * (nyears - 1), mean = 0.05, sd = 0.1), nrow = nsims, ncol = nyears - 1)
+rmatrix <- cbind(rep(0, nsims), returns)
+ht(rmatrix)
+
+assets <- matrix(nrow=nsims, ncol=nyears)
+assets[1] <- assets0
+liab <- numeric(1 + nyears)
+liab[1] <- liab0 
+ii <- numeric(1 + nyears)
+ii[0] <- 0
+for(y in 2:(nyears+1)){
+  ii[y] <- assets[y-1] * ireturn[y]
+  assets[y] <- assets[y - 1] + ii[y] + contributions[y] - benefits[y]
+  liab[y] <- liab[y-1] + ncosts[y] - benefits[y]
+}
+assets
+
+```
