@@ -1,6 +1,9 @@
 project:
   type: book
-  output-dir: _report
+  output-dir: _report2024
+  
+# CAUTION: all .R and other files are in the report folder, not the upper
+# level folder R
   
 execute:
   eval: true
@@ -27,7 +30,8 @@ book:
       - model_returns.qmd
     - part: "Appendix"
       chapters:
-      - appendix.qmd
+      - appendix-model_returns.qmd
+      - appendix-gbm.qmd
     
 # bibliography: references.bib
 
