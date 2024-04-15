@@ -2,6 +2,8 @@
 
 library(lmtest)
 
+library(quantmod)
+
 library(forecast)
 library(tsibble)
 library(feasts)

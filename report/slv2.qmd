@@ -1,0 +1,304 @@
+---
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(here::here("report", "libraries_ts.R"))
+
+
+library(quantmod)
+library(stats4)
+library(stochvolTMB)
+library(stochvol)
+library(rstan)
+library(V8)
+
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE) # avoids recompiling
+
+```
+
+## Get data
+
+```{r}
+#| label: download-sp500
+#| eval: false
+
+# Dec 1955-Dec 2003 monthly was period used in AIRG for sp500
+
+# Download adjusted close prices for the S&P 500 index
+# monthly data do not go back far enough so get daily and convert
+
+# re-download if needed
+spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
+saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+
+```
+
+```{r}
+#| label: get-sp500
+
+# get previously downloaded and saved data
+
+spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
+
+spmonthly <- spdaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  select(date=Index, sp500=GSPC.Adjusted) |> 
+  # we can safely assume data are sorted by date
+  mutate(lr=log(sp500 / lag(sp500))) # note that we lose lr for the first observation
+
+period <- c("1955-12-31", "2003-12-31")
+# period <- c("1955-12-31", "2023-12-31")
+# period <- c("1950-02-28", "2024-03-31")
+
+log_returns <- spmonthly |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(annlr=lr * 12, # annualized
+         mclr=scale(annlr, scale = FALSE) |> c()) |> # mean-centered log return
+  pull(lr)
+
+df <- spmonthly |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(annlr=lr * 12)
+
+mean(df$lr) * 12
+sd(df$lr) * sqrt(12)
+
+# To annualize the mean, multiply the mean of the monthly log returns by 12 (since there are 12 months in a year
+#  To annualize the standard deviation, multiply the standard deviation of the monthly log returns by the square root of 12. 
+
+```
+
+```{r}
+#| label: dias-sp500
+
+# E:\R_projects\projects\SOA_Model_Risk\SV-HMC-master\Data\S&P500.csv
+
+# Daily S&P 500 data from Ricardo Dias
+
+fpath <- here::here(r"(SV-HMC-master\Data\S&P500.csv)")
+spdias1 <- read_csv(fpath) 
+
+spdias2 <- spdias1 |> 
+  select(cdate=Data, close=Fechamento, open=Abertura, lrdias=`Var%`) |> 
+  mutate(date=dmy(cdate), lr=log(close / open)*100)
+
+spdias2 |> 
+  pivot_longer(c(lrdias, lr)) |> 
+  filter(year(date)==2008, month(date)==1) |> 
+  ggplot(aes(date, value, colour=name)) +
+  geom_line()
+
+spdias2 |> 
+  filter(year(date)==2008, month(date)==1)
+
+spcheck <- spdaily |> 
+  fortify.zoo() |> 
+  select(date=Index, closeadj=GSPC.Adjusted) 
+  
+
+comp <- spdias2 |> 
+  select(date, open, close) |> 
+  left_join(spcheck, by = join_by(date))
+
+comp |> 
+  select(date, close, closeadj) |> 
+  summary()
+# his data almost identical to mine
+
+
+
+```
+
+
+```{r}
+#| label: dias-normal
+
+# Ricardo Diaz's code -- sp is the raw data
+# sp$date = as.Date(sp$Data, "%d.%m.%Y")
+# sp$rdate<-format(sp$date, format = "%Y")
+# sp$rdate2<-format(sp$date, format = "%b %Y")
+# sp = subset(sp, rdate>=2012)
+# dados = sp[-(1404:1474),]
+# Pr <- dados[,2] # de 03.01.12 a 31.07.2017 # djb this is closing price, 1/3/2012 - 7/31/2017
+# r  <- diff(log(Pr))
+# ret <- logret(Pr, demean=TRUE) 
+
+
+# nsamples = 10000
+# #--- Initial Values:
+# #x.0 = est.x(ret)/2
+# phi.0 =  0.99               
+# sigma.0 = 0.075 #var(x.0)*(1-phi.0^2)
+# data = list(T = length(ret), y = ret)
+# 
+# inits <-list(list(mu = -10, phiT=(phi.0 + 1)/2, s2=sigma.0^2))
+# fit.n <- stan(model_code=stan_code_n, data=data, init=inits, chains=1, iter=nsamples)
+
+retdata <- spdias1 |> 
+  select(cdate=Data, close=Fechamento, open=Abertura, lrdias=`Var%`) |> 
+  mutate(date=dmy(cdate),
+         lr=log(close / open),
+         lr=log(close / lag(close))) |> 
+  filter(date >= "2012-01-03", date <= "2017-07-31")
+
+ret2 <- retdata |> 
+  filter(row_number() > 1) |> # to be comparable to dias drop one obs
+  mutate(lrdm1=scale(lr, center=TRUE, scale=FALSE) |> as.vector(),
+         lrdm2=lr - mean(lr))
+
+
+# mutate(ret=logret(close, demean=TRUE))
+length(retdata$close) # 1403
+ret <- stochvol::logret(retdata$close, demean=TRUE)
+length(ret) # 1402 -- drops the first observation
+ht(ret) 
+ht(ret2) # ok, now we match him
+
+data <- list(T = length(ret), y = ret)
+sfile <- here::here("report", "slv_dias_normal.stan")
+
+phi.0 <- 0.99
+sigma.0 <- 0.075 
+inits <-list(list(mu = -10, phiT=(phi.0 + 1)/2, s2=sigma.0^2))
+
+fit.n <- stan(file=sfile, 
+              data=data, 
+              init=inits, 
+              chains=1, 
+              iter=10000)
+
+
+
+summary(fit.n)$summary[c(1,(length(ret)+4),(length(ret)+5)), ] 
+v.n <- extract(fit.n, pars = c('mu','phi','sigma'))
+theta.n <- cbind(v.n$mu,v.n$phi,v.n$sigma)
+colnames(theta.n) <- c('mu','phi','sigma')
+
+print(
+  fit,
+  digits = 3,
+  par = c('mu', 'phi', 'sigma', 'rho', 'E_v', 'Var_v', 'E_sigma', 'E_sigma_sq', 'E_mu', 'A', 'B', 'C'),
+  probs = c(.025, .5, .975)
+)
+
+
+
+fit <- stan(
+  file = sfile,
+  data = stan_data,
+  control=control, #  control, or list(max_treedepth = 8), for debugging
+  iter = 2000, # 2000, or 100 for debugging
+  chains = 4
+)
+
+```
+
+
+
+## Model
+
+```{r}
+#| label: stan-best
+
+# https://github.com/m-clark/models-by-example/blob/main/bayesian-stochastic-volatility.Rmd
+# https://discourse.mc-stan.org/t/adapt-delta/7947/2
+# https://groups.google.com/g/stan-users/c/zNttu0wgavg?pli=1
+# https://mc-stan.org/rstanarm/reference/adapt_delta.html#references
+# https://mc-stan.org/docs/stan-users-guide/time-series.html#stochastic-volatility-models
+
+
+# get centered log returns - don't forget first obs in data is missing lr
+period <- c("1955-12-31", "2003-12-31")
+# period <- c("1955-12-31", "2023-12-31")
+# period <- c("1950-02-28", "2024-03-31")
+
+log_returns <- spmonthly |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(annlr=lr * 12, # annualized
+         mclr=scale(annlr, scale = FALSE) |> c()) |> # mean-centered log return
+  pull(lr)
+
+
+stan_data <- list(
+  N_t = length(log_returns),
+  y = log_returns
+)
+
+sfile <- here::here("report", "slv_best.stan") # best so far
+sfile <- here::here("report", "slv_rho.stan")
+sfile <- here::here("report", "slv_perplexity.stan")
+sfile <- here::here("report", "slv_perplexity2.stan")
+sfile <- here::here("report", "slv_perplexity3.stan")
+sfile <- here::here("report", "slv_perplexity4.stan")
+# sfile <- here::here("report", "slv1.stan") # slow
+# sfile <- here::here("report", "slv2.stan") # good but not always 67 secs
+
+cat(readLines(sfile), sep = "\n")
+
+# control <- list(adapt_delta=0.99, stepsize = 0.01, max_treedepth = 20)
+# control <- list(adapt_delta= 0.99, stepsize = 0.005, max_treedepth = 20)
+# control <- list(adapt_delta= 0.995, stepsize = 0.005, max_treedepth = 25)
+# control <- list(adapt_delta= 0.995, max_treedepth = 25)
+control <- list(adapt_delta= 0.995)
+
+fit <- stan(
+  file = sfile,
+  data = stan_data,
+  control=control, #  control, or list(max_treedepth = 8), for debugging
+  iter = 2000, # 2000, or 100 for debugging
+  chains = 4
+)
+
+print(
+  fit,
+  digits = 3,
+  par = c('mu', 'phi', 'sigma', 'rho', 'E_v', 'Var_v', 'E_sigma', 'E_sigma_sq', 'E_mu', 'A', 'B', 'C'),
+  probs = c(.025, .5, .975)
+)
+
+
+
+print(
+  fit,
+  digits = 3,
+  par    = c('mu', 'phi', 'sigma', 'rho', 'A', 'B', 'C'),
+  probs  = c(.025, .5, .975)
+)
+
+# compare, with stochvolTMB
+# svmod <- estimate_parameters(log_returns, model = "gaussian", silent = TRUE)
+# summary(svmod)
+
+# Extract the posterior samples of the parameters
+posterior_samples <- rstan::extract(fit)
+names(posterior_samples)
+
+# Calculate the unconditional expected volatility and squared volatility
+E_v <- mean(posterior_samples$mu)
+Var_v <- mean(posterior_samples$sigma^2) / (1 - mean(posterior_samples$phi)^2)
+
+E_sigma <- exp(E_v + 0.5 * Var_v)
+E_sigma_sq <- exp(2 * E_v + 2 * Var_v)
+
+# Calculate the unconditional expected monthly drift
+E_mu <- mean(posterior_samples$A) + mean(posterior_samples$B) * E_sigma + mean(posterior_samples$C) * E_sigma_sq
+
+# Convert the monthly drift to an annual effective rate
+unconditional_expected_return <- exp(12 * E_mu) - 1
+
+
+```

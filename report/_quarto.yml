@@ -9,7 +9,7 @@ execute:
   eval: true
   echo: true
   output: true
-  freeze: auto  # auto: during global project renders, re-render only when source changes
+  freeze: false  # auto: during global project renders, re-render only when source changes
 
 editor_options:
   chunk_output_type: console
@@ -27,11 +27,18 @@ book:
       - probability.qmd
     - part: "Model-based investment returns"
       chapters:
-      - model_returns.qmd
+      - esg.qmd
+      # - slv.qmd to come
+    - part: "Pension model"
+      chapters:
+      - penmod.qmd
+    - part: "Risk evaluation"
+      chapters:
+      - risk_eval.qmd      
     - part: "Appendix"
       chapters:
-      - appendix-model_returns.qmd
-      - appendix-gbm.qmd
+      - appendix_model_returns.qmd
+      - appendix_gbm.qmd
     
 # bibliography: references.bib
 
