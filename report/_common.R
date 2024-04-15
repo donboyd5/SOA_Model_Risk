@@ -1,6 +1,5 @@
 
 # Note that all files are in the folder that houses a particular quarto project
-
 source(here::here("report", "constants.R"))
 
 source(fs::path(rptdir, "libraries.R"))

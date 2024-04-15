@@ -1,0 +1,9 @@
+---
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+# Economic scenario generators
+
+Placeholder for the code that will generate investment returns.

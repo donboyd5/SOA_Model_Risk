@@ -1,0 +1,168 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Run investment-return results through a simple pension model
+
+## Overview
+
+-   Data preparation: Create a data tibble that has the following columns:
+
+    -   scenario - string identifying the scenario in question
+
+    -   nsims - integer giving the number of sims in the scenario
+
+    -   nyears - integer giving the number of years in the scenario
+
+    -   ir_matrix - list-column with matrix of annual log investment returns, with nsims rows and nyears columns
+
+    Thus, the tibble will have one row per scenario.
+    
+-   Modeling: Create a result tibble that has the data and the results of running a simple pension model, called penmod, on each row of the tibble, creating a new list-column called penmod. The list-column  penmod has a nested tibble with pension results (e.g., assets, liability, payroll, funded ratio, etc.) for each sim and year within the given scenario. Thus, our result tibble has one row per scenario, with the same columns as before (scenario, nsims, nyears, a list-column called ir_matrix with a matrix of investment returns, and a list-column called penmod with a tibble of results.
+
+
+The following code does this, using Gang's simple pension model, for some made-up data. Soon we'll replace the made-up data with results of ESG models and probability distributions.
+
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+
+# get Gang's pension model, adapted to work with multiple simulations
+source(here::here("report", "function_penmod.R")) 
+
+```
+
+
+## Model test
+
+Create a small simulation (30 years, 5 simulations) with the same assumptions as Gang used, and with fixed investment returns. Verify that the results are the same as Gang's pension model. Since investment returns are constant, all simulations are the same. We look at funded ratio from one sim, which we compare to funded_ratio from Gang's alm.R program. They are the same.
+
+```{r}
+#| label: model-test
+
+# get Gang's model
+source(here::here("pensionALM-main", "alm.R"))
+
+```
+
+Funded ratio from Gang's model:
+
+```{r}
+#| label: Gang-funded-ratio
+
+alm$funded_ratio  # funded ratio from Gang's result
+```
+
+Funded ratio from the penmod equivalent of Gang's model
+
+Look at one sim from penmod (any sim will do, as the model was run with a fixed investment return).
+
+```{r}
+#| label: penmod-funded-ratio
+
+# run penmod
+test <- penmod(nsims=10, nyears=30, irates=.07)
+test |> filter(sim==1) |> pull(fr) # look at one sim from penmod (any sim will do)
+
+```
+
+
+
+
+
+## Data preparation -- made up data
+
+Prepare 3 made-up scenarios of 10,000 sims and 50 years each, each with random normal returns and different standard deviations. Nest the data so that there is one row per scenario. This is simply a demonstration of how to set up data. We'll replace this with actual data output from ESGs and probability distributions as we move toward final paper.
+
+Note that while each scenario has the same number of sims and years, that is not required by this approach -- it allows scenarios with different numbers of sims and years.
+
+```{r}
+#| label: data-prep-madeup
+
+nsims <- 10000
+nyears <- 50
+
+scen1 <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+  mutate(ir=rnorm(nsims * nyears, .07, .10),
+         scenario="scen1")
+
+scen2 <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+  mutate(ir=rnorm(nsims * nyears, .07, .16),
+         scenario="scen2")
+
+scen3 <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+  mutate(ir=rnorm(nsims * nyears, .07, .20),
+         scenario="scen3")
+
+data <- bind_rows(scen1, scen2, scen3) |> 
+  group_by(scenario) |> 
+  summarise(
+    nsims = n_distinct(sim),
+    nyears = n_distinct(year),
+    ir_matrix = list(matrix(ir, nrow = nsims, ncol = nyears, byrow = TRUE))
+  )
+
+data
+
+```
+
+
+## Run the pension model
+
+Since each scenario in the made-up data has 10,000 simulations and 50 years, the resulting tibble for each scenario has 500,000 rows.
+
+Note that this is quite fast. 
+
+```{r}
+#| label: penmod
+
+result <- data  |> 
+  # next stament "loops" (via map) through the 3 rows (the 3 scenarios), and for each row it
+  # calls penmod using nsims, nyears, and the investment return matrix for the scenario in the row
+  mutate(penmod = 
+           purrr::map(seq_along(ir_matrix),
+                      ~penmod(
+                        irates = ir_matrix[[.x]],
+                        nsims = nsims[.x],   # Ensures nsims is passed as a scalar
+                        nyears = nyears[.x]  # Ensures nyears is passed as a scalar
+                        )))
+result
+
+```
+
+"Unnest" one of the scenarios to see the variables we have. If we're going to need any other variables for risk analysis, please say so and we can add them to penmod output.
+
+Three variable names may not be intuitive:
+
+-   ii -- investment income (dollars)
+-   ir -- investment return (e.g., .10=10%)
+-   fr -- funded ration (e.g., .75=75%)
+
+```{r}
+#| label: penmod-sample-output
+
+result |> 
+  filter(scenario=="scen2") |> 
+  unnest(col=penmod) |> 
+  ht() # look at the head and the tail of scenario 2
+
+```
+
+## Save the results for risk analysis
+
+Save the results for risk analysis in the next section.
+
+```{r}
+#| label: save-penmod-results
+
+saveRDS(result, here::here("data", "penmod_results.rds"))
+
+```
+

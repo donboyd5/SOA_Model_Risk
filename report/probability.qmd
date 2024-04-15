@@ -4,9 +4,9 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Introduction
+# Returns generated from a probability distribution
 
-Returns generated from a probability distribution.
+Placeholder for returns generated from a probability distribution.
 
 ```{r}
 #| label: setup

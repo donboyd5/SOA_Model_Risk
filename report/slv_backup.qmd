@@ -1,0 +1,468 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Stochastic log volatility
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(here::here("report", "libraries_ts.R"))
+
+
+library(quantmod)
+library(stats4)
+library(stochvolTMB)
+library(stochvol)
+library(rstan)
+library(V8)
+
+options(mc.cores = parallel::detectCores())
+
+```
+
+## Source
+
+“C3 Phase II Risk-Based Capital for Variable Annuities: Pre-Packaged Scenarios:  Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittees’ C-3 Phase 2 Work Group to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, March 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3supp_march05.pdf>.
+
+![](images/clipboard-2233928360.png)
+
+## AIRG SLV equations
+
+![](images/clipboard-325100188.png)
+
+## AIRG parameter values
+
+![](images/clipboard-1231382399.png)
+
+![](images/clipboard-540603410.png)
+
+## Model
+
+```{r}
+
+
+
+# Download monthly adjusted close prices for the S&P 500 index
+# Dec 1995-Dec 2003
+
+getSymbols("^GSPC", from = "1990-01-01", to = Sys.Date(), periodicity = "monthly", auto.assign = TRUE)
+
+sp500b <- GSPC |> 
+  as_tibble() |> 
+  add_column(date = zoo::index(GSPC), .before = 1) |> 
+  mutate(price=GSPC.Adjusted,
+         lr=monthlyReturn(GSPC, type = "log") |> as.vector(),
+         lrdjb=log(price / lag(price))) # this is correct
+
+
+# Calculate monthly returns
+sp500_monthly_returns <- monthlyReturn(GSPC, type = "log")
+as.vector(sp500_monthly_returns)
+
+# Print the first few rows of monthly returns
+head(sp500_monthly_returns)
+
+sp500 <- sp500_monthly_returns |> 
+  as_tibble() |> 
+  add_column(date = zoo::index(sp500_monthly_returns), .before = 1) |> 
+  mutate(lr=monthlyReturn(GSPC, type = "log"))
+  rename(logret=monthly.returns)
+
+data <- sp500 |> 
+  filter(date >= "1995-12-01",
+         date <= "2003-12-01")
+
+```
+
+```{r}
+#| label: rstan
+
+# For execution on a local, multicore CPU with excess RAM we recommend calling
+# options(mc.cores = parallel::detectCores()).
+# To avoid recompilation of unchanged Stan programs, we recommend calling
+# rstan_options(auto_write = TRUE)
+# For within-chain threading using `reduce_sum()` or `map_rect()` Stan functions,
+# change `threads_per_chain` option:
+# rstan_options(threads_per_chain = 1)
+# 
+# Do not specify '-march=native' in 'LOCAL_CPPFLAGS' or a Makevars file
+
+# prepare log returns in a list format that matches the data block in your Stan model
+
+
+log_returns <- sp500b |> 
+  filter(date >= "1995-12-01",
+         date <= "2003-12-01") |> 
+  mutate(mclr=lr - mean(lr)) |> # mean center
+  pull(mclr)
+
+data_list <- list(
+  T = length(log_returns),
+  y = log_returns
+)
+
+sfile <- here::here("report", "slv.stan")
+sfile <- here::here("report", "slv2.stan")
+sfile <- here::here("report", "slv3.stan")
+
+cat(readLines(sfile), sep = "\n")
+
+
+# Fit the model
+fit <- stan(
+  file = sfile,  # Your Stan model file
+  data = data_list,
+  iter = 2000,
+  chains = 4
+)
+
+fit
+stan_diag(fit)
+stan_trace(fit)
+
+
+# Warning messages:
+# 1: There were 2106 divergent transitions after warmup. See
+# https://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
+# to find out why this is a problem and how to eliminate them. 
+# 2: There were 3 chains where the estimated Bayesian Fraction of Missing Information was low. See
+# https://mc-stan.org/misc/warnings.html#bfmi-low 
+# 3: Examine the pairs() plot to diagnose sampling problems
+#  
+# 4: The largest R-hat is 2.06, indicating chains have not mixed.
+# Running the chains for more iterations may help. See
+# https://mc-stan.org/misc/warnings.html#r-hat 
+# 5: Bulk Effective Samples Size (ESS) is too low, indicating posterior means and medians may be unreliable.
+# Running the chains for more iterations may help. See
+# https://mc-stan.org/misc/warnings.html#bulk-ess 
+# 6: Tail Effective Samples Size (ESS) is too low, indicating posterior variances and tail quantiles may be unreliable.
+# Running the chains for more iterations may help. See
+# https://mc-stan.org/misc/warnings.html#tail-ess 
+
+
+
+```
+
+```{r}
+#| label: stan2
+
+# https://github.com/m-clark/models-by-example/blob/main/bayesian-stochastic-volatility.Rmd
+# https://groups.google.com/g/stan-users/c/zNttu0wgavg?pli=1
+
+d <- read_csv(
+  'https://raw.githubusercontent.com/m-clark/Datasets/master/us%20cpi/USCPI.csv',
+  col_names = 'inflation'
+)
+
+inflation <- pull(d, inflation)
+summary(inflation)
+
+inflation_cen <- scale(inflation, scale = FALSE)
+stan_data = list(N_t = length(inflation_cen), y = c(inflation_cen))
+
+stan_data <- list(
+  N_t = length(log_returns),
+  y = log_returns
+)
+
+sfile <- here::here("report", "infl1.stan")
+sfile <- here::here("report", "infl2.stan")
+
+# fit = sampling(
+#   file = sfile,
+#   data  = stan_data,
+#   cores = 4,
+#   thin  = 4
+# )
+
+a <- proc.time()
+fit <- stan(
+  file = sfile,  # Your Stan model file
+  data = stan_data,
+  control=list(adapt_delta=0.99, stepsize = 0.01, max_treedepth =20),
+  iter = 2000,
+  chains = 4
+)
+b <- proc.time()
+b - a
+
+
+print(
+  fit,
+  digits = 3,
+  par    = c('mu', 'phi', 'sigma'),
+  probs  = c(.025, .5, .975)
+)
+
+# stan documentation
+# example(stan_model, package = "rstan", run.dontrun = TRUE)
+
+
+```
+
+```{r}
+
+data(spy)
+plot(spy$date, spy$log_return, type = "l", xlab = "", ylab = "", main = "Log-returns of S&P500")
+plot(spy$date, spy$price, type = "l", xlab = "", ylab = "", main = "Price of S&P500")
+
+
+gaussian = estimate_parameters(spy$log_return, model = "gaussian", silent = TRUE)
+t_dist = estimate_parameters(spy$log_return, model = "t", silent = TRUE)
+skew_gaussian = estimate_parameters(spy$log_return, model = "skew_gaussian", silent = TRUE)
+leverage = estimate_parameters(spy$log_return, model = "leverage", silent = TRUE)
+
+summary(gaussian)
+
+djb1 <- stochvolTMB::estimate_parameters(data$ir, model = "gaussian", silent = TRUE)
+summary(djb1)
+
+djb2 <- stochvol::svsample(data$ir, quiet = TRUE)
+summary(djb2)
+
+slv1 <- stochvol::svsample(sp500b$lr, quiet = TRUE)
+slv1$summary$para
+
+slv2 <- stochvol::svsample(sp500b |> 
+                             filter(month <= "2003-12-01") |> 
+                             pull(lr), quiet = TRUE)
+slv2$summary$para
+
+
+
+
+
+
+summary(djb1, report = "transformed")
+djb2$summary$para
+
+
+summary(spy)
+summary(data)
+
+spy2 <- spy |> 
+  mutate(ratio=price / lag(price),
+         lr=log(ratio),
+         lr=ifelse(is.na(lr), log_return, lr))
+gaussian2 = estimate_parameters(spy2$lr, model = "gaussian", silent = TRUE)
+summary(gaussian2)
+
+GSPC |> 
+  as_tibble() |> 
+  add_column(month = zoo::index(GSPC), .before = 1) |> 
+  mutate(price=GSPC.Adjusted,
+         ratio=price / lag(price),
+         lr=log(ratio)) # this is correct
+
+data
+
+
+stochvol_gauss <- svsample(spy$log_return, quiet = TRUE)
+stochvolTMB_gauss  <- estimate_parameters(spy$log_return, "gaussian", silent = TRUE)
+
+str(stochvol_gauss)
+
+stochvol_gauss$summary$para
+summary(stochvolTMB_gauss, report = "transformed")
+
+
+
+# Model equation for the log returns and volatility
+slv_model <- function(params, returns) {
+  mu = params[1]
+  phi = params[2]
+  sigma_v = params[3]
+  rho = params[4]
+  
+  # Define more of the model here as needed
+  # ...
+  
+  # Placeholder for likelihood calculation
+  # This would need to be adapted to your specific model equations and data
+  likelihood = -sum(dnorm(returns, mean = mu, sd = sigma_v, log = TRUE))
+  
+  return(likelihood)
+}
+
+
+# Initial parameter guesses, lower and upper bounds
+initial_params <- c(mu = 0.01, phi = 0.5, sigma_v = 0.2, rho = 0)
+lower_bounds <- c(mu = -0.5, phi = 0, sigma_v = 0, rho = -1)
+upper_bounds <- c(mu = 0.5, phi = 1, sigma_v = 1, rho = 1)
+
+slv_model(initial_params, data$ir)
+returns <- data$ir
+
+# Optimize using constrained MLE
+result <- mle(minuslogl=slv_model, 
+              start = initial_params, 
+              method = "L-BFGS-B", 
+              lower = lower_bounds, 
+              upper = upper_bounds, 
+              fixed = list(returns = data$ir))
+
+
+
+# new start ----
+
+slv <- function(mu, phi, sigma_v, rho) {
+  nll = -sum(dnorm(returns, mean = mu, sd = sigma_v, log = TRUE))
+  return(nll)
+}
+
+ip <- list(mu = 0.01, phi = 0.5, sigma_v = 0.2, rho = 0)
+lb <- list(mu = -0.5, phi = 0, sigma_v = 0, rho = -1)
+ub <- list(mu = 0.5, phi = 1, sigma_v = 1, rho = 1)
+
+ -sum(dnorm(returns, mean = ip$mu, sd = ip$sigma_v, log = TRUE))
+
+
+slv(ip$mu, ip$phi, ip$sigma_v, ip$rho)
+
+
+result <- mle(minuslogl=slv, 
+              start = ip, 
+              method = "L-BFGS-B", 
+              lower = lb, 
+              upper = ub)
+
+summary(result)
+
+
+result <- mle(minuslogl=slv_model, 
+              start = initial_params, 
+              method = "L-BFGS-B", 
+              lower = lower_bounds, 
+              upper = upper_bounds, 
+              fixed = list(returns = data$ir))
+
+```
+
+## S&P 500 Data
+
+```{r}
+# Download monthly adjusted close prices for the S&P 500 index
+# Dec 1955-Dec 2003 was 
+
+getSymbols("^GSPC", from = "1955-01-01", to = Sys.Date(), periodicity = "monthly", auto.assign = TRUE)
+summary(GSPC)
+
+# monthly data do not go back far enough so get daily and convert
+# spx <- getSymbols("^GSPC", auto.assign = FALSE, periodicity = "monthly", from = "1950-01-01")
+spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
+
+spmonth <- spdaily |> 
+  as_tibble() |> 
+  add_column(date = zoo::index(spdaily), .before = 1) |> 
+  mutate(ldom = rollforward(date)) |> 
+  filter(date==ldom) |> 
+  arrange(date) |> 
+  mutate(price=GSPC.Adjusted,
+         lr=log(price / lag(price)))
+
+# log returns: lr=log(price / lag(price)) except that quantmod function fills in 1st observation
+
+# sp500 <- GSPC |> 
+#   as_tibble() |> 
+#   add_column(date = zoo::index(GSPC), .before = 1) |> 
+#   mutate(price=GSPC.Adjusted,
+#          lr=monthlyReturn(GSPC, type = "log") |> as.vector())
+# skim(sp500)
+
+# get centered log returns
+period <- c("1955-12-31", "2003-12-31")
+# period <- c("1955-12-31", "2023-12-31")
+# period <- c("1950-02-28", "2024-03-31")
+
+log_returns <- spmonth |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(mclr=scale(lr, scale = FALSE) |> c()) |> # mean-centered log return
+  pull(mclr)
+
+```
+
+## Stan results and AIRG reported
+
+```{r}
+#| label: stan-best
+
+# https://github.com/m-clark/models-by-example/blob/main/bayesian-stochastic-volatility.Rmd
+# https://discourse.mc-stan.org/t/adapt-delta/7947/2
+# https://groups.google.com/g/stan-users/c/zNttu0wgavg?pli=1
+# https://mc-stan.org/rstanarm/reference/adapt_delta.html#references
+# https://mc-stan.org/docs/stan-users-guide/time-series.html#stochastic-volatility-models
+
+
+# get centered log returns
+period <- c("1955-12-31", "2003-12-31")
+# period <- c("1955-12-31", "2023-12-31")
+# period <- c("1950-02-28", "2024-03-31")
+
+log_returns <- spmonth |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(mclr=scale(lr, scale = FALSE) |> c()) |> # mean-centered log return
+  pull(mclr)
+
+stan_data <- list(
+  N_t = length(log_returns),
+  y = log_returns
+)
+
+sfile <- here::here("report", "slv_best.stan") # best so far
+sfile <- here::here("report", "slv1.stan") # slow
+sfile <- here::here("report", "slv2.stan") # good 67 secs
+
+# control <- list(adapt_delta=0.99, stepsize = 0.01, max_treedepth = 20)
+# control <- list(adapt_delta= 0.99, stepsize = 0.005, max_treedepth = 20)
+# control <- list(adapt_delta= 0.995, stepsize = 0.005, max_treedepth = 25)
+# control <- list(adapt_delta= 0.995, max_treedepth = 25)
+control <- list(adapt_delta= 0.995)
+
+fit <- stan(
+  file = sfile,
+  data = stan_data,
+  control=control,
+  iter = 2000,
+  chains = 4
+)
+
+print(
+  fit,
+  digits = 3,
+  par    = c('mu', 'phi', 'sigma'),
+  probs  = c(.025, .5, .975)
+)
+
+
+```
+
+![](images/clipboard-3854984031.png)
+
+### AIRG reported results
+
+**This is the key document:**
+
+“Recommended Approach for Setting Regulatory Risk-Based Capital Requirements for Variable Annuities and Similar Products Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittee to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, June 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3_june05.pdf>.
+
+![](images/clipboard-1062302077.png)
+
+“C3 Phase II Risk-Based Capital for Variable Annuities: Pre-Packaged Scenarios:  Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittees’ C-3 Phase 2 Work Group to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, March 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3supp_march05.pdf>.
+
+![](images/clipboard-239653750.png)
+
+### AIRG sample (1955:12 - 2003:12)
+
+![](images/clipboard-3660888329.png)
+
+### AIRG + 20 years (1955:12 - 2023:12)
+
+### ![](images/clipboard-3744221033.png) Full sample (1990:01 - 2024:04)
+
+![](images/clipboard-413491497.png)
