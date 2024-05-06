@@ -1,0 +1,250 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# ACLI scenarios
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+
+```
+
+
+```{r}
+#| label: constants
+#| output: false
+
+# ddir <- r"(E:\data\soa\acli)"
+# 
+# base_dir <- "s_baseline"
+# base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
+
+
+# file names and descriptions ----
+sfnames <- "
+AGGR.csv, Aggressive or specialized equity
+BALANCED.csv, Diversified balanced allocation
+FIXED.csv, Diversified fixed income
+INT.csv, Diversified international equity
+SMALL.csv, Intermediate risk equity
+US.csv, Diversified large cap US equity
+IG_1_5.csv, U.S. Corporate investment grade 1-5 year
+IG_Long.csv, U.S. Corporate investment grade 10-30 year
+HY.csv, U.S. Corporate high yield (Below investment grade)
+"
+
+(fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
+# create named vector
+(fnamesv <- setNames(fnames$fdesc, fnames$fname |> path_ext_remove() |> str_to_lower()))
+# fnamesv["aggr"]
+
+
+# alternative parameter runs ----
+# equity tau -- long-run target volatility
+tau_m.05_dir <- "s_tau_m.05" # default minus .05
+tau_p.05_dir <- "s_tau_p.05" # default plus .05
+tau_p.10_dir <- "s_tau_p.10" # default plus .10
+
+# equity phi -- strength of mean reversion in volatility
+phi_m.05_dir <- "s_phi_m.05" # default minus 0.05
+phi_p.05_dir <- "s_phi_p.05" # default plus 0.05
+
+phi_m.20_dir <- "s_phi_m.20" # default minus 0.20
+phi_p.20_dir <- "s_phi_p.20" # default plus 0.20
+
+# equity sigma(v) -- monthly standard deviation of the log volatility process
+sigmav_m.05_dir <- "s_sigmav_m.05" # default minus .05
+sigmav_p.05_dir <- "s_sigmav_p.05" # default plus .05
+
+# equity rho -- Correlation to random shock to vol and random return component
+rho_m.05_dir <- "s_rho_m.05" # default minus .05
+rho_p.05_dir <- "s_rho_p.05" # default plus .05
+rho_zero_dir <- "s_rho_zero" # rho set to zero
+
+# interest rate paremeterization directories ----
+itau1_m.50_dir <- "s_itau1_m.50" # default minus .50
+itau1_p.50_dir <- "s_itau1_p.50" # default plus .50
+
+# parameterizations and descriptions ----
+scen_names1 <- "
+baseline, Baseline
+tau_m.05, Target volatility (tau): reduced by .05 for each equity fund
+tau_p.05, Target volatility (tau): increased by .05 for each equity fund
+tau_p.10, Target volatility (tau): increased by .10 for each equity fund
+phi_m.05, Speed of mean reversion in volatility (phi): reduced by .05 for each equity fund
+phi_p.05, Speed of mean reversion in volatility (phi): increased by .05 for each equity fund
+phi_m.20, Speed of mean reversion in volatility (phi): reduced by .20 for each equity fund
+phi_p.20, Speed of mean reversion in volatility (phi): increased by .20 for each equity fund
+sigmav_m.05, Monthly sd of the log volatility process (sigma(v)): reduced by .05 for each equity fund
+sigmav_p.05, Monthly sd of the log volatility process (sigma(v)): increased by .05 for each equity fund
+rho_m.05, Correlation of random volatility shock vol and random return component (rho): reduced by .05 for each equity fund
+rho_p.05, Correlation of random volatility shock and random return component (rho): increased by .05 for each equity fund
+itau1_p.50, Mean reversion point for the long rate (tau1): increased by 0.50
+itau1_m.50, Mean reversion point for the long rate (tau1): reduced by 0.50
+"
+(scen_names <- read_csv(scen_names1, col_names = c("scenario", "scendesc")))
+
+# rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
+
+```
+
+
+```{r}
+#| label: functions
+#| output: false
+
+# dirname <- base_dir
+
+# function to read ESG output data files
+
+dirget <- function(dirname, fnames){
+  ddata <- path(ddir, dirname)
+  fndf <- path(ddata, fnames$fname)
+  df1 <- vroom(fndf, 
+               col_types = cols(.default = col_double()),
+               col_names=FALSE, id="fname")
+  
+  df2 <- df1 |> 
+    mutate(scenario=str_remove(dirname, "s_"),
+           fname=path_file(fname)) |> 
+    left_join(fnames, by = join_by(fname)) |> 
+    relocate(scenario) |> 
+    lcnames()
+  
+  df2
+}
+
+```
+
+
+## Get and save ACLI scenarios
+
+```{r}
+#| label: get-data
+#| output: false
+
+# baseline ----
+base <- dirget(base_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+# count(df1, sim) |> ht()
+
+# equity parameters ----
+taum <- dirget(tau_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup <- dirget(tau_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup10 <- dirget(tau_p.10_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim05 <- dirget(phi_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip05 <- dirget(phi_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim20 <- dirget(phi_m.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip20 <- dirget(phi_p.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+sigmavm <- dirget(sigmav_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+sigmavp <- dirget(sigmav_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhom <- dirget(rho_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhop <- dirget(rho_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhoz <- dirget(rho_zero_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+# interest rate parameters ----
+itaum <- dirget(itau1_m.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+itaup <- dirget(itau1_p.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+
+stack <- bind_rows(base, 
+                   # equity fund parameterizations
+                   taum, taup, taup10,
+                   phim05, phip05,
+                   phim20, phip20,
+                   sigmavm, sigmavp,
+                   rhom, rhop, rhoz,
+                   # interest rate parameterizations
+                   itaum, itaup
+                   ) |> 
+  mutate(fnbase=path_ext_remove(fname) |> str_to_lower())
+glimpse(stack)
+summary(stack) # make sure there are no NAs or oddball values (neg assets, for example)
+count(stack, scenario)
+count(stack, fname, fnbase)
+
+# create a  long version of the stacked file, with year starting at 0
+slong <- stack |> 
+  select(-fname) |> 
+  pivot_longer(cols=-c(scenario, fnbase, fdesc, sim)) |> 
+  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
+  select(-name) |> 
+  arrange(scenario, fnbase, sim, year) |> 
+  mutate(return=value / lag(value) - 1, 
+         cagr=value^(1/year) - 1,
+         .by=scenario, fnbase, sim)
+
+glimpse(slong)
+saveRDS(slong, here::here("data", "acli_scenarios.rds"))
+
+slong <- readRDS(here::here("data", "acli_scenarios.rds"))
+
+slong |> 
+  filter(year==30, scenario=="baseline") |> 
+  summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr), .by = c(fnbase, fdesc))
+
+# slong |> 
+#   filter(year==10, scenario=="baseline", fnbase=="aggr") |> 
+#   summarise(uvmeasures(return))
+# 
+# slong |> 
+#   filter(scenario=="baseline", fnbase=="aggr") |> 
+#   summarise(uvmeasures(return), .by=year)
+# 
+# slong |> 
+#   filter(scenario=="baseline", year > 0) |> 
+#   summarise(uvmeasures(return), .by=fnbase)
+# 
+# slong |> 
+#   filter(fnbase=="aggr", year > 0) |> 
+#   summarise(uvmeasures(return), .by=scenario)
+
+measures <- slong |> 
+  filter(year > 0) |> 
+  summarise(uvmeasures(return), .by=c(scenario, fnbase))
+
+cagr <- slong |> 
+  filter(year==30) |> 
+  summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr),
+            .by = c(scenario, fnbase, fdesc))
+
+cagr |> 
+  arrange(desc(cagrmdn)) |> 
+  filter(fnbase=="aggr")
+
+```
+
+

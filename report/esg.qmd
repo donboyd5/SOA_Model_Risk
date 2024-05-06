@@ -7,3 +7,119 @@ editor_options:
 # Economic scenario generators
 
 Placeholder for the code that will generate investment returns.
+
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+
+library(stochvol)
+library(stochvolTMB)
+
+```
+
+
+
+```{r}
+#| label: get-sp500
+
+# get previously downloaded and saved data
+
+spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
+
+spmonthly <- spdaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  select(date=Index, sp500=GSPC.Adjusted) |> 
+  # we can safely assume data are sorted by date
+  mutate(lr=log(sp500 / lag(sp500))) |> # note that we lose lr for the first observation
+  filter(row_number() > 1)
+
+period <- c("1955-12-31", "2003-12-31")
+# period <- c("1955-12-31", "2023-12-31")
+# period <- c("1950-02-28", "2024-03-31")
+
+log_returns <- spmonthly |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(annlr=lr * 12, # annualized
+         mclr=scale(annlr, scale = FALSE) |> c()) |> # mean-centered log return
+  pull(lr)
+
+df <- spmonthly |> 
+  filter(date >= period[1],
+         date <= period[2]) |> 
+  mutate(annlr=lr * 12)
+
+mean(df$lr) * 12
+sd(df$lr) * sqrt(12)
+
+# To annualize the mean, multiply the mean of the monthly log returns by 12 (since there are 12 months in a year
+#  To annualize the standard deviation, multiply the standard deviation of the monthly log returns by the square root of 12. 
+
+```
+
+
+```{r}
+set.seed(123)
+res <- sim_sv(
+  param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+  nobs = 1000L,
+  seed = NULL,
+  model = "gaussian"
+)
+
+f <- function(seed, nobs){
+  sim_sv(
+    param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+    nobs = nobs,
+    seed = seed,
+    model = "gaussian") |> 
+    as_tibble() |> 
+    mutate(time=row_number(), simseed=seed) |> 
+    relocate(simseed, time)
+}
+
+f(1, 10)
+
+nsims <- 10000
+nperiods <- 12*50
+a <- proc.time()
+df <- purrr::map(1:nsims, \(seed) f(seed, nperiods)) |> 
+  list_rbind()
+b <- proc.time()
+b - a  # 20 secs
+
+df
+
+count(df, seed) |> ht()
+
+df |> summarise(y=mean(y))
+
+df |> 
+  summarise(y=mean(y), .by=simseed)
+
+df |> 
+  summarise(y=mean(y), .by=time)
+
+
+
+
+res |> 
+  summarise(y=mean(y), h=mean(h))
+
+res |> as_tibble()
+
+res |> 
+  mutate(time=row_number()) |> 
+  ggplot(aes(time, y)) +
+  geom_line()
+
+
+```
+
+

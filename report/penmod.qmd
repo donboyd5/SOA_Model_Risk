@@ -40,6 +40,75 @@ source(here::here("report", "function_penmod.R"))
 ```
 
 
+## ACLI portfolios
+
+```{r}
+
+acliport <- readRDS(here::here("data", "acli_portfolios.rds"))
+
+```
+
+
+```{r}
+
+make_irmat <- function(sim, year, return){
+  nrows <- length(unique(sim))
+  ncols <- length(unique(year))
+  
+  mat <- matrix(data = return, nrow=nrows, ncol = ncols, byrow = TRUE)
+  mat
+  list(mat)
+}
+
+make_irmat(test$sim, test$year, test$wtdreturn)
+
+test <- acliport |>
+  filter(scenario=="baseline", porttype=="highequity", sim %in% 1:10, year %in% 0:5)
+
+
+prep <- acliport |>
+  filter(year != 0) |> 
+  summarise(irmat=make_irmat(sim, year, wtdreturn), .by=c(scenario, porttype))
+
+
+
+prep |> 
+  unnest(cols = irmat)
+
+# unlist(prep$irmat)
+# prep$irmat[[1]]
+# 
+# penmod2(ir=prep$irmat[[1]])
+
+
+result <- prep  |> 
+  # next stament "loops" (via map) through the 3 rows (the 3 scenarios), and for each row it
+  # calls penmod using nsims, nyears, and the investment return matrix for the scenario in the row
+  mutate(penmod = 
+           purrr::map(seq_along(irmat),
+                      ~penmod2(
+                        ir = irmat[[.x]])))
+result
+
+saveRDS(result, here::here("data", "acli_penmod.rds"))
+
+```
+
+
+```{r}
+
+apm <- readRDS(here::here("data", "acli_penmod.rds"))
+
+apm |> 
+  select(-irmat) |> 
+  unnest(penmod)
+
+
+```
+
+
+
+
 ## Model test
 
 Create a small simulation (30 years, 5 simulations) with the same assumptions as Gang used, and with fixed investment returns. Verify that the results are the same as Gang's pension model. Since investment returns are constant, all simulations are the same. We look at funded ratio from one sim, which we compare to funded_ratio from Gang's alm.R program. They are the same.

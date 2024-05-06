@@ -29,19 +29,40 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 ```{r}
 #| label: get-penmod-results
 
-result <- readRDS(here::here("data", "penmod_results.rds"))
+# result <- readRDS(here::here("data", "penmod_results.rds"))
+result <- readRDS(here::here("data", "acli_penmod.rds"))
 
 result
 
 result |> 
-  filter(scenario=="scen2") |> 
+  select(-irmat) |> 
+  unnest(penmod)
+
+result |> 
+  select(-irmat) |> 
+  filter(scenario=="phi_m.05") |> 
   unnest(col=penmod) |> 
   ht()
+
+result |> 
+  select(-irmat) |> 
+  filter(scenario %in% c("baseline", "phi_m.05")) |> 
+  unnest(col=penmod) |> 
+  filter(year==30) |> 
+  summarise(frmdn=median(fr), .by=c(scenario, porttype)) |> 
+  arrange(porttype)
+
+
 
 ```
 
 
 ## Construct risk measures from pension model results
+
+
+
+
+## OLD: Construct risk measures from pension model results
 
 For now, we just calculate the 10th, 50th, and 90th percentiles of the final-year funded ratio for each scenario. We also compute the arithmetic mean and standard deviation of the 10,000 investment returns in the final year.
 

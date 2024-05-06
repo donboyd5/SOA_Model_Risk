@@ -9,7 +9,7 @@ execute:
   eval: true
   echo: true
   output: true
-  freeze: false  # auto: during global project renders, re-render only when source changes
+  freeze: auto  # auto: during global project renders, re-render only when source changes
 
 editor_options:
   chunk_output_type: console
@@ -29,6 +29,11 @@ book:
       chapters:
       - esg.qmd
       # - slv.qmd to come
+      - acli_scenarios.qmd
+    - part: "Portfolios"
+      chapters: 
+        - portfolios.qmd
+        - head_to_head.qmd
     - part: "Pension model"
       chapters:
       - penmod.qmd

@@ -25,6 +25,11 @@ default_params <- within(list(),{
   ufl0 = liability0 - assets0
 })
 
+flatmat <- function(matrix){
+  # flatten a matrix with all elements in one row followed by all in next
+  c(t(matrix))
+}
+
 
 penmod <- function(
     irates=.07,
@@ -79,9 +84,59 @@ penmod <- function(
       benefits[y]
   }
   
-  flatmat <- function(matrix){
-    # flatten a matrix with all elements in one row followed by all in next
-    c(t(matrix))
+  # create a tibble
+  df <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+    mutate(assets=flatmat(assets),
+           liability=flatmat(liability),
+           benefits=rep(benefits, nsims),
+           payroll=rep(payroll, nsims),
+           nc=rep(nc, nsims),
+           contrib=flatmat(contrib),
+           ii=flatmat(ii),
+           ir=flatmat(ir),
+           fr=assets / liability)
+  df
+}
+
+
+penmod2 <- function(
+    ir,
+    params=default_params){
+  
+  # define objects that vary by year and sim (and thus are matrices)
+  nsims <- nrow(ir)
+  nyears <- ncol(ir)
+  
+  mat <- matrix(nrow=nsims, ncol=nyears)
+  assets <- liability <- ufl <- amort <- ii <- contrib <- mat
+  
+  # objects that vary only by year (and thus are vectors)
+  payroll <-  params$payroll0 * (1 + params$salary_growth)^(0:(nyears - 1))
+  nc <- payroll * params$ncrate
+  benefits <- payroll * params$benpayrate
+  
+  # initialize
+  assets[, 1] <- params$assets0
+  liability[, 1] <- params$liability0
+  ufl[, 1] <- params$liability0 - params$assets0
+  amort[, 1] <- params$ufl0 / params$growth_annuity
+  contrib[, 1] <- nc[1] + amort[, 1]
+  ii[, 1] <- assets[, 1] * ir[, 1]
+  
+  for(y in 2:nyears){
+    # for each year, calc values for all sims at once
+    liability[, y] <- liability[, y-1] * (1 + params$discount_rate) +
+      nc[y] - benefits[y]
+    
+    # note that amortization can be positive or negative
+    amort[, y] <- (liability[, y-1] - assets[, y-1]) / params$growth_annuity
+    contrib[, y] <- nc[y] + amort[, y]
+    ii[, y] <- assets[, y-1] * ir[, y]
+    
+    assets[, y] <- assets[, y - 1] + 
+      contrib[, y] + 
+      ii[, y] -
+      benefits[y]
   }
   
   # create a tibble
