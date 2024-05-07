@@ -6,4 +6,10 @@ editor_options:
 
 # Introduction
 
+Gang, this document is just for you and me. It will produce some tables and graphs that we can copy into the report for SOA. (I will try to save them as .png files, also, or other appropriate saved files.)
+
+The current version of this repo focuses on producing results that will go into the report, and all of the relevant code is under the /report subfolder in the main project folder.
+
+To create this webpage you will need to be able to access the ACLI output files (from running the ACLI spreadsheet model).
+
 
