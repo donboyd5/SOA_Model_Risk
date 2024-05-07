@@ -6,6 +6,12 @@ editor_options:
 
 # Portfolios
 
+After ACLI results are saved as a long file with results by scenario and asset class, we need to create portfolios from the asset classes.
+
+We create two portfolios, based on Gang's investigation: a "high equity" portfolio reasonable consistent with public pension plans in the United States, and a "high fixed" portfolio reasonably consistent with private pension plans in the United States.
+
+## Setup
+
 ```{r}
 #| label: setup
 #| output: false
@@ -14,9 +20,9 @@ source(here::here("report", "_common.R"))
 
 ```
 
-## Construct portfolios from ACLI results
+## Define portfolios to be created from ACLI asset-class results
 
-Get Gang's weights
+Here are the two portfolios Gang suggested:
 
 +----------------------------------------------------------------------------------+---------------------------------------------------------------+------------------------------------------------------------------+------------------------------------------------------------------+
 |                                                                                  | \                                                             | Portfolio 1 (mimicking private DB pension in 2021); 29.6% equity | Portfolio 2 (mimicking public DB pension in 2021); 48.71% equity |
@@ -49,8 +55,13 @@ Get Gang's weights
 
 ![](images/clipboard-528079377.png)
 
+## Create weights for the highfixed and highequity portfolios
+
+Get the weights and ensure they sum to 1.
+
 ```{r}
 #| label: weights
+#| output: false
 
 weights1 <- read_delim(
 "fnbase;label;highfixed;highequity
@@ -72,40 +83,61 @@ weights <- weights1 |>
   pivot_longer(-c(fnbase, label), names_to = "porttype", values_to = "weight") |> 
   mutate(weight=weight / sum(weight), .by=porttype)
 
+# ensure that weights sum to 1 for each portfolio
 weights |> 
   summarise(weight=sum(weight), .by=porttype)
 
 
 ```
 
+## Construct portfolios
+
+Get the previously created ACLI scenarios long dataframe and construct the two portfolios for each scenario.
+
 ```{r}
+#| label: construct-portfolios
+#| output: false
+
 
 slong <- readRDS(here::here("data", "acli_scenarios.rds"))
 
+# wtdslong has twice as many records as slong -- each asset class has the relevant highfixed or highequity weight
 wtdslong <- slong |> 
   left_join(weights, by = join_by(fnbase),
             relationship = "many-to-many")
 
-portfolios <- wtdslong |> 
-  mutate(portvalue=value * weight) |> 
-  summarise(value=sum(value), .by=c(scenario, sim, year, porttype))
-  
-portfolios <- wtdslong |> 
-  mutate(retshare=return * weight) |> 
-  summarise(wtdreturn=sum(retshare), .by=c(scenario, sim, year, porttype))
+# collapse by scenario, sim, year, and portfolio type
 
-portfolios2 <- portfolios |> 
-  mutate(wtdreturn=ifelse(year==0, 0, wtdreturn)) |> 
+portfolios <- wtdslong |> 
+  mutate(return_share=logreturn * weight) |> 
+  summarise(logreturn=sum(return_share), .by=c(scenario, sim, year, porttype)) |> 
+  mutate(logreturn=ifelse(year==0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
   arrange(scenario, porttype, sim, year) |> 
-  mutate(value=cumprod(1 + wtdreturn), .by=c(scenario, sim, porttype))
+  # calc assets two ways - they are equivalent so we don't do the arithmetic approach
+  # mutate(areturn=exp(logreturn) - 1,
+  #        aasset=cumprod(1 + areturn), .by=c(scenario, sim, porttype)) |> # arithmetic asset
+  mutate(asset=exp(cumsum(logreturn)),
+         .by=c(scenario, sim, porttype)) |> 
+  select(scenario, porttype, sim, year, logreturn, asset)
 
-y30 <- portfolios2 |> 
-  filter(year==30) |> 
-  summarise(value=median(value), .by=c(scenario, porttype))
-  
-y30 |> arrange(desc(value))
-
-saveRDS(portfolios2, here::here("data", "acli_portfolios.rds"))
-
+saveRDS(portfolios, here::here("data", "acli_portfolios.rds"))
 
 ```
+
+
+## Explore portfolios (if wanted)
+
+```{r}
+#| label: explore
+#| output: false
+
+# take a quick look at the result
+y30 <- portfolios |> 
+  filter(year==30) |> 
+  summarise(asset=median(asset), .by=c(scenario, porttype))
+  
+y30 |> arrange(desc(asset))
+
+```
+
+
