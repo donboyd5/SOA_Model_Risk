@@ -1,0 +1,160 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Prepare for apples-to-apples comparisons
+
+For every ACLI scenario and portfolio, create a corresponding random-normal scenario with the same mean and standard deviation over the ACLI-simulated number of years and simulations.
+
+This will allow head-to-head comparison for each scenario-portfolio combination.
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(fs::path(rptdir, "function_penmod.R")) # for flatmat
+
+```
+
+
+```{r}
+#| label: get-acli-portfolios
+#| output: false
+
+acli <- readRDS(here::here("data", "acli_portfolios.rds"))
+glimpse(acli)
+count(acli, scenario)
+count(acli, porttype)
+
+```
+
+
+## Prepare one or more random normal comparisons
+
+Get portfolio statistics so that we can construct random normals corresponding to each scenario-portfolio combination.
+
+```{r}
+#| label: get-stats
+#| output: false
+
+# we need portfolio stats (mean, sd) so we can construct random normals corresponding to each
+# scenario-portfolio combination
+port_stats <- acli |> 
+  filter(year > 0) |> 
+  summarise(nsims=length(unique(sim)),
+            nyears=length(unique(year)),
+            mean_logreturn=mean(logreturn), 
+            sd_logreturn=sd(logreturn),
+            min_logreturn=min(logreturn),
+            max_logreturn=max(logreturn),
+            .by=c(scenario, porttype))
+port_stats
+
+```
+
+
+## Graph of means and standard deviations of scenarios and portfolios
+
+Gang, we might want to do a graph like this (with fewer scenarios and better labeling). It's a nice summary of the range of results.
+
+```{r}
+#| label: scenario-portfolio-plot
+#| output: true
+
+port_stats |> 
+  ggplot(aes(mean_logreturn, sd_logreturn, colour=porttype, label=scenario)) +
+  geom_point() +
+  geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) +
+  scale_color_manual(values=c("red", "blue")) +
+  scale_x_continuous(name="mean", 
+                     breaks = seq(0, 1, .0025),
+                     labels = scales::percent_format(accuracy = .01)) +
+  scale_y_continuous(name="standard deviation", 
+                     breaks = seq(0, 1, .01),
+                     labels = scales::percent_format(accuracy = .1)) +
+  ggtitle(label = "Mean and standard deviation for ACLI scenarios",
+          subtitle = "ACLI scenarios and portfolios") +
+  guides(col= guide_legend(title= "Portfolio\ntype")) +
+  theme_bw()
+
+
+```
+
+
+## Construct the corresponding random normal log returns
+
+
+```{r}
+
+# generate similar random normal ----
+
+get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
+  # ensure that we hit the desired mean and sd exactly
+  set.seed(seed)
+  irnorm <- rnorm(n = nsims * nyears)
+  # standardize to hit the targets
+  irnorm <- (irnorm - mean(irnorm)) / sd(irnorm) # standardize to exactly mean 0, sd 1
+  irnorm <- irnorm * sdreturn + meanreturn # adjust to target mean, target sd
+  irnorm <- irnorm |> matrix(nrow = nsims, ncol = nyears) # convert to matrix
+  res <- list(ir_norm=irnorm, mean_norm=mean(irnorm), sd_norm=sd(irnorm))
+  return(res)
+}
+
+
+rnorm_prep <- port_stats |> 
+  rowwise() |> 
+  mutate(rnormal=get_normal(mean_logreturn, sd_logreturn, nsims, nyears) |> list()) |> 
+  mutate(mean_rnorm=pluck(rnormal, "mean_norm"),
+         sd_rnorm=pluck(rnormal, "sd_norm"),
+         irmat=pluck(rnormal, "ir_norm") |> list(),
+         version="rnormal") |> 
+  ungroup() |> 
+  select(-rnormal, -min_logreturn, -max_logreturn)
+rnorm_prep
+
+rnorm_prep |> 
+  ggplot(aes(mean_logreturn, mean_rnorm)) +
+  geom_point() +
+  geom_abline(slope=1)
+
+rnorm_prep |> 
+  ggplot(aes(sd_logreturn, sd_rnorm)) +
+  geom_point() +
+  geom_abline(slope=1)
+
+# prepare modeled data ----
+
+make_irmat <- function(sim, year, return){
+  # make an investment return matrix from a 
+  nrows <- length(unique(sim))
+  ncols <- length(unique(year))
+  
+  mat <- matrix(data = return, nrow=nrows, ncol = ncols, byrow = TRUE)
+  mat
+  list(mat)
+}
+
+port_prep <- acli |>
+  filter(year != 0) |> 
+  summarise(irmat=make_irmat(sim, year, logreturn), .by=c(scenario, porttype)) |> 
+  right_join(rnorm_prep |> 
+               select(scenario, porttype, nsims, nyears, mean_logreturn, sd_logreturn, mean_rnorm, sd_rnorm),
+             by = join_by(scenario, porttype)) |> 
+  mutate(version="model")
+
+# stack modeled data and random normal data ---
+stack <- bind_rows(rnorm_prep, port_prep) |> 
+  relocate(version, .after = porttype) |> 
+  arrange(scenario, porttype, version)
+
+ht(stack)
+
+saveRDS(stack, here::here("data", "acli_rnorm_portfolios.rds"))
+
+```
+
