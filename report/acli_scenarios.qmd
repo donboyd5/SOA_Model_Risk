@@ -258,18 +258,18 @@ slong |>
 #   filter(fnbase=="aggr", year > 0) |> 
 #   summarise(uvmeasures(return), .by=scenario)
 
-measures <- slong |> 
-  filter(year > 0) |> 
-  summarise(uvmeasures(return), .by=c(scenario, fnbase))
-
-cagr <- slong |> 
-  filter(year==30) |> 
-  summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr),
-            .by = c(scenario, fnbase, fdesc))
-
-cagr |> 
-  arrange(desc(cagrmdn)) |> 
-  filter(fnbase=="aggr")
+# measures <- slong |> 
+#   filter(year > 0) |> 
+#   summarise(uvmeasures(return), .by=c(scenario, fnbase))
+# 
+# cagr <- slong |> 
+#   filter(year==30) |> 
+#   summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr),
+#             .by = c(scenario, fnbase, fdesc))
+# 
+# cagr |> 
+#   arrange(desc(cagrmdn)) |> 
+#   filter(fnbase=="aggr")
 
 
 ```
