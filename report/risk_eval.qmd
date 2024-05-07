@@ -44,15 +44,35 @@ result |>
   unnest(col=penmod) |> 
   ht()
 
+```
+
+
+Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years.
+
+Notes:
+
+-   Modeled median funded ratio is always slightly higher than the random normal counterpart, even though mean log return and sd of log return is virtually identical for both
+
+```{r}
+#| label: explore
+
 result |> 
   select(-irmat) |> 
-  filter(scenario %in% c("baseline", "phi_m.05")) |> 
+  # filter(scenario %in% c("baseline", "phi_m.05")) |> 
   unnest(col=penmod) |> 
   filter(year==30) |> 
-  summarise(frmdn=median(fr), .by=c(scenario, porttype)) |> 
-  arrange(porttype)
+  summarise(
+    meanlogreturn=first(meanlogreturn),
+    mean_norm=first(mean_norm),
+    frmdn=median(fr), .by=c(scenario, porttype, version)) |> 
+  pivot_wider(names_from = version, values_from = frmdn) |> 
+  relocate(rnormal, .before=model) |> 
+  mutate(diff_vsrnorm=model - rnormal)
+
 
 ```
+
+
 
 
 ## Construct risk measures from pension model results

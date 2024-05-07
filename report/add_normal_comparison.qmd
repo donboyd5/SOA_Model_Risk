@@ -93,10 +93,22 @@ port_stats |>
 
 # generate similar random normal ----
 
-get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=123){
+# get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=123){
+#   set.seed(seed)
+#   irnorm <- rnorm(n = nsims * nyears, mean=meanreturn, sd=sdreturn)
+#   irnorm <- irnorm |> matrix(nrow = nsims, ncol = nyears)
+#   res <- list(ir_norm=irnorm, mean_norm=mean(irnorm), sd_norm=sd(irnorm))
+#   return(res)
+# }
+
+get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
+  # ensure that we hit the desired mean and sd exactly
   set.seed(seed)
-  irnorm <- rnorm(n = nsims * nyears, mean=meanreturn, sd=sdreturn)
-  irnorm <- irnorm |> matrix(nrow = nsims, ncol = nyears)
+  irnorm <- rnorm(n = nsims * nyears)
+  # standardize to hit the targets
+  irnorm <- (irnorm - mean(irnorm)) / sd(irnorm) # standardize to exactly mean 0, sd 1
+  irnorm <- irnorm * sdreturn + meanreturn # adjust to target mean, target sd
+  irnorm <- irnorm |> matrix(nrow = nsims, ncol = nyears) # convert to matrix
   res <- list(ir_norm=irnorm, mean_norm=mean(irnorm), sd_norm=sd(irnorm))
   return(res)
 }
@@ -112,6 +124,16 @@ rnorm_prep <- port_stats |>
   ungroup() |> 
   select(-rnormal, -minlogreturn, -maxlogreturn)
 rnorm_prep
+
+rnorm_prep |> 
+  ggplot(aes(meanlogreturn, mean_norm)) +
+  geom_point() +
+  geom_abline(slope=1)
+
+rnorm_prep |> 
+  ggplot(aes(sdlogreturn, sd_norm)) +
+  geom_point() +
+  geom_abline(slope=1)
 
 # prepare modeled data ----
 
