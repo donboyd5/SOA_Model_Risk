@@ -6,6 +6,27 @@ editor_options:
 
 # ACLI scenarios
 
+**Gang, see the main page (index.html) for information on how to get the data needed for this segment.**
+
+This .qmd file gets and saves results of ACLI scenarios that were created using the ACLI Excel spreadsheet model:
+
+-   There are about 15 scenarios, each involving changes in model parameters.
+-   Each scenario has results for 9 asset classes.
+-   Each asset class has 1,000 simulations for 31 years (year 0 plus 30 future years)
+
+The code reads all files for each scenario, stacks them into one long dataframe called `slong`. Each record contains results for one sim for one year, with the following columns:
+
+-   `scenario`: short name for the scenario
+-   `fnbase`: short name for the asset class
+-   `fdesc`: description of the asset class
+-   `sim`: simulation number (1 to 1000)
+-   `year`: 0 to 30
+-   `asset`: asset value at the end of year (asset is 1 in year 0)
+-   `logreturn`: log return for given year
+-   `cagr`: compound annual growth rate at end of year
+
+This long dataframe is saved as `acli_scenarios.rds` in the data folder of the project. It's too big to include in the repo so you'll have to create the file by running the code below.
+
 ## Setup
 
 ```{r}
@@ -16,16 +37,9 @@ source(here::here("report", "_common.R"))
 
 ```
 
-
 ```{r}
 #| label: constants
 #| output: false
-
-# ddir <- r"(E:\data\soa\acli)"
-# 
-# base_dir <- "s_baseline"
-# base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
-
 
 # file names and descriptions ----
 sfnames <- "
@@ -41,7 +55,7 @@ HY.csv, U.S. Corporate high yield (Below investment grade)
 "
 
 (fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
-# create named vector
+# create a named vector
 (fnamesv <- setNames(fnames$fdesc, fnames$fname |> path_ext_remove() |> str_to_lower()))
 # fnamesv["aggr"]
 
@@ -95,16 +109,15 @@ itau1_m.50, Mean reversion point for the long rate (tau1): reduced by 0.50
 
 ```
 
-
 ```{r}
 #| label: functions
 #| output: false
 
-# dirname <- base_dir
-
-# function to read ESG output data files
 
 dirget <- function(dirname, fnames){
+  
+  # function to read ACLI output data files
+  
   ddata <- path(ddir, dirname)
   fndf <- path(ddata, fnames$fname)
   df1 <- vroom(fndf, 
@@ -123,8 +136,9 @@ dirget <- function(dirname, fnames){
 
 ```
 
-
 ## Get and save ACLI scenarios
+
+Gang, running this
 
 ```{r}
 #| label: get-data
@@ -199,16 +213,28 @@ count(stack, fname, fnbase)
 # create a  long version of the stacked file, with year starting at 0
 slong <- stack |> 
   select(-fname) |> 
-  pivot_longer(cols=-c(scenario, fnbase, fdesc, sim)) |> 
+  pivot_longer(cols=-c(scenario, fnbase, fdesc, sim),
+               values_to = "asset") |> 
   mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
   select(-name) |> 
   arrange(scenario, fnbase, sim, year) |> 
-  mutate(return=value / lag(value) - 1, 
-         cagr=value^(1/year) - 1,
-         .by=scenario, fnbase, sim)
+  mutate(logreturn=log(asset / lag(asset)), # log return, not arithmetic return
+         cagr=asset^(1/year) - 1, # compound average growth rate
+         .by=scenario, fnbase, sim) |> 
+  select(scenario, fnbase, fdesc, sim, year, asset, logreturn, cagr)
 
 glimpse(slong)
 saveRDS(slong, here::here("data", "acli_scenarios.rds"))
+
+
+```
+
+## Explore the results (if you want)
+
+```{r}
+#| label: explore
+#| output: false
+
 
 slong <- readRDS(here::here("data", "acli_scenarios.rds"))
 
@@ -245,6 +271,5 @@ cagr |>
   arrange(desc(cagrmdn)) |> 
   filter(fnbase=="aggr")
 
+
 ```
-
-
