@@ -24,7 +24,7 @@ book:
     - index.qmd
     - part: "Probability distributions"
       chapters:
-      - probability.qmd
+      - probability.qmd # this is just exploratory - I'll add substance later
     - part: "Model-based investment returns"
       chapters:
       # - esg.qmd # not ready yet
@@ -33,7 +33,7 @@ book:
     - part: "Portfolios"
       chapters: 
         - portfolios.qmd
-        - head_to_head.qmd
+        - add_normal_comparison.qmd
     - part: "Pension model"
       chapters:
       - penmod.qmd

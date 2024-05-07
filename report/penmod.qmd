@@ -40,11 +40,14 @@ source(here::here("report", "function_penmod.R"))
 ```
 
 
-## ACLI portfolios
+## ACLI portfolios and corresponding random normal
 
 ```{r}
 
-acliport <- readRDS(here::here("data", "acli_portfolios.rds"))
+# acliport <- readRDS(here::here("data", "acli_portfolios.rds"))
+
+portfolios <- readRDS(stack, here::here("data", "acli_rnorm_portfolios.rds"))
+
 
 ```
 
@@ -60,15 +63,15 @@ make_irmat <- function(sim, year, return){
   list(mat)
 }
 
-make_irmat(test$sim, test$year, test$wtdreturn)
-
-test <- acliport |>
-  filter(scenario=="baseline", porttype=="highequity", sim %in% 1:10, year %in% 0:5)
+# make_irmat(test$sim, test$year, test$wtdreturn)
+# 
+# test <- acliport |>
+#   filter(scenario=="baseline", porttype=="highequity", sim %in% 1:10, year %in% 0:5)
 
 
 prep <- acliport |>
   filter(year != 0) |> 
-  summarise(irmat=make_irmat(sim, year, wtdreturn), .by=c(scenario, porttype))
+  summarise(irmat=make_irmat(sim, year, logreturn), .by=c(scenario, porttype))
 
 
 
