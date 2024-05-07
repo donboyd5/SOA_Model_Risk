@@ -30,7 +30,7 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 #| label: get-penmod-results
 
 # result <- readRDS(here::here("data", "penmod_results.rds"))
-result <- readRDS(here::here("data", "acli_penmod.rds"))
+result <- readRDS(here::here("data", "acli_normal_penmod.rds"))
 
 result
 
@@ -51,8 +51,6 @@ result |>
   filter(year==30) |> 
   summarise(frmdn=median(fr), .by=c(scenario, porttype)) |> 
   arrange(porttype)
-
-
 
 ```
 
