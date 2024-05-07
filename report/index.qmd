@@ -12,9 +12,29 @@ It will produce some tables and graphs that we can copy into the report for SOA.
 
 The current version of this repo focuses on producing results that will go into the report, and all of the relevant code is under the /report subfolder in the main project folder.
 
-To create this webpage you will need to be able to access the ACLI output files from running the ACLI spreadsheet model. There are in a Google drive folder I have shared with you called "acli". It is about 2.75 gb so you will want to download it to your computer.
+To create this webpage you will need to be able to access the ACLI output files from running the ACLI spreadsheet model. There are in a [Google drive folder I have shared with you called "acli"](https://drive.google.com/drive/folders/17BN0wx2DUSyHKpqjAMdl0NqpSjyZqEAc?usp=drive_link). It is about 2.75 gb so you will want to download it to your computer.
 
 To make sure the program finds the folder on your computer you will have to change one line in the /report/constants.R file:
 
--   from: ddir \<- r"(E:\data\soa\acli)"
--   to: ddir \<- locaction-on-your-computer
+-   from: `ddir <- r"(E:\data\soa\acli)"`
+-   to: `ddir <- location-on-your-computer`
+
+See screenshot below:
+
+![](images/clipboard-3209699277.png)
+
+After you do that, you should be able to run everything to create necessary data by doing the following:
+
+-   Get the latest version of the [repo from Github](https://github.com/donboyd5/SOA_Model_Risk).
+
+-   Open it as a project in RStudio
+
+-   Open a terminal in RStudio (Tools menu, new terminal)
+
+-   cd /report to get to the report quarto project directory
+
+-   quarto render to run the whole thing
+
+-   look at files in the /report/\_report2024
+
+-   double-click index.html to open the main page on your computer
