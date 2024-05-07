@@ -48,10 +48,10 @@ port_stats <- acli |>
   filter(year > 0) |> 
   summarise(nsims=length(unique(sim)),
             nyears=length(unique(year)),
-            meanlogreturn=mean(logreturn), 
-            sdlogreturn=sd(logreturn),
-            minlogreturn=min(logreturn),
-            maxlogreturn=max(logreturn),
+            mean_logreturn=mean(logreturn), 
+            sd_logreturn=sd(logreturn),
+            min_logreturn=min(logreturn),
+            max_logreturn=max(logreturn),
             .by=c(scenario, porttype))
 port_stats
 
@@ -67,7 +67,7 @@ Gang, we might want to do a graph like this (with fewer scenarios and better lab
 #| output: true
 
 port_stats |> 
-  ggplot(aes(meanlogreturn, sdlogreturn, colour=porttype, label=scenario)) +
+  ggplot(aes(mean_logreturn, sd_logreturn, colour=porttype, label=scenario)) +
   geom_point() +
   geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) +
   scale_color_manual(values=c("red", "blue")) +
@@ -93,14 +93,6 @@ port_stats |>
 
 # generate similar random normal ----
 
-# get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=123){
-#   set.seed(seed)
-#   irnorm <- rnorm(n = nsims * nyears, mean=meanreturn, sd=sdreturn)
-#   irnorm <- irnorm |> matrix(nrow = nsims, ncol = nyears)
-#   res <- list(ir_norm=irnorm, mean_norm=mean(irnorm), sd_norm=sd(irnorm))
-#   return(res)
-# }
-
 get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
   # ensure that we hit the desired mean and sd exactly
   set.seed(seed)
@@ -116,22 +108,22 @@ get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
 
 rnorm_prep <- port_stats |> 
   rowwise() |> 
-  mutate(rnormal=get_normal(meanlogreturn, sdlogreturn, nsims, nyears) |> list()) |> 
-  mutate(mean_norm=pluck(rnormal, "mean_norm"),
-         sd_norm=pluck(rnormal, "sd_norm"),
+  mutate(rnormal=get_normal(mean_logreturn, sd_logreturn, nsims, nyears) |> list()) |> 
+  mutate(mean_rnorm=pluck(rnormal, "mean_norm"),
+         sd_rnorm=pluck(rnormal, "sd_norm"),
          irmat=pluck(rnormal, "ir_norm") |> list(),
          version="rnormal") |> 
   ungroup() |> 
-  select(-rnormal, -minlogreturn, -maxlogreturn)
+  select(-rnormal, -min_logreturn, -max_logreturn)
 rnorm_prep
 
 rnorm_prep |> 
-  ggplot(aes(meanlogreturn, mean_norm)) +
+  ggplot(aes(mean_logreturn, mean_rnorm)) +
   geom_point() +
   geom_abline(slope=1)
 
 rnorm_prep |> 
-  ggplot(aes(sdlogreturn, sd_norm)) +
+  ggplot(aes(sd_logreturn, sd_rnorm)) +
   geom_point() +
   geom_abline(slope=1)
 
@@ -151,7 +143,7 @@ port_prep <- acli |>
   filter(year != 0) |> 
   summarise(irmat=make_irmat(sim, year, logreturn), .by=c(scenario, porttype)) |> 
   right_join(rnorm_prep |> 
-               select(scenario, porttype, nsims, nyears, meanlogreturn, sdlogreturn, mean_norm, sd_norm),
+               select(scenario, porttype, nsims, nyears, mean_logreturn, sd_logreturn, mean_rnorm, sd_rnorm),
              by = join_by(scenario, porttype)) |> 
   mutate(version="model")
 
@@ -166,92 +158,3 @@ saveRDS(stack, here::here("data", "acli_rnorm_portfolios.rds"))
 
 ```
 
-
-## OLD -- Prepare one or more random normal comparisons
-
-
-```{r}
-#| label: prepare-acli-data
-#| output: false
-
-comp <- left_join(portfolio, rnportfolio,
-                  by = join_by(sim, year)) |> 
-  mutate(rnreturn=ifelse(year==0, 0, rnreturn),
-         rnportfolio=ifelse(year==0, 1, rnportfolio))
-
-ystats <- comp |> 
-  filter(year > 0) |> 
-  summarise(mean_acli=mean(portreturn), sd_acli=sd(portreturn),
-            mean_rn=mean(rnreturn), sd_rn=sd(rnreturn), .by=year) |> 
-  pivot_longer(-year) |> 
-  separate(name, c("stat", "type"))
-
-
-```
-
-## Comparison of ACLI baseline to random normal with same mean and SD
-
-### Observations
-
--   Grand mean and sd about the same
--   ACLI appears to have some modest autocorrelation in returns that random normal does not
--   ACLI portfolio appears to have slightly thinner tails than normal (can quantify this)
--   We need to decide on 2? portfolios to examine, and then run them through penmod.
--   However, these results suggest (to me) that we're unlikely to see large differences in risk measures vs. random normal. But will be good to examine more thoughtful portfolios and use actual risk measures.
-
-### Grand mean and standard deviations - ACLI and random normal
-
-```{r}
-
-comp |> 
-  filter(year > 0) |> 
-  summarise(mean_acli=mean(portreturn), sd_acli=sd(portreturn),
-            mean_rn=mean(rnreturn), sd_rn=sd(rnreturn))
-
-
-```
-
-### Mean and standard deviation by year
-
-```{r}
-
-ystats |> 
-  filter(stat=="mean") |> 
-  ggplot(aes(year, value, colour=type)) +
-  geom_point() +
-  geom_line() +
-  geom_hline(yintercept = grand$mean) +
-  ggtitle("Arithmetic mean return by year")
-
-ystats |> 
-  filter(stat=="sd") |> 
-  ggplot(aes(year, value, colour=type)) +
-  geom_point() +
-  geom_line() +
-  geom_hline(yintercept = grand$sd) +
-  ggtitle("Standard deviation by year")
-
-```
-
-### Accumulation at year 30
-
-```{r}
-
-
-p <-  c(0, .05, .1, 0.25, 0.5, 0.75, .9, .95, 1)
-
-y30 <- comp |> 
-  filter(year==30) |>
-  select(sim, year, portfolio, rnportfolio) |> 
-  pivot_longer(c(portfolio, rnportfolio)) |> 
-  group_by(name) |> 
-  summarise(
-    quantiles = list(quantile(value, probs = p))
-    ) |> 
-  unnest_wider(quantiles) |> 
-  ungroup() |> 
-  rename_with(~paste0("q", p * 100),
-              .cols=-name)
-y30
-
-```
