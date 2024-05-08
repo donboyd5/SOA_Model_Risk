@@ -65,10 +65,31 @@ result |>
   filter(year==30) |> 
   summarise(
     mean_logreturn=first(mean_logreturn),
+    sd_logreturn=first(sd_logreturn),
     frmdn=median(fr), .by=c(scenario, porttype, version)) |> 
   pivot_wider(names_from = version, values_from = frmdn) |> 
   relocate(rnormal, .before=model) |> 
-  mutate(diff_vsrnorm=model - rnormal)
+  mutate(diff_vsrnorm=model - rnormal) |> 
+  arrange(desc(diff_vsrnorm)) |> 
+  gt() |> 
+  tab_header(
+    title = html("Median funded ratio at 30 years for different scenarios and portfolio types"),
+    subtitle = html("Modeled portfolio and random normal counter part (same mean, sd)")
+  ) |>
+  tab_spanner(columns = contains("_logreturn"),
+              label="Portfolio log returns") |>
+  tab_spanner(columns = c(rnormal, model, diff_vsrnorm),
+              label="Median funded ratio at 30 years") |>
+  cols_label(mean_logreturn="mean",
+             sd_logreturn="sd",
+             rnormal=html("Random normal"),
+             model = html("Model"),
+             diff_vsrnorm = html("Model<br>minus<br>normal")) |>
+  fmt_percent(columns=-c(scenario, porttype),
+             scale=1,
+             decimals=1)
+
+  
 
 ```
 

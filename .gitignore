@@ -3,12 +3,11 @@
 .RData
 .Ruserdata
 
+# ignore selected folders
 _*/
-# _freeze/
-# _report/
-# _report2024/
-# images/
+images/
 
+# ignore selected file types
 *.csv
 *.doc*
 *.htm*
