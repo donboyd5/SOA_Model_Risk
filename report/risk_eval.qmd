@@ -19,6 +19,8 @@ Summarize the results for each scenario (each row of the result tibble) by unnes
 
 source(here::here("report", "_common.R"))
 
+scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+
 ```
 
 
@@ -47,18 +49,17 @@ result |>
 
 ```
 
+## Exploratory analysis
 
 Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years.
 
-Notes:
+### Comparison of modeled investment returns to random normal returns
 
--   Modeled median funded ratio is always slightly higher than the random normal counterpart, even though mean log return and sd of log return is virtually identical for both
 
 ```{r}
-#| label: explore
-#| output: true
+#| label: explore-data
 
-result |> 
+tabdata <- result |> 
   select(-c(irmat, mean_rnorm, sd_rnorm)) |> 
   # filter(scenario %in% c("baseline", "phi_m.05")) |> 
   unnest(col=penmod) |> 
@@ -67,9 +68,36 @@ result |>
     mean_logreturn=first(mean_logreturn),
     sd_logreturn=first(sd_logreturn),
     frmdn=median(fr), .by=c(scenario, porttype, version)) |> 
-  pivot_wider(names_from = version, values_from = frmdn) |> 
+  pivot_wider(names_from = version, values_from = frmdn)
+
+```
+
+
+This table compares, for each scenario, the median funded ratio at 30 years using ACLI-modeled investment return to the funded ratio using a random normal distribution with the same mean and standard deviatio. It is sorted by the largest difference in median funded ratio between modeled and random normal returns.
+
+Observations:
+
+-   In general, the differences from random normal at 30 years hardly look large - the most is 2 percentage points after 30 years. We can easily see swings of 2 percent or more in a single year.
+
+-   Partly, this is because of automatic adjustments built into pension funding - if returns are low, contributions go up, helping to stabilize the funded ratio. That is why we need to look at contributions also. This suggests there's value in just looking at cumulative returns, without considering contributions, to help understand the pure effects of alternative returns. I probably should do that.
+
+-   Modeled median funded ratio is always slightly higher than the random normal counterpart, even though mean log return and sd of log return is virtually identical for both.
+
+-   The difference is much greater for the high fixed-income portfolio than for the high equity portfolio. In these portfolios, mean returns (and standard deviations) are lower than in the high equity portfolios and so median funded ratios are lower as well, but this doesn't explain why the difference from random normal would be large.
+
+-   I am not sure why the differences from random normal are larger with the high fixed portfolios. If we had time it would make sense to try to figure out what the ACLI model is doing that has a bigger impact when fixed income plays a bigger role.
+
+
+
+```{r}
+#| label: explore-table
+#| output: true
+
+tabdata |> 
   relocate(rnormal, .before=model) |> 
   mutate(diff_vsrnorm=model - rnormal) |> 
+  left_join(scen_names, by = join_by(scenario)) |> 
+  relocate(scendesc) |> 
   arrange(desc(diff_vsrnorm)) |> 
   gt() |> 
   tab_header(
@@ -82,17 +110,131 @@ result |>
               label="Median funded ratio at 30 years") |>
   cols_label(mean_logreturn="mean",
              sd_logreturn="sd",
-             rnormal=html("Random normal"),
+             rnormal=html("Random<br>normal"),
              model = html("Model"),
              diff_vsrnorm = html("Model<br>minus<br>normal")) |>
-  fmt_percent(columns=-c(scenario, porttype),
+  fmt_percent(columns=-c(scendesc, scenario, porttype),
              scale=1,
-             decimals=1)
-
-  
+             decimals=1) |>
+  opt_row_striping()
 
 ```
 
+
+```{r}
+#| label: explore-plot
+
+
+tabdata |> 
+  ggplot(aes(rnormal, model, colour=porttype, label=scenario)) +
+  geom_point() +
+  # geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) +
+  geom_text(vjust = -0.5, hjust = 0.5) +
+  geom_abline(slope=1) +
+  scale_color_manual(values=c("red", "blue")) +
+  scale_x_continuous(name="Funded ratio with random normal returns corresponding to model (same mean, sd)", 
+                     breaks = seq(0, 1, .05),
+                     labels = scales::percent_format(accuracy = .1)) +
+  scale_y_continuous(name="Funded ratio with ACLI-modeled returns", 
+                     breaks = seq(0, 1, .05),
+                     labels = scales::percent_format(accuracy = .1)) +
+  ggtitle(label = "Median funded ratio at 30 years",
+          subtitle = "ACLI scenarios and portfolios") +
+  guides(col= guide_legend(title= "Portfolio\ntype")) +
+  theme_bw()
+
+```
+
+
+### Comparison to baseline for the same portfolio type
+
+
+```{r}
+#| label: explore-baseline-table-data
+#| output: false
+
+tabdata2 <- tabdata |> 
+  filter(!str_detect(scenario, "rho")) |> 
+  select(-rnormal) |> 
+  rename(frmdn30=model, mean=mean_logreturn, sd=sd_logreturn) |> 
+  pivot_longer(cols=c(mean, sd, frmdn30),
+               names_to = "measure",
+               values_to = "variant") |> 
+  group_by(porttype, measure) |> 
+  mutate(baseline=variant[scenario=="baseline"]) |> 
+  ungroup() |> 
+  filter(scenario != "baseline") |> 
+  relocate(variant, .after = baseline) |> 
+  mutate(diff=variant - baseline) |> 
+  pivot_wider(names_from = measure, values_from = c(baseline, variant, diff)) |> 
+  select(-contains("variant")) |> 
+  left_join(scen_names, by = join_by(scenario)) |> 
+  relocate(scendesc) |> 
+  arrange(porttype, desc(diff_frmdn30))
+
+```
+
+
+#### High-equity portfolio
+
+```{r}
+
+tabdata2 |> 
+  filter(porttype=="highequity") |> 
+  select(-porttype) |> 
+  gt() |>
+  tab_header(
+    title = html("Median funded ratio at 30 years for different scenarios: High equity portfolio"),
+    subtitle = html("Comparison to baseline scenario")
+  ) |>
+  tab_spanner(columns = contains("baseline"),
+              label="Baseline results") |>
+  tab_spanner(columns = contains("diff"),
+              label="Alternative minus baseline") |>
+  cols_label(baseline_mean="mean return",
+             diff_mean="mean return",
+             baseline_sd="sd return",
+             diff_sd="sd return",
+             baseline_frmdn30=html("Funded ratio<br>year 30"),
+             diff_frmdn30=html("Funded ratio<br>year 30")
+             ) |>
+  fmt_percent(columns=-c(scendesc, scenario),
+             scale=1,
+             decimals=1) |>
+  opt_row_striping()
+
+```
+
+
+#### High-fixed portfolio
+
+```{r}
+
+tabdata2 |> 
+  filter(porttype=="highfixed") |> 
+  select(-porttype) |> 
+  gt() |>
+  tab_header(
+    title = html("Median funded ratio at 30 years for different scenarios: High fixed income portfolio"),
+    subtitle = html("Comparison to baseline scenario")
+  ) |>
+  tab_spanner(columns = contains("baseline"),
+              label="Baseline results") |>
+  tab_spanner(columns = contains("diff"),
+              label="Alternative minus baseline") |>
+  cols_label(baseline_mean="mean return",
+             diff_mean="mean return",
+             baseline_sd="sd return",
+             diff_sd="sd return",
+             baseline_frmdn30=html("Funded ratio<br>year 30"),
+             diff_frmdn30=html("Funded ratio<br>year 30")
+             ) |>
+  fmt_percent(columns=-c(scendesc, scenario),
+             scale=1,
+             decimals=1) |>
+  opt_row_striping()
+
+```
 
 
 

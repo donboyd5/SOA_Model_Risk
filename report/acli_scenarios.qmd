@@ -100,10 +100,12 @@ sigmav_m.05, Monthly sd of the log volatility process (sigma(v)): reduced by .05
 sigmav_p.05, Monthly sd of the log volatility process (sigma(v)): increased by .05 for each equity fund
 rho_m.05, Correlation of random volatility shock vol and random return component (rho): reduced by .05 for each equity fund
 rho_p.05, Correlation of random volatility shock and random return component (rho): increased by .05 for each equity fund
+rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
 itau1_p.50, Mean reversion point for the long rate (tau1): increased by 0.50
 itau1_m.50, Mean reversion point for the long rate (tau1): reduced by 0.50
 "
 (scen_names <- read_csv(scen_names1, col_names = c("scenario", "scendesc")))
+saveRDS(scen_names, here::here("data", "acli_scenario_names.rds"))
 
 # rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
 
@@ -138,7 +140,7 @@ dirget <- function(dirname, fnames){
 
 ## Get and save ACLI scenarios
 
-Gang, running this
+Gang, running this next chunk gets all of the ACLI scenarios I created using their spreadsheet model.
 
 ```{r}
 #| label: get-data
