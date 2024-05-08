@@ -4,10 +4,10 @@
 .Ruserdata
 
 _*/
-_freeze/
-_report/
-data/
-images/
+# _freeze/
+# _report/
+# _report2024/
+# images/
 
 *.csv
 *.doc*
