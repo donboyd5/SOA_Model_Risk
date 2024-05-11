@@ -333,14 +333,18 @@ res <- stack |>
 res
 
 # this is it !!! ----
-t1 <- res |> 
+params <- res |> 
   #filter(vname=="us") |> 
-  mutate(x3=map(mod, \(x) summary(x, report="transformed") |> list()))
-t2 <- t1 |> 
-  mutate(params=map(x3, \(x) pluck(x, 1) |> list())) |> 
-  unnest(params) |> 
+  mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
+         params=map(summary, \(x) pluck(x, 1) |> list())) |> 
   unnest(params)
-t2 |> 
+
+params |> 
+  select(-c(data, mod, summary)) |> 
+  unnest(params) |> 
+  select(-type) |> 
   arrange(parameter, vname)
+# simplify the above
+
 
 ```
