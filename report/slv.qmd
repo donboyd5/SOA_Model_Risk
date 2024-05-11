@@ -330,77 +330,17 @@ res <- stack |>
   # filter(vname=="us") |> 
   nest(.by=vname) |> 
   mutate(mod=purrr::map(data, \(x) f(x, start="2000-01-31", end="2020-05-02")))
+res
 
-check <- res |> 
-  filter(vname=="us") |> 
-  pull(summ)
-str(check)
-
-dd <- res |> 
-  # filter(vname=="intl") |> 
-  mutate(z = map(mod, \(x) pluck(x, 1, "par.fixed"))) |> 
-  unnest_wider(z)
-  # mutate(summ = map(mod, pluck, 1) |> summary(report="transformed") |> list())
-dd  
-  
-str(dd$z)
-
-dd <- res |> 
-  # filter(vname=="intl") |> 
-  mutate(z = map(mod, \(x) pluck(x, 1, "par.fixed"))) |> 
-  unnest_wider(z)
-  # mutate(summ = map(mod, pluck, 1) |> summary(report="transformed") |> list())
-dd  
-  
-str(dd$z)
-
-res |> 
-  filter(vname=="intl") |> 
-  pull(mod)
-
-tmp <- res |> 
-  filter(vname=="intl") |> 
-  mutate(summ = map(mod, pluck, 1) |> summary(report="transformed") |> list())
-
-str(tmp$summ)
-
-tmp <- res |> 
-  filter(vname=="us")
-
-tmp$mod
-str(tmp$mod)
-
-tmp |> 
-  unnest(mod)
-
-res |> 
-  #filter(vname=="us")
-  mutate(nobs=pluck(mod, 1, "nobs")),
-         summ=summary(pluck(mod, 1), report = "transformed") |> list()) 
-
-res |> 
-  unnest(mod)
-
-
-res <- stack |> 
-  # filter(vname=="us") |> 
-  nest(.by=vname) |> 
-  summarise(mod=f(pick(date, lr), vname, start="2010-01-31", end="2020-05-02") |> list())
-  
-tmp <- res |> filter(vname=="us")
-str(tmp$mod)
-pluck(tmp$mod, 1, "nobs")
-summary(tmp$mod)
-summary(tmp$mod, )
-tmp$mod
-
-params <- res |> 
-  # filter(vname=="us") |> 
-  mutate(nobs=pluck(mod, 1, "nobs"),
-         summ=summary(pluck(mod, 1), report = "transformed") |> list()) |> 
-  unnest(summ)
-
-params |> arrange(parameter)
-
+# this is it !!! ----
+t1 <- res |> 
+  #filter(vname=="us") |> 
+  mutate(x3=map(mod, \(x) summary(x, report="transformed") |> list()))
+t2 <- t1 |> 
+  mutate(params=map(x3, \(x) pluck(x, 1) |> list())) |> 
+  unnest(params) |> 
+  unnest(params)
+t2 |> 
+  arrange(parameter, vname)
 
 ```
