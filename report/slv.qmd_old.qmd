@@ -44,11 +44,11 @@ library(quantmod)
 library(stats4)
 library(stochvolTMB)
 library(stochvol)
-library(rstan)
-library(V8)
 
-options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = TRUE) # avoids recompiling
+# library(rstan)
+# library(V8)
+# options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = TRUE) # avoids recompiling
 
 ```
 
@@ -87,6 +87,156 @@ spmonthly <- spdaily |>
 
 ```
 
+
+## StochvolTMB estimation of models
+
+```{r}
+#| eval: false
+
+
+data(spy)
+plot(spy$date, spy$log_return, type = "l", xlab = "", ylab = "", main = "Log-returns of S&P500")
+plot(spy$date, spy$price, type = "l", xlab = "", ylab = "", main = "Price of S&P500")
+
+
+gaussian = estimate_parameters(spy$log_return, model = "gaussian", silent = TRUE)
+t_dist = estimate_parameters(spy$log_return, model = "t", silent = TRUE)
+skew_gaussian = estimate_parameters(spy$log_return, model = "skew_gaussian", silent = TRUE)
+leverage = estimate_parameters(spy$log_return, model = "leverage", silent = TRUE)
+
+summary(gaussian)
+
+djb1 <- stochvolTMB::estimate_parameters(data$ir, model = "gaussian", silent = TRUE)
+summary(djb1)
+
+djb2 <- stochvol::svsample(data$ir, quiet = TRUE)
+summary(djb2)
+
+slv1 <- stochvol::svsample(sp500b$lr, quiet = TRUE)
+slv1$summary$para
+
+slv2 <- stochvol::svsample(sp500b |> 
+                             filter(month <= "2003-12-01") |> 
+                             pull(lr), quiet = TRUE)
+slv2$summary$para
+
+
+
+
+
+
+summary(djb1, report = "transformed")
+djb2$summary$para
+
+
+summary(spy)
+summary(data)
+
+spy2 <- spy |> 
+  mutate(ratio=price / lag(price),
+         lr=log(ratio),
+         lr=ifelse(is.na(lr), log_return, lr))
+gaussian2 = estimate_parameters(spy2$lr, model = "gaussian", silent = TRUE)
+summary(gaussian2)
+
+GSPC |> 
+  as_tibble() |> 
+  add_column(month = zoo::index(GSPC), .before = 1) |> 
+  mutate(price=GSPC.Adjusted,
+         ratio=price / lag(price),
+         lr=log(ratio)) # this is correct
+
+data
+
+
+stochvol_gauss <- svsample(spy$log_return, quiet = TRUE)
+stochvolTMB_gauss  <- estimate_parameters(spy$log_return, "gaussian", silent = TRUE)
+
+str(stochvol_gauss)
+
+stochvol_gauss$summary$para
+summary(stochvolTMB_gauss, report = "transformed")
+
+
+
+# Model equation for the log returns and volatility
+slv_model <- function(params, returns) {
+  mu = params[1]
+  phi = params[2]
+  sigma_v = params[3]
+  rho = params[4]
+  
+  # Define more of the model here as needed
+  # ...
+  
+  # Placeholder for likelihood calculation
+  # This would need to be adapted to your specific model equations and data
+  likelihood = -sum(dnorm(returns, mean = mu, sd = sigma_v, log = TRUE))
+  
+  return(likelihood)
+}
+
+
+# Initial parameter guesses, lower and upper bounds
+initial_params <- c(mu = 0.01, phi = 0.5, sigma_v = 0.2, rho = 0)
+lower_bounds <- c(mu = -0.5, phi = 0, sigma_v = 0, rho = -1)
+upper_bounds <- c(mu = 0.5, phi = 1, sigma_v = 1, rho = 1)
+
+slv_model(initial_params, data$ir)
+returns <- data$ir
+
+# Optimize using constrained MLE
+result <- mle(minuslogl=slv_model, 
+              start = initial_params, 
+              method = "L-BFGS-B", 
+              lower = lower_bounds, 
+              upper = upper_bounds, 
+              fixed = list(returns = data$ir))
+
+
+
+# new start ----
+
+slv <- function(mu, phi, sigma_v, rho) {
+  nll = -sum(dnorm(returns, mean = mu, sd = sigma_v, log = TRUE))
+  return(nll)
+}
+
+ip <- list(mu = 0.01, phi = 0.5, sigma_v = 0.2, rho = 0)
+lb <- list(mu = -0.5, phi = 0, sigma_v = 0, rho = -1)
+ub <- list(mu = 0.5, phi = 1, sigma_v = 1, rho = 1)
+
+ -sum(dnorm(returns, mean = ip$mu, sd = ip$sigma_v, log = TRUE))
+
+
+slv(ip$mu, ip$phi, ip$sigma_v, ip$rho)
+
+
+result <- mle(minuslogl=slv, 
+              start = ip, 
+              method = "L-BFGS-B", 
+              lower = lb, 
+              upper = ub)
+
+summary(result)
+
+
+result <- mle(minuslogl=slv_model, 
+              start = initial_params, 
+              method = "L-BFGS-B", 
+              lower = lower_bounds, 
+              upper = upper_bounds, 
+              fixed = list(returns = data$ir))
+
+```
+
+```
+
+
+
+
+
+# OLD BELOW HERE
 ## Model
 
 ```{r}

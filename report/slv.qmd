@@ -1,0 +1,134 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Stochastic log volatility
+
+## AIRG documentation and reported results
+
+### Documents
+
+**This is the key document:**
+
+“Recommended Approach for Setting Regulatory Risk-Based Capital Requirements for Variable Annuities and Similar Products Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittee to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, June 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3_june05.pdf>.
+
+![](images/clipboard-2233928360.png)
+
+Also useful:
+
+“C3 Phase II Risk-Based Capital for Variable Annuities: Pre-Packaged Scenarios:  Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittees’ C-3 Phase 2 Work Group to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, March 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3supp_march05.pdf>.
+
+### AIRG parameters
+
+![](images/clipboard-1062302077.png)
+
+![](images/clipboard-239653750.png)
+
+### AIRG SLV equations
+
+![](images/clipboard-325100188.png)
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(here::here("report", "libraries_ts.R"))
+
+
+library(quantmod)
+library(stats4)
+library(stochvolTMB)
+library(stochvol)
+
+# library(rstan)
+# library(V8)
+# options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = TRUE) # avoids recompiling
+
+```
+
+## Get and show main ACLI parameters
+
+```{r}
+#| label: get-params
+
+# ddir <- r"(E:\data\soa\acli)"
+# base_dir <- "s_baseline"
+# base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
+
+fpath <- fs::path(ddir, base_dir, base_fn)
+
+## equity parameters ----
+
+eqparams1 <- read_excel(fpath, sheet="Parameters", range = "H32:M44")
+
+eqparams <- eqparams1 |> 
+  select(symbol=1, usdiverse=2, intldiverse=3, intermedrisk=4, aggressive=5, desc=6) |> 
+  filter(row_number() > 1) |> 
+  mutate(across(-c(symbol, desc), as.numeric)) |> 
+  mutate(vname=case_when(
+    symbol == "sigma(v)" ~ "sigma_v",
+    symbol == "sigma(0)" ~ "sigma_0",
+    symbol == "sigma-" ~ "sigma_min",
+    symbol == "sigma+" ~ "sigma_max",
+    symbol == "sigma*" ~ "sigma_star",
+    .default = symbol)
+    ) |> 
+  relocate(vname, .before = desc)
+eqparams  
+
+# col_types = cols(.default = col_character())
+
+## interest rate parameters ----
+
+intparams1 <- read_excel(fpath, sheet="Parameters", range = "B2:F39")
+
+intparams <- intparams1 |> 
+  select(vname=1, default=3, desc=5) |> 
+  filter(row_number() > 1) |> 
+  mutate(default = as.numeric(default))
+
+intparams
+
+```
+
+
+## Get data
+
+```{r}
+#| label: download-sp500
+#| eval: false
+
+# Dec 1955-Dec 2003 monthly was period used in AIRG for sp500
+
+# Download adjusted close prices for the S&P 500 index
+# monthly data do not go back far enough so get daily and convert
+
+# re-download if needed
+spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
+saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+
+```
+
+```{r}
+#| label: get-sp500
+
+# get previously downloaded and saved data
+
+spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
+
+spmonthly <- spdaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  select(date=Index, sp500=GSPC.Adjusted) |> 
+  # we can safely assume data are sorted by date
+  mutate(lr=log(sp500 / lag(sp500))) # note that we lose lr for the first observation
+
+# skim(spmonthly)
+
+```

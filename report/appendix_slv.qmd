@@ -1,0 +1,542 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Appendix: Stochastic log volatility
+
+## AIRG documentation and reported results
+
+### Documents
+
+**This is the key document:**
+
+“Recommended Approach for Setting Regulatory Risk-Based Capital Requirements for Variable Annuities and Similar Products Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittee to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, June 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3_june05.pdf>.
+
+![](images/clipboard-2233928360.png)
+
+Also useful:
+
+“C3 Phase II Risk-Based Capital for Variable Annuities: Pre-Packaged Scenarios:  Presented by the American Academy of Actuaries’ Life Capital Adequacy Subcommittees’ C-3 Phase 2 Work Group to the National Association of Insurance Commissioners’ Capital Adequacy Task Force.” American Academy of Actuaries, March 2005. <https://www.actuary.org/sites/default/files/pdf/life/c3supp_march05.pdf>.
+
+### AIRG parameters
+
+![](images/clipboard-1062302077.png)
+
+![](images/clipboard-239653750.png)
+
+### AIRG SLV equations
+
+![](images/clipboard-325100188.png)
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(here::here("report", "libraries_ts.R"))
+
+
+library(quantmod)
+library(stats4)
+library(stochvolTMB)
+library(stochvol)
+
+# library(rstan)
+# library(V8)
+# options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = TRUE) # avoids recompiling
+
+```
+
+## Get data
+
+```{r}
+#| label: download-sp500
+#| eval: false
+
+# Dec 1955-Dec 2003 monthly was period used in AIRG for sp500
+
+# Download adjusted close prices for the S&P 500 index
+# monthly data do not go back far enough so get daily and convert
+
+# re-download if needed
+spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
+saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+
+```
+
+```{r}
+#| label: get-sp500
+
+# get previously downloaded and saved data
+
+spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
+
+spmonthly <- spdaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  select(date=Index, sp500=GSPC.Adjusted) |> 
+  # we can safely assume data are sorted by date
+  mutate(lr=log(sp500 / lag(sp500))) # note that we lose lr for the first observation
+
+# skim(spmonthly)
+
+```
+
+## StochvolTMB estimation of models
+
+### About stochvolTMB
+
+-   [stochvolTMB on github](https://github.com/JensWahl/stochvolTMB)
+-   [manual](https://cran.r-project.org/web/packages/stochvolTMB/stochvolTMB.pdf)
+-   [vignette](https://cran.r-project.org/web/packages/stochvolTMB/vignettes/stochvolTMB_vignette.html)
+
+### About stochvol
+
+-   stochvolTMB was inspired by [stochvol](https://github.com/gregorkastner/stochvol)
+-   [manual](https://cran.r-project.org/web/packages/stochvol/stochvol.pdf)
+-   stochvol [vignette, code, paper](https://www.jstatsoft.org/article/view/v069i05)
+-   
+
+### Run some stochvol examples
+
+```{r}
+#| label: stochvol-examples
+#| eval: true
+#| output: true
+
+vignette(package = "stochvol")
+vignette("article", package = "stochvol")
+
+# article
+set.seed(123)
+# library("stochvol")
+data("exrates")
+ret <- logret(exrates$USD, demean = TRUE) # loses one observation
+check <- log(exrates$USD / lag(exrates$USD))[-1]
+length(exrates$USD); length(ret)
+round(check - ret, 3)
+
+par(mfrow = c(2, 1), mar = c(1.9, 1.9, 1.9, 0.5), mgp = c(2, 0.6, 0))
+plot(exrates$date, exrates$USD, type = "l", main = "Price of 1 EUR in USD")
+plot(exrates$date[-1], ret, type = "l", main = "Demeaned log returns")
+
+sim <- svsim(500, mu = -9, phi = 0.99, sigma = 0.1)
+par(mfrow = c(2, 1))
+plot(sim)
+summary(sim)
+
+
+
+
+```
+
+### Run and examine the stochvolTMB examples on GitHub
+
+Here are the github examples, estimated using stochvolTMB provided:
+
+-   **daily** S&P 500 log returns, 2005-01-04 through 2018-12-31
+-   NOT mean centered (but perhaps transformed by stochvolTMB)
+-   presumably based on adjusted close
+
+```{r}
+#| label: stocvolTMB-examples
+#| eval: true
+#| output: true
+
+# library(stochvolTMB, warn.conflicts = FALSE)
+
+# load s&p500 DAILY data from 2005 to 2018
+data(spy)
+
+# find the best model using AIC 
+gaussian <- estimate_parameters(spy$log_return, model = "gaussian", silent = TRUE)
+t_dist <- estimate_parameters(spy$log_return, model = "t", silent = TRUE)
+skew_gaussian <- estimate_parameters(spy$log_return, model = "skew_gaussian", silent = TRUE)
+leverage <- estimate_parameters(spy$log_return, model = "leverage", silent = TRUE)
+
+# the leverage model stands out with an AIC far below the other models
+AIC(gaussian, t_dist, skew_gaussian, leverage)
+#>               df       AIC
+#> gaussian       3 -23430.57
+#> t_dist         4 -23451.69
+#> skew_gaussian  4 -23440.87
+#> leverage       4 -23608.85
+
+# get parameter estimates with standard error
+estdaily <- summary(leverage)
+head(estdaily, 10)
+#>       parameter     estimate    std_error     z_value       p_value        type
+#>  1:     sigma_y  0.008338412 0.0004163314  20.0283029  3.121144e-89 transformed
+#>  2:     sigma_h  0.273443559 0.0182641070  14.9716359  1.125191e-50 transformed
+#>  3:         phi  0.967721215 0.0043681868 221.5384240  0.000000e+00 transformed
+#>  4:         rho -0.748695259 0.0322487815 -23.2162340 3.121690e-119 transformed
+#>  5: log_sigma_y -4.786882463 0.0499293427 -95.8731319  0.000000e+00       fixed
+#>  6: log_sigma_h -1.296660043 0.0667929683 -19.4131220  5.978190e-84       fixed
+#>  7:   logit_phi  4.110221202 0.1375467861  29.8823500 3.337032e-196       fixed
+#>  8:   logit_rho -1.939958912 0.1467670249 -13.2179481  6.912403e-40       fixed
+#>  9:           h -0.536254072 0.5182192669  -1.0348015  3.007616e-01      random
+#> 10:           h -0.207811236 0.4245258952  -0.4895137  6.244781e-01      random
+
+# plot estimated volatility with 95 % confidence interval
+# plot(leverage, include_ci = TRUE, dates = spy$date)
+
+```
+
+Repeat leverage model:
+
+-   with their data converted to monthly, log returns, to see how parameter estimates change
+-   with my sp500 data, to verify that I can reproduce
+
+Good: I can reproduce.
+
+```{r}
+#| label: stocvolTMB-examples-monthly
+#| eval: true
+#| output: true
+
+# (current_sigfig <- getOption("pillar.sigfig"))
+# options(pillar.sigfig = 8)
+# options(pillar.sigfig = current_sigfig)
+# options(pillar.sigfig = 6)
+# options(pillar.sigfig = 3) # default
+
+
+ldom <- function(date){
+  # last day of month
+  ceiling_date(date, "month") - days(1)
+  # ldom(as.Date("2022-11-03"))
+}
+
+
+# I have not been able to match the spy log returns exactkly, but my calc's match those of quantmode
+# data(spy)
+# class(spy)
+
+# dailyReturn(spy |> select(-log_return), type = "log") # same numbers as my calculations
+# monthlyReturn(spy, type = "log") |> head()
+
+# this matches quantmod's monthlyReturn
+spymo <- spy |> 
+  mutate(ldom=ldom(date)) |> 
+  group_by(ldom) |> 
+  filter(date==max(date)) |> 
+  ungroup() |> 
+  select(date, price) |> 
+  mutate(lr=log(price / lag(price))) |> 
+  filter(row_number() > 1)
+summary(spymo) # 2005-02-28, 2018-12-31
+
+levmo <- estimate_parameters(spymo$lr, model = "leverage", silent = TRUE)
+estmo <- summary(levmo)
+
+# repeat with my sp500daily data
+spmonthly <- spdaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  select(date=Index, sp500=GSPC.Adjusted) |> 
+  as_tibble() |> 
+  # we can safely assume data are sorted by date
+  mutate(date=as.Date(date), lr=log(sp500 / lag(sp500))) # note that we lose lr for the first observation
+
+spmo2 <- spmonthly |> 
+  mutate(date=ldom(date)) |> 
+  filter(date >= "2005-02-28", date <= "2018-12-31")
+summary(spmo2)
+  
+# estimate monthly using spmy
+lev2 <- estimate_parameters(spmo2$lr, model = "leverage", silent = TRUE)
+estmo2 <- summary(lev2)
+
+```
+
+Notes:
+
+-   Moving from daily to monthly, sigma_y changes a lot. Most other parameters change considerably less.
+-   My SP500 data matches theirs
+
+```{r}
+
+cat("leverage estimates for S&P 500 data, 2005-2018\n")
+cat("Their daily SP500 data\n")
+head(estdaily, 10) # their data, daily
+cat("Their data, last day of month, 2005-02-28 2018-12-31\n")
+head(estmo, 10) # their data, monthly
+cat("My data, last day of month, 2005-02-28 2018-12-31\n")
+head(estmo2, 10) # my data, monthly
+
+```
+
+How much does it matter if we use their daily log returns vs. my calculated daily log returns (which match what quantmod has, but are slightly different than their returns)?
+
+It does not matter much.
+
+```{r}
+spy2 <- spy |> 
+  mutate(lr2=log(price / lag(price))) |> 
+  filter(row_number() > 1)
+
+levdaily1 <- estimate_parameters(spy2$log_return, model = "leverage", silent = TRUE)
+estdaily1 <- summary(levdaily1)
+
+levdaily2 <- estimate_parameters(spy2$lr2, model = "leverage", silent = TRUE)
+estdaily2 <- summary(levdaily2)
+
+head(estdaily1, 8)
+head(estdaily2, 8)
+
+```
+
+## Now, examine parameter estimates for monthly data
+
+-   How do they compare to AIRG when we use (ostensibly) a highly similar model?
+-   How do they change with different sampling periods?
+
+```{r}
+#| eval: false
+
+spmonthly <- spdaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  select(date=Index, sp500=GSPC.Adjusted) |> 
+  as_tibble() |> 
+  # we can safely assume data are sorted by date
+  mutate(date=as.Date(date) |> ldom(), lr=log(sp500 / lag(sp500))) |>  # note that we lose lr for the first observation
+  filter(row_number() > 1)
+ht(spmonthly)
+
+# Dec 1955 - Dec 2003 was the AIRG SP500 estimation period
+airgsp500 <- expression(date >= "1955-12-01" & date <= "2003-12-31")
+postsp500 <- expression(date > "2003-12-31")
+
+
+
+# estimate the airg time period ----
+airgdf <- spmonthly |> 
+  filter(eval(airgsp500))
+summary(airgdf)
+
+levairg <- estimate_parameters(airgdf$lr, model = "leverage", silent = TRUE)
+estairg <- summary(levairg)
+head(estairg, 8)
+
+# estimate the full time period ----
+levfull <- estimate_parameters(spmonthly$lr, model = "leverage", silent = TRUE)
+estfull <- summary(levfull)
+head(estfull, 8)
+
+# estimate post-airg time period ----
+postdf <- spmonthly |> 
+  filter(eval(postsp500))
+summary(postdf)
+
+levpost <- estimate_parameters(postdf$lr, model = "leverage", silent = TRUE)
+estpost <- summary(levpost)
+head(estpost, 8)
+
+# recap
+head(estairg, 8)
+head(estfull, 8)
+head(estpost, 8)
+
+
+```
+
+## Impact of demeaning on parameter values
+
+```{r}
+summary(airgdf)
+airgdf <- spmonthly |> 
+  mutate(lr2=c(NA_real_, logret(sp500)),
+         lrdm=c(NA_real_, logret(sp500, demean=TRUE))) |> 
+  filter(eval(airgsp500))
+summary(airgdf)
+skim(airgdf)
+
+levraw <- estimate_parameters(airgdf$lr, model = "leverage", silent = TRUE)
+levdm <- estimate_parameters(airgdf$lrdm, model = "leverage", silent = TRUE)
+
+summary(levraw, report = "transformed")
+summary(levdm, report = "transformed")
+
+## we can simulate parameters that are correlated -- look at phi and sigma_h ----
+tmp <- simulate_parameters(levraw, nsim = 10000)
+# str(tmp)
+skim(tmp)
+cor(tmp)
+
+
+
+
+```
+
+## Compare stochvol to stochvolTMB
+
+Note that the parameter exp(mu/2) and sigma from stochvol is the same as sigma_y and sigma_h from stochvolTMB.
+
+stochvol stochvolTMB
+
+exp(mu / 2) = sigma_y sigma = sigma_h
+
+```{r}
+
+leverage <- estimate_parameters(spy$log_return, model = "leverage", silent = TRUE)
+summary(leverage, report = "transformed")
+
+stochvol_lev <- svlsample(spy$log_return, quiet = TRUE)
+stochvol_lev$para
+summary(stochvol_lev)
+
+
+stochvol_gauss <- svsample(spy$log_return, quiet = T)
+stochvolTMB_gauss  <- estimate_parameters(spy$log_return, "gaussian", silent = TRUE)
+
+stochvol_lev <- svlsample(spy$log_return, quiet = TRUE)
+stochvolTMB_lev  <- estimate_parameters(spy$log_return, "leverage", silent = TRUE)
+
+```
+
+## Simulate some data and then estimate a model
+
+```{r}
+head(estfull, 8)
+sim <- svsim(500, mu = -9, phi = 0.99, sigma = 0.1)
+
+
+phi <- estfull |> filter(parameter=="phi") |> pull(estimate)
+rho <- estfull |> filter(parameter=="rho") |> pull(estimate)
+sigma_y <- estfull |> filter(parameter=="sigma_y") |> pull(estimate)
+log_sigma_y <- estfull |> filter(parameter=="log_sigma_y") |> pull(estimate)
+# sigma_y <- 0.008217761
+
+(mu <- log(sigma_y) * 2)
+
+
+sim <- svsim(500, mu = mu, phi = phi, sigma = sigma_y, rho=rho)
+str(sim)
+sim$para
+
+msim <- svlsample(sim$y, quiet = TRUE)
+summary(msim)
+
+getmu <- function(mod){
+  sigma_y <- mod |> 
+    summary() |> 
+    filter(parameter=="sigma_y") |> 
+    pull(estimate)
+  log(sigma_y) * 2
+}
+mlevtmb <- estimate_parameters(sim$y, model = "leverage", silent = TRUE)
+summary(mlevtmb)
+getmu(mlevtmb)  # estimate of mu
+sd(sim$y) # appears to be approximately sigma_y
+str(sim)
+sd(sim$vol)
+mean(sim$vol)
+
+```
+
+## Generate returns from alternative models
+
+```{r}
+
+# set.seed(123)
+
+airgdf <- spmonthly |> 
+  mutate(lr2=c(NA_real_, logret(sp500)),
+         lrdm=c(NA_real_, logret(sp500, demean=TRUE))) |> 
+  filter(eval(airgsp500))
+summary(airgdf)
+skim(airgdf)
+nrow(airgdf)
+
+levraw <- estimate_parameters(airgdf$lr, model = "leverage", silent = TRUE)
+summary(levraw, report = "transformed")
+
+# centered log returns
+levrawc <- estimate_parameters(scale(airgdf$lr, scale=FALSE)[, 1], model = "leverage", silent = TRUE)
+summary(levrawc, report = "transformed")
+
+params <- summary(levraw, report = "transformed") |> 
+  select(parameter, estimate) |> 
+  filter(parameter != "h") |> 
+  as_tibble() |> 
+  deframe() |> 
+  as.list()
+
+sims <- sim_sv(
+  param = params,
+  nobs = 360, # num years x num months
+  seed = NULL,
+  model = "gaussian")
+summary(sims)
+
+f <- function(params, nobs, seed){
+  sims <- sim_sv(
+    param = params,
+    nobs = nobs, # num years x num months
+    seed = seed,
+    model = "gaussian")
+  tibble(sim=seed, time=1:nobs, y=sims$y, h=sims$h)
+}
+
+f(params, 360, seed=123)
+
+nsims <- 10000
+df <- 1:nsims |> 
+  purrr::map(\(x) f(params, nobs=360, seed=x)) |> 
+  list_rbind()
+
+ht(df)
+count(df, sim)
+summary(df)
+
+pred2 <- predict(levraw, steps = 360, nsim = 10000, include_parameters = TRUE)
+p2a <- pred2 |> 
+  t() |> 
+  tibble()
+
+p2a[[1]] |> dim()
+
+
+simnum <- 500; y <- df |> filter(sim==simnum) |> pull(y)
+check <- estimate_parameters(y, model = "leverage", silent = TRUE)
+summary(check, report = "transformed")
+params |> as_tibble()
+
+
+# get parameters ----
+str(levraw)
+
+phi <- estfull |> filter(parameter=="phi") |> pull(estimate)
+rho <- estfull |> filter(parameter=="rho") |> pull(estimate)
+sigma_y <- estfull |> filter(parameter=="sigma_y") |> pull(estimate)
+log_sigma_y <- estfull |> filter(parameter=="log_sigma_y") |> pull(estimate)
+
+
+sims <- sim_sv(
+  param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+  nobs = 360, # num years x num months
+  seed = 123,
+  model = "gaussian")
+
+
+set.seed(123)
+# simulate future prices with or without parameter uncertainty
+pred = predict(levfull, steps = 360)
+class(pred)
+str(pred)
+
+spy[.N, date] - 150
+spy[.N, date] + 150
+
+plot(levfull, include_ci = TRUE, forecast = 50, dates = spmonthly$date) +
+  ggplot2::xlim(as.Date("2020-01-01"), as.Date("2030-01-01"))
+# + ggplot2::xlim(c(spmonthly[.N, date] - 150, spmonthly[.N, date] + 50))
+
+
+```

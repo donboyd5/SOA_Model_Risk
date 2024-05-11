@@ -5,6 +5,7 @@
 
 # ignore selected folders
 _*/
+report/slv_files/
 images/
 
 # ignore selected file types
