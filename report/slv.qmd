@@ -45,6 +45,12 @@ library(stats4)
 library(stochvolTMB)
 library(stochvol)
 
+# options(pillar.sigfig = 3) # default
+options(pillar.print_max = 20)
+tprint <- 25  # default tibble print
+options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
+
+
 # library(rstan)
 # library(V8)
 # options(mc.cores = parallel::detectCores())
@@ -202,13 +208,12 @@ saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
 
 ```
 
-
 ## Prepare data for estimation
 
 Create files with monthly prices and log returns.
 
 ```{r}
-#| label: get-sp500
+#| label: prep-data
 
 # get previously downloaded and saved data
 
@@ -218,11 +223,12 @@ spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
 usdiverse <- spdaily |> 
   to.monthly(OHLC=FALSE) |> 
   fortify.zoo() |> # to dataframe with Index from rowname
+  tibble() |> 
   select(date=Index, price=GSPC.Adjusted) |> 
   # we can safely assume data are sorted by date
   mutate(date=ldom(as.Date(date)),
          vname="us", 
-         ticker="sp500",
+         src="sp500",
          lr=log(price / lag(price))) # note that we lose lr for the first observation
 
 ## prep Diversified International Equity ----
@@ -231,25 +237,170 @@ mscidaily <- readRDS(here::here("data", "msci_eafe_eaf_rawdaily.rds"))
 intldiverse <- mscidaily |> 
   to.monthly(OHLC=FALSE) |> 
   fortify.zoo() |> # to dataframe with Index from rowname
+  tibble() |> 
   select(date=Index, price=EFA.Adjusted) |> 
   # we can safely assume data are sorted by date
   mutate(date=ldom(as.Date(date)),
          vname="intl", 
-         ticker="mscieafe",
+         src="mscieafe",
          lr=log(price / lag(price))) # note that we lose lr for the first observation
 
 ## prep Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12 ----
 r2000daily <- readRDS(here::here("data", "russell2000_rawdaily.rds"))
 
-intldiverse <- mscidaily |> 
+intermediate_diverse <- r2000daily |> 
   to.monthly(OHLC=FALSE) |> 
   fortify.zoo() |> # to dataframe with Index from rowname
-  select(date=Index, price=EFA.Adjusted) |> 
+  tibble() |> 
+  select(date=Index, price=RUT.Adjusted) |> 
   # we can safely assume data are sorted by date
   mutate(date=ldom(as.Date(date)),
          vname="small", 
-         ticker="^RUT", # Russell 2000
+         src="russell2000", # Russell 2000 ^RUT
          lr=log(price / lag(price))) # note that we lose lr for the first observation
+
+## prep Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng ----
+aggrport <- readRDS(here::here("data", "aggressive_rawdaily.rds"))
+
+aggressive <- aggrport |> 
+  mutate(ldom=ldom(date)) |> 
+  group_by(ldom) |> 
+  filter(date==max(date)) |> 
+  select(date=ldom, price=portassets) |> 
+  ungroup() |>  
+  mutate(vname="aggr", 
+         src="portfolio", # Russell 2000
+         lr=log(price / lag(price)))
+
+# stack ----
+
+stack <- bind_rows(usdiverse,
+                   intldiverse,
+                   intermediate_diverse,
+                   aggressive)
+count(stack, vname, src)
+stack |> 
+  filter(is.na(lr))
+
+saveRDS(stack, here::here("data", "airg_equities.rds"))
+
+
+```
+
+## Estimate stochastic log volatility models
+
+```{r}
+
+stack <- readRDS(here::here("data", "airg_equities.rds"))
+glimpse(stack)
+
+get_subset <- function(vname, start, end, data=stack){
+  start <- as.Date(start)
+  end <- as.Date(end)
+  vname <- "us"
+  df <- data |> 
+    filter(vname==!!vname, date >= start, date <= end) |> 
+    filter(!is.na(lr)) |> 
+    mutate(lrc=lr - mean(lr))
+  df
+}
+
+get_subset("us", "2020-01-31", "2020-05-02")
+
+f <- function(data, vname, start, end){
+  vec <- get_subset(vname, start, end, data)$lrc
+  mod <- estimate_parameters(vec, model = "leverage", silent = TRUE)
+  mod
+}
+
+f(stack, "us", "2010-01-31", "2020-05-02")
+
+f2 <- function(dlist, vname, start, end){
+  vec <- get_subset(vname, start, end, data)$lrc
+  mod <- estimate_parameters(vec, model = "leverage", silent = TRUE)
+  mod
+}
+
+stack |> 
+  filter(vname=="us") |> 
+  nest(.by=vname)
+
+
+res <- stack |> 
+  # filter(vname=="us") |> 
+  nest(.by=vname) |> 
+  mutate(mod=purrr::map(data, \(x) f(x, start="2000-01-31", end="2020-05-02")))
+
+check <- res |> 
+  filter(vname=="us") |> 
+  pull(summ)
+str(check)
+
+dd <- res |> 
+  # filter(vname=="intl") |> 
+  mutate(z = map(mod, \(x) pluck(x, 1, "par.fixed"))) |> 
+  unnest_wider(z)
+  # mutate(summ = map(mod, pluck, 1) |> summary(report="transformed") |> list())
+dd  
+  
+str(dd$z)
+
+dd <- res |> 
+  # filter(vname=="intl") |> 
+  mutate(z = map(mod, \(x) pluck(x, 1, "par.fixed"))) |> 
+  unnest_wider(z)
+  # mutate(summ = map(mod, pluck, 1) |> summary(report="transformed") |> list())
+dd  
+  
+str(dd$z)
+
+res |> 
+  filter(vname=="intl") |> 
+  pull(mod)
+
+tmp <- res |> 
+  filter(vname=="intl") |> 
+  mutate(summ = map(mod, pluck, 1) |> summary(report="transformed") |> list())
+
+str(tmp$summ)
+
+tmp <- res |> 
+  filter(vname=="us")
+
+tmp$mod
+str(tmp$mod)
+
+tmp |> 
+  unnest(mod)
+
+res |> 
+  #filter(vname=="us")
+  mutate(nobs=pluck(mod, 1, "nobs")),
+         summ=summary(pluck(mod, 1), report = "transformed") |> list()) 
+
+res |> 
+  unnest(mod)
+
+
+res <- stack |> 
+  # filter(vname=="us") |> 
+  nest(.by=vname) |> 
+  summarise(mod=f(pick(date, lr), vname, start="2010-01-31", end="2020-05-02") |> list())
+  
+tmp <- res |> filter(vname=="us")
+str(tmp$mod)
+pluck(tmp$mod, 1, "nobs")
+summary(tmp$mod)
+summary(tmp$mod, )
+tmp$mod
+
+params <- res |> 
+  # filter(vname=="us") |> 
+  mutate(nobs=pluck(mod, 1, "nobs"),
+         summ=summary(pluck(mod, 1), report = "transformed") |> list()) |> 
+  unnest(summ)
+
+params |> arrange(parameter)
 
 
 ```
