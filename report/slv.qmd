@@ -110,7 +110,7 @@ AIRG used the following data. ACLI used the same data as AIRG for equities.
 ![](images/clipboard-736643218.png)
 
 ```{r}
-#| label: download-sp500
+#| label: download-airg-assets
 #| eval: false
 
 # Here are the data sources for AIRG:
@@ -462,4 +462,55 @@ These leaves two issues (I think):
 
 -   It does not deal with interest rate parameters. I have ideas but don't know if we have time.
 -   It does not deal with rho in the equity models, which could be important, but I don't konw. I have ideas but don't know if we have time.
+
+
+## SLV models for a 2-asset portfolio
+
+```{r}
+#| label: get-assets
+
+
+# MSCI All Country World Index (ACWI): This index captures large and mid-cap
+# representation across 23 Developed Markets and 24 Emerging Markets countries,
+# covering approximately 85% of the global investable equity opportunity set.
+
+# FTSE Global All Cap Index: This index measures the performance of large, mid,
+# and small cap stocks globally, covering over 7,400 securities in 47 countries,
+# including both developed and emerging markets.
+
+equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-01-03 forward
+bonds <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
+
+combo2 <- merge(Ad(equity), Ad(bonds), all = FALSE) # adjusted close; drop missing
+weights2equity <- c(equity=.7, bonds=.3)
+weights2bonds <- c(equity=.3, bonds=.7) 
+
+aggrport2 <- combo2 |> 
+  fortify() |> 
+  tibble() |> 
+  setNames(c("date", "equity", "bonds")) |> 
+  mutate(across(c(equity, bonds), \(x) log(x / lag(x)))) |> 
+  filter(date > min(date)) |> 
+  mutate(equity_portret= equity * weights2equity["equity"] + bonds * weights2equity["bonds"],
+         equity_portassets=exp(cumsum(equity_portret)),
+         bonds_portret= equity * weights2bonds["equity"] + bonds * weights2bonds["bonds"],
+         bonds_portassets=exp(cumsum(bonds_portret))) # note that this is end of period assets
+ht(aggrport2)
+
+saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
+
+
+
+# getSymbols("^INSYBUC", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
+
+# equity <- getSymbols("ACWI", auto.assign = FALSE, from = "1950-01-01") # 2008-03-28 forward
+# equity <- getSymbols("GEISAC.FGI", auto.assign = FALSE, from = "1950-01-01") # most recent only
+# saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+
+# spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
+# saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+
+
+```
+
 
