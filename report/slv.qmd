@@ -499,6 +499,17 @@ ht(aggrport2)
 
 saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 
+port_monthly <- aggrport2 |> 
+  mutate(ldom=ldom(date)) |> 
+  group_by(ldom) |> 
+  filter(date==max(date)) |> 
+  select(date=ldom, eqprice=equity_portassets, bondprice=bonds_portassets) |> 
+  ungroup() |>  
+  mutate(vname="simport", 
+         src="portfolio",
+         lrequity=log(eqprice / lag(eqprice)),
+         lrbonds=log(bondprice / lag(bondprice)))
+
 
 
 # getSymbols("^INSYBUC", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
