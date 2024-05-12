@@ -45,6 +45,12 @@ library(stats4)
 library(stochvolTMB)
 library(stochvol)
 
+# options(pillar.sigfig = 3) # default
+options(pillar.print_max = 20)
+tprint <- 25  # default tibble print
+options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
+
+
 # library(rstan)
 # library(V8)
 # options(mc.cores = parallel::detectCores())
@@ -97,38 +103,361 @@ intparams
 
 ```
 
-
 ## Get data
+
+AIRG used the following data. ACLI used the same data as AIRG for equities.
+
+![](images/clipboard-736643218.png)
 
 ```{r}
 #| label: download-sp500
 #| eval: false
 
-# Dec 1955-Dec 2003 monthly was period used in AIRG for sp500
+# Here are the data sources for AIRG:
 
+# Asset Class, Market Proxies, Historic Period
+# Money Market, 3 Month Treasury returns, 1955.12 – 2003.12
+# U.S. ITGVT, U.S. Intermediate Term Government Bonds, 1955.12 – 2003.12
+# U.S. LTCORP, U.S. Long Term Corporate Bonds, 1955.12 – 2003.12
+# Fixed Income, 65% ITGVT + 35% LTCORP, n/a
+# Balanced Allocation, 60% Diversified Equity + 40% Fixed Income, n/a
+# Diversified Large Cap U.S. Equity, S&P500 Total Return Index, 1955.12 – 2003.12
+# Diversified International Equity, MSCI-EAFE $USD Total Return Index, 1969.12 – 2003.12
+# Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12
+# Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng, 1984.12 – 2003.12
+
+# re-download if needed -- src = "yahoo" by default
+# Yahoo symbol lookup:
+# https://finance.yahoo.com/lookup
+
+## Diversified Large Cap U.S. Equity ----
+# Dec 1955-Dec 2003 monthly was period used in AIRG for sp500
 # Download adjusted close prices for the S&P 500 index
 # monthly data do not go back far enough so get daily and convert
-
-# re-download if needed
 spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
 saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
 
+## Diversified International Equity ----
+# MSCI-EAFE $USD Total Return Index, 1969.12 – 2003.12
+# MSCI EAFE (Europe, Australasia and Far East) Index - This is a broad index that represents the performance of large and mid-cap stocks across 21 developed markets, excluding the U.S. and Canada. It covers approximately 85% of the free float-adjusted market capitalization in each country.
+# The MSCI EAFE Index itself does not have a ticker symbol, as it is not an investable security but rather a benchmark index. However, there are several exchange-traded funds (ETFs) and mutual funds that track the performance of the MSCI EAFE Index.
+# https://www.msci.com/documents/10199/822e3d18-16fb-4d23-9295-11bc9e07b8ba
+# The most popular and widely traded ETF that tracks the MSCI EAFE Index is the iShares MSCI EAFE ETF, which has the ticker symbol "EFA". It's only available since 2001.
+
+mscidaily <- getSymbols("EFA", auto.assign = FALSE, from = "1950-01-01") # 2001+
+saveRDS(mscidaily, here::here("data", "msci_eafe_eaf_rawdaily.rds"))
+
+## Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12 ----
+# U.S. Small Capitalization Index
+
+# The Russell 2000 is perhaps the most well-known and widely referenced small-cap index in the U.S. It measures the performance of the smallest 2,000 companies included in the Russell 3000 Index, which represents approximately 10% of the total market capitalization of the Russell 3000.
+# ^RUT only available from 1987-09-10 forward
+
+# The S&P SmallCap 600 is another prominent index that measures the small-cap
+# segment of the U.S. equity market. Managed by Standard & Poor's, it includes
+# 600 small companies that meet specific inclusion criteria, such as market
+# capitalization, liquidity, and financial viability.
+
+r2000daily <- getSymbols("^RUT", auto.assign = FALSE, from = "1950-01-01") # 1987-09-10 forward
+# getSymbols("^SP600", auto.assign = FALSE, from = "1950-01-01") # 1989-01-03
+saveRDS(r2000daily, here::here("data", "russell2000_rawdaily.rds"))
+
+## Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng, 1984.12 – 2003.12 ----
+
+# The hypothetical “Aggressive/Exotic Equity” index was constructed by blending
+# returns for the NASDAQ, Emerging Markets and Hang Seng indices (weights are
+# approximately 12.5%, 25% and 62.5% respectively). This proxy has an
+# unconditional annualized volatility of approximately 25%. This market mix is
+# not meant to suggest a representative asset profile for this class, but used
+# merely to build an historic index with high volatility and sufficient history.
+
+# NASDAQ:
+# For the NASDAQ-100 Index, the ticker is QQQ:
+# Invesco QQQ Trust is an ETF that tracks the NASDAQ-100 Index, which includes 100 of the largest non-financial companies listed on the NASDAQ stock exchange.
+# For the broader NASDAQ Composite Index, there isn't a direct ETF because it includes over 3,000 stocks. However, the NASDAQ-100 (QQQ) is often used as a proxy due to its heavy technology and growth-oriented composition.
+
+# MSCI Emerging Markets Index:
+# ETF Ticker: EEM
+# iShares MSCI Emerging Markets ETF is one of the most popular ETFs tracking the performance of the MSCI Emerging Markets Index. It includes large and mid-sized companies across emerging markets.
+
+# Hang Seng Index:
+# ETF Ticker: EWH
+# iShares MSCI Hong Kong ETF tracks the investment results of an index composed of Hong Kong equities and is often used by investors to gain exposure to the Hong Kong market, broadly reflective of the Hang Seng Index dynamics.
+
+getSymbols(c("QQQ", "EEM", "EWH"), auto.assign = TRUE, from = "1950-01-01") 
+QQQ # 1999-03-10 forward
+EEM # 2003-04-14 forward
+EWH # 1996-03-18 forward
+# Ad(QQQ)
+
+combo <- merge(Ad(QQQ), Ad(EEM), Ad(EWH), all = FALSE) # adjusted close; drop missing
+weights <- c(qqq=0.125, eem=0.25, ewh=0.625) 
+
+aggrport <- combo |> 
+  fortify() |> 
+  tibble() |> 
+  setNames(c("date", "qqq", "eem", "ewh")) |> 
+  mutate(across(c(qqq, eem, ewh), \(x) log(x / lag(x)))) |> 
+  filter(date > min(date)) |> 
+  mutate(portret=qqq * weights["qqq"] + eem * weights["eem"] + ewh * weights["ewh"],
+         portassets=exp(cumsum(portret))) # note that this is end of period assets
+ht(aggrport)
+  
+saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
+
+
 ```
 
+## Prepare data for estimation
+
+Create files with monthly prices and log returns.
+
 ```{r}
-#| label: get-sp500
+#| label: prep-data
 
 # get previously downloaded and saved data
 
+## prep Diversified Large Cap U.S. Equity ----
 spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
 
-spmonthly <- spdaily |> 
+usdiverse <- spdaily |> 
   to.monthly(OHLC=FALSE) |> 
   fortify.zoo() |> # to dataframe with Index from rowname
-  select(date=Index, sp500=GSPC.Adjusted) |> 
+  tibble() |> 
+  select(date=Index, price=GSPC.Adjusted) |> 
   # we can safely assume data are sorted by date
-  mutate(lr=log(sp500 / lag(sp500))) # note that we lose lr for the first observation
+  mutate(date=ldom(as.Date(date)),
+         vname="us", 
+         src="sp500",
+         lr=log(price / lag(price))) # note that we lose lr for the first observation
 
-# skim(spmonthly)
+## prep Diversified International Equity ----
+mscidaily <- readRDS(here::here("data", "msci_eafe_eaf_rawdaily.rds"))
+
+intldiverse <- mscidaily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  tibble() |> 
+  select(date=Index, price=EFA.Adjusted) |> 
+  # we can safely assume data are sorted by date
+  mutate(date=ldom(as.Date(date)),
+         vname="intl", 
+         src="mscieafe",
+         lr=log(price / lag(price))) # note that we lose lr for the first observation
+
+## prep Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12 ----
+r2000daily <- readRDS(here::here("data", "russell2000_rawdaily.rds"))
+
+intermediate_diverse <- r2000daily |> 
+  to.monthly(OHLC=FALSE) |> 
+  fortify.zoo() |> # to dataframe with Index from rowname
+  tibble() |> 
+  select(date=Index, price=RUT.Adjusted) |> 
+  # we can safely assume data are sorted by date
+  mutate(date=ldom(as.Date(date)),
+         vname="small", 
+         src="russell2000", # Russell 2000 ^RUT
+         lr=log(price / lag(price))) # note that we lose lr for the first observation
+
+## prep Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng ----
+aggrport <- readRDS(here::here("data", "aggressive_rawdaily.rds"))
+
+aggressive <- aggrport |> 
+  mutate(ldom=ldom(date)) |> 
+  group_by(ldom) |> 
+  filter(date==max(date)) |> 
+  select(date=ldom, price=portassets) |> 
+  ungroup() |>  
+  mutate(vname="aggr", 
+         src="portfolio", # Russell 2000
+         lr=log(price / lag(price)))
+
+# stack ----
+
+stack <- bind_rows(usdiverse,
+                   intldiverse,
+                   intermediate_diverse,
+                   aggressive)
+count(stack, vname, src)
+stack |> 
+  filter(is.na(lr))
+
+saveRDS(stack, here::here("data", "airg_equities.rds"))
+
 
 ```
+
+## Estimate stochastic log volatility models
+
+```{r}
+#| label: estimate-slv
+#| output: false
+
+stack <- readRDS(here::here("data", "airg_equities.rds"))
+glimpse(stack)
+ht(stack)
+
+get_subset <- function(vname, start, end, data=stack){
+  # get a time-period subset of the stacked data and demean the log returns
+  # only keep the portion of the time-period subset that has values for the
+  #   demeaned log returns
+  start <- as.Date(start)
+  end <- as.Date(end)
+  vname <- "us"
+  df <- data |> 
+    filter(vname==!!vname, date >= start, date <= end) |> 
+    filter(!is.na(lr)) |> 
+    mutate(lrc=lr - mean(lr))
+  df
+}
+# get_subset("us", "2020-01-31", "2020-05-02")
+
+runslv <- function(data, vname, start, end, modtype="leverage"){
+  # get the demeaned log return from a data subset and estimate an slv model
+  vec <- get_subset(vname, start, end, data)$lrc
+  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
+  mod
+}
+# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
+
+# run the slv model on each asset, for a particular time period
+res <- stack |> 
+  nest(.by=vname) |> 
+  mutate(mod=purrr::map(data, \(x) runslv(x, start="1950-01-01", end="2024-05-10")))
+res
+
+# get the model parameters
+params <- res |> 
+  mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
+         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
+         params=map(summary, \(x) pluck(x, 1)))
+# params
+
+```
+
+
+## Show estimated parameters
+
+```{r}
+#| label: show-parameters
+
+params
+
+# examine the model parameters
+params |> 
+  select(-c(data, mod, summary)) |> 
+  unnest(params) |> 
+  select(-type) |> 
+  arrange(parameter, vname)
+
+
+```
+
+
+## Compare estimated parameters to AIRG-ACLI parameters
+
+```{r}
+#| label: compare-parameters
+#| output: false
+
+# prep ACLI parameters
+eqparams
+eqparams1 <- eqparams |> 
+  filter(vname %in% c("tau", "phi", "sigma_v", "rho")) |> 
+  select(vname, us=usdiverse, intl=intldiverse, small=intermedrisk, aggr=aggressive, desc) |> 
+  pivot_longer(cols=c(us, intl, small, aggr), names_to = "class", values_to = "param_acli") |> 
+  select(parameter=vname, class, param_acli, desc)
+
+# prep modeled parameters
+params |> 
+  select(-c(data, mod, summary)) |> 
+  unnest(params) |> 
+  select(-type) |> 
+  arrange(parameter, vname)
+
+params1 <- params |> 
+  unnest(params) |> 
+  mutate(parameter=case_when(
+    parameter=="sigma_y" ~ "tau",
+    parameter=="sigma_h" ~ "sigma_v",
+    .default = parameter
+  )) |> 
+  mutate(estimate=ifelse(parameter=="tau", estimate * sqrt(12), estimate),
+         std_error=ifelse(parameter=="tau", std_error * sqrt(12), std_error),
+         moe90=std_error * qnorm(.95)) |> 
+  select(parameter, class=vname, param_model=estimate, moe90, stderr=std_error, nobs)
+
+comp <- eqparams1 |> 
+  left_join(params1,
+            by = join_by(parameter, class)) |> 
+  mutate(lbound_acli=param_acli - moe90,
+         ubound_acli=param_acli + moe90) |> 
+  select(parameter, class, param_model, param_acli, moe90, lbound_acli, ubound_acli, stderr, nobs, desc)
+
+comp
+
+# z_critical <- qnorm(0.95)  # 1.644854
+# lower_bound <- estimate - z_critical * std_error
+
+
+```
+
+## Key result: equity parameter estimates and uncertainty
+
+The goal of this exercise is to develop parameter-uncertainty estimates for AIRG-ACLI equity parameters, so that we can run different scenarios with the ACLI model using "principled" variations in parameter estimates, rather than arbitrary variations in parameter estimates as we did in our last meeting with the POG. The POG had complained about the arbitrariness of our scenarios.
+
+*(I call the parameters the AIRG-ACLI parameters because the equity models and parameter estimates are identical between the AIRG and ACLI models -- parameters and models only differ for interest rates, not for equities.)*
+
+The table below shows:
+
+-   Reported key parameters for the AIRG-ACLI equity models, for the 4 asset classes in those models. According to AIRG documentation, these models were estimated with a version of a stochastic log volatility model that allows the volatility of asset price to be correlated with the asset price.
+
+-   Parameters and standard errors for similar assets, estimated by me as follows:
+
+    -   the data are for assets that are highly-similar to the AIRG-ACLI asset classes, but they are not identical to the AIRG-ACLI classes
+    
+    -   the time periods are as long as possible with the available data, and thus are not the same as the time periods used by AIRG-ACLI
+    
+    -   I estimated the parameters and their standard errors using the R package stochvolTMB. I estimated them using a stochastic volatility model with leverage -- a variant that allows asset price volatility to be correlated with asset price, and thus, presumably, highly similar to the model used by AIRG-ACLI
+    
+    -   90% margins of error (`moe90`) for the stochvolTMB parameter estimates, calculated as stderr * critical z value (which is approximately 1.645)
+    
+-   Estimated lower and upper bounds for the AIRG-ACLI parameters, **obtained by applying the stochvolTMB-estimated margins of errors to the AIRG-ACLI parameters**. I think this is a reasonable approach given what we have to work with, but of course it is worth discussing.
+
+
+```{r}
+#| label: show-comparison
+
+comp |> 
+  gt() |> 
+  fmt_number(columns=c(param_model:stderr),
+             decimals=4) |>
+  fmt_number(columns=c(nobs),
+             decimals=0)
+
+```
+
+
+## Next steps
+
+My plan is to replace the arbitrary scenarios I ran for our last POG meeting with the following "principled" scenarios based on the lower and upper bounds estimated above:
+
+-   4 lower bound scenarios, one for each  parameter (tau, phi, sigma_v, rho): set the parameter to its lower bound for all asset classes
+
+-   4 upper bound scenarios, one for each  parameter (tau, phi, sigma_v, rho): set the parameter to its upper bound for all asset classes
+
+-   That gives a total of 8 scenarios. However, you may recall that the AIRG-ACLI model is flawed in that it does not implement rho properly and never has any variation in results. Thus, as a practical matter, this gives only 6 scenarios - a lot fewer than we showed the POG, which is good.
+
+I will then update our recent work by:
+
+-   Constructing 2 portfolios from the asset-class results -- high equity, and high fixed.
+-   Running the weighted returns from those 2 portfolios for the 6 scenarios through our pension model, and
+-   Applying our 4 risk measures, and producing your Tables 1 and 2
+
+I should be able to get this done on Monday.
+
+These leaves two issues (I think):
+
+-   It does not deal with interest rate parameters. I have ideas but don't know if we have time.
+-   It does not deal with rho in the equity models, which could be important, but I don't konw. I have ideas but don't know if we have time.
+

@@ -28,7 +28,7 @@ book:
     - part: "Model-based investment returns"
       chapters:
       # - esg.qmd # not ready yet
-      # - slv.qmd # not ready yet
+      - slv.qmd
       - acli_scenarios.qmd
     - part: "Portfolios"
       chapters: 

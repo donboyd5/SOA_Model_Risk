@@ -72,7 +72,13 @@ ns <- function (obj)
 round_nearest <- function(x, nearest) {round(x / nearest) * nearest}
 
 
+# date functions -----------------------------------------------
 
+ldom <- function(date){
+  # last day of month
+  ceiling_date(date, "month") - days(1)
+  # ldom(as.Date("2022-11-03"))
+}
 
 
 # probability distributions -----------------------------------------------

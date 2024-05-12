@@ -206,13 +206,6 @@ Good: I can reproduce.
 # options(pillar.sigfig = 3) # default
 
 
-ldom <- function(date){
-  # last day of month
-  ceiling_date(date, "month") - days(1)
-  # ldom(as.Date("2022-11-03"))
-}
-
-
 # I have not been able to match the spy log returns exactkly, but my calc's match those of quantmode
 # data(spy)
 # class(spy)
