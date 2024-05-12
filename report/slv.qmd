@@ -450,9 +450,11 @@ My plan is to replace the arbitrary scenarios I ran for our last POG meeting wit
 
 I will then update our recent work by:
 
--   Constructing 2 portfolios from the asset-class results -- high equity, and high fixed.
+-   Running the scenarios through the ACLI model (by manually varying the parameters in the spreadsheet, doing 6 separate runs with the spreadsheet)
+-   Getting the results (in R) and constructing 2 portfolios from the asset-class results -- high equity, and high fixed.
 -   Running the weighted returns from those 2 portfolios for the 6 scenarios through our pension model, and
--   Applying our 4 risk measures, and producing your Tables 1 and 2
+-   Applying our 4 risk measures
+-   Producing your Tables 1 and 2
 
 I should be able to get this done on Monday.
 
