@@ -293,8 +293,12 @@ saveRDS(stack, here::here("data", "airg_equities.rds"))
 
 stack <- readRDS(here::here("data", "airg_equities.rds"))
 glimpse(stack)
+ht(stack)
 
 get_subset <- function(vname, start, end, data=stack){
+  # get a time-period subset of the stacked data and demean the log returns
+  # only keep the portion of the time-period subset that has values for the
+  #   demeaned log returns
   start <- as.Date(start)
   end <- as.Date(end)
   vname <- "us"
@@ -307,44 +311,32 @@ get_subset <- function(vname, start, end, data=stack){
 
 get_subset("us", "2020-01-31", "2020-05-02")
 
-f <- function(data, vname, start, end){
+runslv <- function(data, vname, start, end, modtype="leverage"){
+  # get the demeaned log return from a data subset and estimate an slv model
   vec <- get_subset(vname, start, end, data)$lrc
-  mod <- estimate_parameters(vec, model = "leverage", silent = TRUE)
+  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
   mod
 }
 
-f(stack, "us", "2010-01-31", "2020-05-02")
+runslv(stack, "us", "2010-01-31", "2020-05-02")
 
-f2 <- function(dlist, vname, start, end){
-  vec <- get_subset(vname, start, end, data)$lrc
-  mod <- estimate_parameters(vec, model = "leverage", silent = TRUE)
-  mod
-}
-
-stack |> 
-  filter(vname=="us") |> 
-  nest(.by=vname)
-
-
+# run the slv model on each asset, for a particular time period
 res <- stack |> 
-  # filter(vname=="us") |> 
   nest(.by=vname) |> 
-  mutate(mod=purrr::map(data, \(x) f(x, start="2000-01-31", end="2020-05-02")))
+  mutate(mod=purrr::map(data, \(x) runslv(x, start="1950-01-01", end="2024-05-10")))
 res
 
-# this is it !!! ----
+# get the model parameters
 params <- res |> 
-  #filter(vname=="us") |> 
   mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
-         params=map(summary, \(x) pluck(x, 1) |> list())) |> 
-  unnest(params)
+         params=map(summary, \(x) pluck(x, 1)))
+params
 
+# examine the model parameters
 params |> 
   select(-c(data, mod, summary)) |> 
   unnest(params) |> 
   select(-type) |> 
   arrange(parameter, vname)
-# simplify the above
-
 
 ```
