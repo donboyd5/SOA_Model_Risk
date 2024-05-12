@@ -58,6 +58,38 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 
 ```
 
+
+```{r}
+#| label: functions-for-slv-models
+
+get_subset <- function(vname, start, end, data=stack){
+  # get a time-period subset of the stacked data and demean the log returns
+  # only keep the portion of the time-period subset that has values for the
+  #   demeaned log returns
+  start <- as.Date(start)
+  end <- as.Date(end)
+  vname <- "us"
+  df <- data |> 
+    filter(vname==!!vname, date >= start, date <= end) |> 
+    filter(!is.na(lr)) |> 
+    mutate(lrc=lr - mean(lr))
+  df
+}
+# get_subset("us", "2020-01-31", "2020-05-02")
+
+runslv <- function(data, vname, start, end, modtype="leverage"){
+  # get the demeaned log return from a data subset and estimate an slv model
+  # data must have vname, date, and lr columns
+  vec <- get_subset(vname, start, end, data)$lrc
+  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
+  mod
+}
+# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
+
+
+```
+
+
 ## Get and show main ACLI parameters
 
 ```{r}
@@ -297,30 +329,8 @@ stack <- readRDS(here::here("data", "airg_equities.rds"))
 glimpse(stack)
 ht(stack)
 
-get_subset <- function(vname, start, end, data=stack){
-  # get a time-period subset of the stacked data and demean the log returns
-  # only keep the portion of the time-period subset that has values for the
-  #   demeaned log returns
-  start <- as.Date(start)
-  end <- as.Date(end)
-  vname <- "us"
-  df <- data |> 
-    filter(vname==!!vname, date >= start, date <= end) |> 
-    filter(!is.na(lr)) |> 
-    mutate(lrc=lr - mean(lr))
-  df
-}
-# get_subset("us", "2020-01-31", "2020-05-02")
-
-runslv <- function(data, vname, start, end, modtype="leverage"){
-  # get the demeaned log return from a data subset and estimate an slv model
-  vec <- get_subset(vname, start, end, data)$lrc
-  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
-  mod
-}
-# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
-
 # run the slv model on each asset, for a particular time period
+# data must have vname, date, and lr columns
 res <- stack |> 
   nest(.by=vname) |> 
   mutate(mod=purrr::map(data, \(x) runslv(x, start="1950-01-01", end="2024-05-10")))
@@ -466,9 +476,10 @@ These leaves two issues (I think):
 
 ## SLV models for a 2-asset portfolio
 
+Get assets needed to construct two equity-bonds portfolios: 70-30 and 30-70.
+
 ```{r}
 #| label: get-assets
-
 
 # MSCI All Country World Index (ACWI): This index captures large and mid-cap
 # representation across 23 Developed Markets and 24 Emerging Markets countries,
@@ -482,8 +493,8 @@ equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-0
 bonds <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
 
 combo2 <- merge(Ad(equity), Ad(bonds), all = FALSE) # adjusted close; drop missing
-weights2equity <- c(equity=.7, bonds=.3)
-weights2bonds <- c(equity=.3, bonds=.7) 
+highequity_weights <- c(equity=.7, bonds=.3)
+highbonds_weights <- c(equity=.3, bonds=.7) 
 
 aggrport2 <- combo2 |> 
   fortify() |> 
@@ -491,9 +502,9 @@ aggrport2 <- combo2 |>
   setNames(c("date", "equity", "bonds")) |> 
   mutate(across(c(equity, bonds), \(x) log(x / lag(x)))) |> 
   filter(date > min(date)) |> 
-  mutate(equity_portret= equity * weights2equity["equity"] + bonds * weights2equity["bonds"],
+  mutate(equity_portret= equity * highequity_weights["equity"] + bonds * highequity_weights["bonds"],
          equity_portassets=exp(cumsum(equity_portret)),
-         bonds_portret= equity * weights2bonds["equity"] + bonds * weights2bonds["bonds"],
+         bonds_portret= equity * highbonds_weights["equity"] + bonds * highbonds_weights["bonds"],
          bonds_portassets=exp(cumsum(bonds_portret))) # note that this is end of period assets
 ht(aggrport2)
 
@@ -507,10 +518,8 @@ port_monthly <- aggrport2 |>
   ungroup() |>  
   mutate(vname="simport", 
          src="portfolio",
-         lrequity=log(eqprice / lag(eqprice)),
-         lrbonds=log(bondprice / lag(bondprice)))
-
-
+         highequity=log(eqprice / lag(eqprice)),
+         highbonds=log(bondprice / lag(bondprice)))
 
 # getSymbols("^INSYBUC", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
 
@@ -521,7 +530,60 @@ port_monthly <- aggrport2 |>
 # spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
 # saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
 
+```
+
+
+```{r}
+#| label: estimate-slv-simple
+
+port_monthly
+
+data <- port_monthly |> 
+  select(date, highequity, highbonds) |> 
+  pivot_longer(cols=c(highequity, highbonds), names_to = "vname", values_to = "lr") |> 
+  arrange(vname, date)
+summary(data)
+
+# run the slv model on each portfolio for all available periods
+# data must have vname, date, and lr columns
+# get_subset
+res2 <- data |> 
+  nest(.by=vname) |> 
+  mutate(gaussmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="gaussian")),
+         tmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="t")),
+         levmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="leverage")),
+         skewmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30",
+                                              modtype="skew_gaussian"))
+         )
+res2
+
+
+# get the model parameters
+params2 <- res2 |> 
+  pivot_longer(cols=contains("mod"), names_to = "modtype", values_to = "mod") |> 
+  mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
+         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
+         aic=map(mod, \(x) AIC(x)) |> unlist(),
+         params=map(summary, \(x) pluck(x, 1)))
+params2
+params2 |> arrange(vname, aic)
+params2 |> unnest(params) |> arrange(vname, parameter, modtype)
 
 ```
 
+
+```{r}
+#| label: slv-predict
+
+m1 <- res2 |> filter(vname=="highbonds") |> pull(gaussmod)
+m2 <- res2 |> filter(vname=="highbonds") |> pull(tmod)
+m3 <- res2 |> filter(vname=="highbonds") |> pull(levmod)
+m4 <- res2 |> filter(vname=="highbonds") |> pull(skewmod)
+
+
+pred2 <- predict(levraw, steps = 360, nsim = 10000, include_parameters = TRUE)
+
+
+
+```
 
