@@ -329,6 +329,7 @@ res
 # get the model parameters
 params <- res |> 
   mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
+         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
          params=map(summary, \(x) pluck(x, 1)))
 params
 
@@ -338,5 +339,7 @@ params |>
   unnest(params) |> 
   select(-type) |> 
   arrange(parameter, vname)
+
+str(params$mod)
 
 ```
