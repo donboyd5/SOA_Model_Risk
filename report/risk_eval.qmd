@@ -346,7 +346,9 @@ riskmeasures1 <- result |>
   select(-c(irmat, mean_rnorm, sd_rnorm)) |> 
   # filter(scenario %in% c("baseline", "phi_m.05")) |> 
   unnest(col=penmod) |> 
-  summarise(vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())),
+  summarise(mean=first(mean_logreturn),
+            sd=first(sd_logreturn),
+            vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())),
             verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())),
             vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())),
             probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())),
@@ -354,7 +356,7 @@ riskmeasures1 <- result |>
             .by=c(scenario, porttype, version))
 
 riskmeasures <- riskmeasures1 |> 
-  pivot_longer(-c(scenario, porttype, version),
+  pivot_longer(-c(scenario, porttype, version, mean, sd),
                names_to = "measure") |> 
   pivot_wider(names_from = version) |> 
   relocate(model, .after = rnormal) |> 
@@ -363,6 +365,9 @@ riskmeasures <- riskmeasures1 |>
   arrange(measure, scenario, porttype)
 
 riskmeasures
+
+riskmeasures |> 
+  arrange(porttype, measure)
 
 ```
 
