@@ -90,10 +90,10 @@ runslv <- function(data, vname, start, end, modtype="leverage"){
 ```
 
 
-## Get and show main ACLI parameters
+## Get, save, and show main ACLI parameters
 
 ```{r}
-#| label: get-params
+#| label: get-save-params
 
 # ddir <- r"(E:\data\soa\acli)"
 # base_dir <- "s_baseline"
@@ -104,9 +104,9 @@ fpath <- fs::path(ddir, base_dir, base_fn)
 ## equity parameters ----
 
 eqparams1 <- read_excel(fpath, sheet="Parameters", range = "H32:M44")
-
+# us=usdiverse, intl=intldiverse, small=intermedrisk, aggr=aggressive
 eqparams <- eqparams1 |> 
-  select(symbol=1, usdiverse=2, intldiverse=3, intermedrisk=4, aggressive=5, desc=6) |> 
+  select(symbol=1, us=2, intl=3, small=4, aggr=5, desc=6) |> 
   filter(row_number() > 1) |> 
   mutate(across(-c(symbol, desc), as.numeric)) |> 
   mutate(vname=case_when(
@@ -132,6 +132,9 @@ intparams <- intparams1 |>
   mutate(default = as.numeric(default))
 
 intparams
+
+saveRDS(list(eqparams=eqparams, intparams=intparams), 
+        here::here("data", "acli_default_parameters.rds"))
 
 ```
 
@@ -340,6 +343,7 @@ res
 params <- res |> 
   mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
          nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
+         aic=map(mod, \(x) AIC(x)) |> unlist(),
          params=map(summary, \(x) pluck(x, 1)))
 # params
 
@@ -370,11 +374,14 @@ params |>
 #| label: compare-parameters
 #| output: false
 
+plist <- readRDS(here::here("data", "acli_default_parameters.rds"))
+plist
+
 # prep ACLI parameters
-eqparams
-eqparams1 <- eqparams |> 
+plist$eqparams
+eqparams1 <- plist$eqparams |> 
   filter(vname %in% c("tau", "phi", "sigma_v", "rho")) |> 
-  select(vname, us=usdiverse, intl=intldiverse, small=intermedrisk, aggr=aggressive, desc) |> 
+  select(vname, us, intl, small, aggr, desc) |> 
   pivot_longer(cols=c(us, intl, small, aggr), names_to = "class", values_to = "param_acli") |> 
   select(parameter=vname, class, param_acli, desc)
 
@@ -392,6 +399,8 @@ params1 <- params |>
     parameter=="sigma_h" ~ "sigma_v",
     .default = parameter
   )) |> 
+  # annualize the long-run volatility estimate (from monthly), and its stderror, then
+  # calc 90% margin of error (using .95 cutpoint) so we can do 90% conf intervals
   mutate(estimate=ifelse(parameter=="tau", estimate * sqrt(12), estimate),
          std_error=ifelse(parameter=="tau", std_error * sqrt(12), std_error),
          moe90=std_error * qnorm(.95)) |> 
@@ -406,9 +415,26 @@ comp <- eqparams1 |>
 
 comp
 
-# z_critical <- qnorm(0.95)  # 1.644854
-# lower_bound <- estimate - z_critical * std_error
+# save as spreadsheet a version that we can easily use in running the ACLI model
+# with columns set just like those in the ACLI model spreadsheet
+# rows should be in order: tau, phi, sigma(v), rho
+# cols should be in order parameter, us, intl, small, aggr, desc
+parm_order <- c("tau", "phi", "sigma_v", "rho")
+cols_order <- c("us", "intl", "small", "aggr")
+meas_order <- c("default", "lbound", "ubound")
 
+scenarios_ordered <- comp |> 
+  select(parameter, class, default=param_acli, lbound=lbound_acli, ubound=ubound_acli, desc) |> 
+  pivot_longer(cols=c(default, lbound, ubound), names_to = "measure") |> 
+  mutate(parameter=factor(parameter, levels=parm_order),
+         class=factor(class, levels=cols_order),
+         measure=factor(measure, levels=meas_order)) |> 
+  arrange(class) |> 
+  pivot_wider(names_from=class) |> 
+  arrange(parameter, measure) |> 
+  relocate(desc, .after = last_col())
+
+writexl::write_xlsx(scenarios_ordered, here::here("data", "equity_scenarios_ordered.xlsx"))
 
 ```
 
@@ -448,6 +474,17 @@ comp |>
 ```
 
 
+The next table shows scenarios in a way that will be easy to use to run ACLI variants.
+
+```{r}
+#| label: show-scenarios
+
+scenarios_ordered |> 
+  kable()
+
+```
+
+
 ## Next steps
 
 My plan is to replace the arbitrary scenarios I ran for our last POG meeting with the following "principled" scenarios based on the lower and upper bounds estimated above:
@@ -480,6 +517,8 @@ Get assets needed to construct two equity-bonds portfolios: 70-30 and 30-70.
 
 ```{r}
 #| label: get-assets
+#| eval: false
+#| output: false
 
 # MSCI All Country World Index (ACWI): This index captures large and mid-cap
 # representation across 23 Developed Markets and 24 Emerging Markets countries,
@@ -510,16 +549,6 @@ ht(aggrport2)
 
 saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 
-port_monthly <- aggrport2 |> 
-  mutate(ldom=ldom(date)) |> 
-  group_by(ldom) |> 
-  filter(date==max(date)) |> 
-  select(date=ldom, eqprice=equity_portassets, bondprice=bonds_portassets) |> 
-  ungroup() |>  
-  mutate(vname="simport", 
-         src="portfolio",
-         highequity=log(eqprice / lag(eqprice)),
-         highbonds=log(bondprice / lag(bondprice)))
 
 # getSymbols("^INSYBUC", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
 
@@ -532,9 +561,24 @@ port_monthly <- aggrport2 |>
 
 ```
 
+## Estimate 4 SLV models, each for 2 portfolios, and recover parameters
 
 ```{r}
 #| label: estimate-slv-simple
+
+# get previously saved assets and construct log returns ----
+port_monthly1 <- readRDS(here::here("data", "simportfolios_rawdaily.rds"))
+
+port_monthly <- port_monthly1 |> 
+  mutate(ldom=ldom(date)) |> 
+  group_by(ldom) |> 
+  filter(date==max(date)) |> 
+  select(date=ldom, eqprice=equity_portassets, bondprice=bonds_portassets) |> 
+  ungroup() |>  
+  mutate(vname="simport", 
+         src="portfolio",
+         highequity=log(eqprice / lag(eqprice)),
+         highbonds=log(bondprice / lag(bondprice)))
 
 port_monthly
 
@@ -542,6 +586,7 @@ data <- port_monthly |>
   select(date, highequity, highbonds) |> 
   pivot_longer(cols=c(highequity, highbonds), names_to = "vname", values_to = "lr") |> 
   arrange(vname, date)
+data
 summary(data)
 
 # run the slv model on each portfolio for all available periods
@@ -549,12 +594,14 @@ summary(data)
 # get_subset
 res2 <- data |> 
   nest(.by=vname) |> 
-  mutate(gaussmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="gaussian")),
-         tmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="t")),
-         levmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="leverage")),
-         skewmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30",
-                                              modtype="skew_gaussian"))
-         )
+  mutate(gaussmod=purrr::map(
+    data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="gaussian")),
+    tmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="t")),
+    levmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30",
+                                        modtype="leverage")),
+    skewmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30",
+                                         modtype="skew_gaussian"))
+    )
 res2
 
 
@@ -565,24 +612,83 @@ params2 <- res2 |>
          nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
          aic=map(mod, \(x) AIC(x)) |> unlist(),
          params=map(summary, \(x) pluck(x, 1)))
-params2
+# params2
 params2 |> arrange(vname, aic)
 params2 |> unnest(params) |> arrange(vname, parameter, modtype)
+params2 |> unnest(params) |> arrange(vname, modtype, parameter)
 
 ```
 
 
+## Predict 10,000 simulations from each of the 8 models
+
 ```{r}
 #| label: slv-predict
 
-m1 <- res2 |> filter(vname=="highbonds") |> pull(gaussmod)
-m2 <- res2 |> filter(vname=="highbonds") |> pull(tmod)
-m3 <- res2 |> filter(vname=="highbonds") |> pull(levmod)
-m4 <- res2 |> filter(vname=="highbonds") |> pull(skewmod)
+# predict and convert to annual, for input to pension model
 
 
-pred2 <- predict(levraw, steps = 360, nsim = 10000, include_parameters = TRUE)
+# m1 <- res2 |> filter(vname=="highbonds") |> pull(gaussmod)
+# m2 <- res2 |> filter(vname=="highbonds") |> pull(tmod)
+# m3 <- res2 |> filter(vname=="highbonds") |> pull(levmod)
+# m4 <- res2 |> filter(vname=="highbonds") |> pull(skewmod)
+# 
+# 
+# pred2 <- predict(m1[[1]], steps = 360, nsim = 10000, include_parameters = TRUE)
+# class(pred2)
+# names(pred2)
+# str(pred2)
 
+# pm1 <- simulate_parameters(m1[[1]], nsim = 1000) # get 1000 sets of parameters
+
+sims <- params2 |>
+  filter(!(modtype=="tmod" & vname=="highbonds")) |> # error 'Sigma' is not positive definite
+  select(vname, modtype, mod) |> 
+  mutate(pred=purrr::map(mod,
+                         \(x) predict(x, steps=360, nsim = 10000, include_parameters = TRUE)),
+         y=purrr::map(pred, \(x) pluck(x, "y") |> t()))
+sims
+
+saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
+
+# collapse
+
+
+
+sims |> 
+  mutate(nrows=purrr::map(y, \(x) dim(x)[1]) |> unlist(),
+         ncols=purrr::map(y, \(x) dim(x)[2]) |> unlist(),
+         mean=purrr::map(y, \(x) mean(x) |> unlist())) |> 
+  unnest(col=mean)
+
+
+
+
+
+# tmp <- sims |> 
+#   filter(row_number()==1) |> 
+#   mutate(yt=map(y, \(x) t(x)))
+#   pull(y)
+
+
+# str(sims$pred[1])
+# tmp <- sims |>   mutate(y=purrr::map(pred, \(x) pluck(x, "y")))
+
+# str(tmp$y[1])
+
+# sim_sv(
+#   param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+#   nobs = 1000L,
+#   seed = NULL,
+#   model = "gaussian"
+# )
+
+# sim_sv(
+#   param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+#   nobs = 1000L,
+#   seed = NULL,
+#   model = "gaussian"
+# )
 
 
 ```
