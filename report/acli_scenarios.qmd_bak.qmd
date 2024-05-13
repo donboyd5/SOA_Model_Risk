@@ -61,40 +61,51 @@ HY.csv, U.S. Corporate high yield (Below investment grade)
 
 
 # alternative parameter runs ----
+# equity tau -- long-run target volatility
+tau_m.05_dir <- "s_tau_m.05" # default minus .05
+tau_p.05_dir <- "s_tau_p.05" # default plus .05
+tau_p.10_dir <- "s_tau_p.10" # default plus .10
 
-# E:\data\soa\acli_report
+# equity phi -- strength of mean reversion in volatility
+phi_m.05_dir <- "s_phi_m.05" # default minus 0.05
+phi_p.05_dir <- "s_phi_p.05" # default plus 0.05
 
-runs <- paste0(c("phi", "tau", "sigma_v"), "_", c("lbound", "ubound"))
+phi_m.20_dir <- "s_phi_m.20" # default minus 0.20
+phi_p.20_dir <- "s_phi_p.20" # default plus 0.20
 
-parms <- c("phi", "tau", "sigma_v")
-types <- c("lbound", "ubound")
-runs <- outer(parms, types, paste, sep = "_") |> as.vector()
-(runs <- setNames(runs, runs))
+# equity sigma(v) -- monthly standard deviation of the log volatility process
+sigmav_m.05_dir <- "s_sigmav_m.05" # default minus .05
+sigmav_p.05_dir <- "s_sigmav_p.05" # default plus .05
 
-scen_names <- tibble(scenario=runs) |> 
-  mutate(temp=str_replace(scenario, "_lbound", "__lbound"),
-         temp=str_replace(temp, "_ubound", "__ubound")) |> 
-  separate(temp, c("parm", "bound"), sep="__") |> 
-  add_row(scenario="baseline", parm="baseline") |> 
-  mutate(parmdesc=case_when(
-    parm=="baseline" ~ "Baseline",
-    parm=="phi" ~ "Speed of mean reversion in volatility (phi)",
-    parm=="sigma_v" ~ "Monthly sd of the log volatility process (sigma(v))",
-    parm=="tau" ~ "Target volatility (tau)")) |> 
-  mutate(scendesc=case_when(
-    bound=="lbound" ~ paste0(parmdesc, ": reduced to lower bound of 90% CI"),
-    bound=="ubound" ~ paste0(parmdesc, ": increased to upper bound of 90% CI"),
-    scenario=="baseline" ~ "Baseline"))
-scen_names
+# equity rho -- Correlation to random shock to vol and random return component
+rho_m.05_dir <- "s_rho_m.05" # default minus .05
+rho_p.05_dir <- "s_rho_p.05" # default plus .05
+rho_zero_dir <- "s_rho_zero" # rho set to zero
 
-saveRDS(scen_names, here::here("data", "acli_scenario_names.rds"))
-
-# scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
-
-
-# TO COME: interest rate paremeterization directories ----
+# interest rate paremeterization directories ----
 itau1_m.50_dir <- "s_itau1_m.50" # default minus .50
 itau1_p.50_dir <- "s_itau1_p.50" # default plus .50
+
+# parameterizations and descriptions ----
+scen_names1 <- "
+baseline, Baseline
+tau_m.05, Target volatility (tau): reduced by .05 for each equity fund
+tau_p.05, Target volatility (tau): increased by .05 for each equity fund
+tau_p.10, Target volatility (tau): increased by .10 for each equity fund
+phi_m.05, Speed of mean reversion in volatility (phi): reduced by .05 for each equity fund
+phi_p.05, Speed of mean reversion in volatility (phi): increased by .05 for each equity fund
+phi_m.20, Speed of mean reversion in volatility (phi): reduced by .20 for each equity fund
+phi_p.20, Speed of mean reversion in volatility (phi): increased by .20 for each equity fund
+sigmav_m.05, Monthly sd of the log volatility process (sigma(v)): reduced by .05 for each equity fund
+sigmav_p.05, Monthly sd of the log volatility process (sigma(v)): increased by .05 for each equity fund
+rho_m.05, Correlation of random volatility shock vol and random return component (rho): reduced by .05 for each equity fund
+rho_p.05, Correlation of random volatility shock and random return component (rho): increased by .05 for each equity fund
+rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
+itau1_p.50, Mean reversion point for the long rate (tau1): increased by 0.50
+itau1_m.50, Mean reversion point for the long rate (tau1): reduced by 0.50
+"
+(scen_names <- read_csv(scen_names1, col_names = c("scenario", "scendesc")))
+saveRDS(scen_names, here::here("data", "acli_scenario_names.rds"))
 
 # rho_zero, Correlation to random shock to vol and random return component (rho) set to zero for each equity fund
 
@@ -135,20 +146,71 @@ Gang, running this next chunk gets all of the ACLI scenarios I created using the
 #| label: get-data
 #| output: false
 
-f <- function(dirname, fnames){
-  print(dirname)
-  dirget(dirname, fnames) |> 
-    mutate(sim=row_number(), .by=fname)
-}
+# baseline ----
+base <- dirget(base_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+# count(df1, sim) |> ht()
 
-stack <- purrr::map(scen_names$scenario, \(x) f(x, fnames)) |> 
-  list_rbind()|> 
+# equity parameters ----
+taum <- dirget(tau_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup <- dirget(tau_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+taup10 <- dirget(tau_p.10_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim05 <- dirget(phi_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip05 <- dirget(phi_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phim20 <- dirget(phi_m.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+phip20 <- dirget(phi_p.20_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+sigmavm <- dirget(sigmav_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+sigmavp <- dirget(sigmav_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhom <- dirget(rho_m.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhop <- dirget(rho_p.05_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+rhoz <- dirget(rho_zero_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+# interest rate parameters ----
+itaum <- dirget(itau1_m.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+itaup <- dirget(itau1_p.50_dir, fnames) |> 
+  mutate(sim=row_number(), .by=fname)
+
+
+stack <- bind_rows(base, 
+                   # equity fund parameterizations
+                   taum, taup, taup10,
+                   phim05, phip05,
+                   phim20, phip20,
+                   sigmavm, sigmavp,
+                   rhom, rhop, rhoz,
+                   # interest rate parameterizations
+                   itaum, itaup
+                   ) |> 
   mutate(fnbase=path_ext_remove(fname) |> str_to_lower())
 glimpse(stack)
-
+summary(stack) # make sure there are no NAs or oddball values (neg assets, for example)
 count(stack, scenario)
-count(stack, fnbase, fname, fdesc)
-count(stack, sim) |> ht()
+count(stack, fname, fnbase)
 
 # create a  long version of the stacked file, with year starting at 0
 slong <- stack |> 
@@ -165,13 +227,6 @@ slong <- stack |>
 
 glimpse(slong)
 saveRDS(slong, here::here("data", "acli_scenarios.rds"))
-
-count(slong, scenario)
-count(slong, fnbase, fdesc)
-
-slong |> 
-  filter(fnbase=="fixed", year %in% 0:3, sim %in% 1:3) |> 
-  arrange(year)
 
 
 ```

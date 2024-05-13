@@ -172,6 +172,7 @@ AIRG used the following data. ACLI used the same data as AIRG for equities.
 spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
 saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
 
+
 ## Diversified International Equity ----
 # MSCI-EAFE $USD Total Return Index, 1969.12 – 2003.12
 # MSCI EAFE (Europe, Australasia and Far East) Index - This is a broad index that represents the performance of large and mid-cap stocks across 21 developed markets, excluding the U.S. and Canada. It covers approximately 85% of the free float-adjusted market capitalization in each country.
@@ -331,6 +332,7 @@ saveRDS(stack, here::here("data", "airg_equities.rds"))
 stack <- readRDS(here::here("data", "airg_equities.rds"))
 glimpse(stack)
 ht(stack)
+count(stack, vname, src)
 
 # run the slv model on each asset, for a particular time period
 # data must have vname, date, and lr columns

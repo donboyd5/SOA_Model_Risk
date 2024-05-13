@@ -43,7 +43,7 @@ result |>
 
 result |> 
   select(-irmat) |> 
-  filter(scenario=="phi_m.05") |> 
+  filter(scenario=="baseline") |> 
   unnest(col=penmod) |> 
   ht()
 
@@ -96,7 +96,8 @@ Observations:
 tabdata |> 
   relocate(rnormal, .before=model) |> 
   mutate(diff_vsrnorm=model - rnormal) |> 
-  left_join(scen_names, by = join_by(scenario)) |> 
+  left_join(scen_names |> 
+              select(scenario, scendesc), by = join_by(scenario)) |> 
   relocate(scendesc) |> 
   arrange(desc(diff_vsrnorm)) |> 
   gt() |> 
@@ -348,8 +349,8 @@ riskmeasures1 <- result |>
   summarise(vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())),
             verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())),
             vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())),
-            probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=test),
-            proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=test),
+            probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())),
+            proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())),
             .by=c(scenario, porttype, version))
 
 riskmeasures <- riskmeasures1 |> 
@@ -367,18 +368,40 @@ riskmeasures
 
 ## Tables summarizing risk measures
 
-
-### High equity portfolios
+### Gang Table 1
 
 ```{r}
-#| label: heq-portfolios
+#| label: gang-table-1
 
-riskmeasures |> 
-  filter(porttype=="highequity", !str_starts(measure, "prob")) |> 
-  gt()
+norms <- riskmeasures |> 
+  filter(scenario=="baseline") |> 
+  select(scenario, porttype, measure, rnormal)  |> 
+  mutate(type="normal") |> 
+  pivot_wider(names_from = measure, values_from = rnormal)
+
+mods <- riskmeasures |> 
+  filter(scenario=="baseline") |> 
+  select(scenario, porttype, measure, model)  |> 
+  mutate(type="model") |> 
+  pivot_wider(names_from = measure, values_from = model)
+
+tots <- bind_rows(norms, mods) |> 
+  arrange(desc(type), porttype)
+
+tots |> 
+  select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
+  arrange(porttype, desc(type)) |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Baseline Runs of ESG Model"),
+    subtitle = html("Normal returns have same mean and SD as ESG model")
+  ) |>
+  cols_label(porttype="Portfolio type",
+             type = html("Random normal<br>or<br>modeled returns"),
+             vloss_a95t10 = html("VaR asset loss in 10 years"),
+             verc_a95t10 = html("VaR contribution increase in 10 years"),
+             probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
+  fmt_number(columns = c(vloss_a95t10, verc_a95t10, probfr_fr70t10),
+             decimals = 3)
 
 ```
-
-
-
-
