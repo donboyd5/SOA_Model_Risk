@@ -29,11 +29,11 @@ book:
       chapters:
       # - esg.qmd # not ready yet
       - slv.qmd
-      - acli_scenarios.qmd
+      - get_acli_scenarios.qmd
     - part: "Portfolios"
       chapters: 
-        - portfolios.qmd
-        - add_normal_comparison.qmd
+        - create_acli_portfolios.qmd
+        - add_comparison_returns.qmd
     - part: "Pension model"
       chapters:
       - penmod.qmd

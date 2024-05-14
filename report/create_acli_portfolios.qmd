@@ -113,3 +113,85 @@ y30 <- portfolios |>
 y30 |> arrange(desc(asset))
 
 ```
+
+
+## Graph of means and standard deviations of scenarios and portfolios
+
+Note that:
+
+-   Returns and volatility generally are greater for the high equity portfolio than the high fixed portfolio
+-   sigma_v (volatility of volatility) 90% MOE variation is much greater than variation for other parameters
+-   tau variation is next greatest
+-   phi variation is minimal
+-   sigma_v has big impacts on both mean and standard deviation; other parameters have far greater impact on sd than on mean
+
+```{r}
+#| label: get-plot-data
+
+# df <- readRDS(here::here("data", "acli_and_comparison_portfolios.rds"))
+
+portfolios <- readRDS(here::here("data", "acli_portfolios.rds"))
+
+df <- portfolios |> 
+  filter(year != 0) |> 
+  summarise(mean=mean(logreturn),
+            sd=sd(logreturn),
+            .by=c(scenario, porttype))
+
+```
+
+```{r}
+#| label: scenario-portfolio-plot
+#| output: true
+
+df |> 
+  ggplot(aes(mean, sd, colour=porttype, label=scenario)) +
+  geom_point() +
+  geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) +
+  scale_color_manual(values=c("red", "blue")) +
+  scale_x_continuous(name="mean", 
+                     breaks = seq(0, 1, .0025),
+                     labels = scales::percent_format(accuracy = .01)) +
+  scale_y_continuous(name="standard deviation", 
+                     breaks = seq(0, 1, .01),
+                     labels = scales::percent_format(accuracy = .1)) +
+  ggtitle(label = "Mean and standard deviation for ACLI scenarios",
+          subtitle = "ACLI scenarios and portfolios") +
+  guides(col= guide_legend(title= "Portfolio\ntype")) +
+  theme_bw()
+
+
+```
+
+
+## More readable plot
+
+Drop the rho scenarios as they do not vary from baseline.
+
+Plot just the high equity portfolio, for greater readability.
+
+
+```{r}
+#| label: scenario-portfolio-panel-plots
+#| output: true
+
+df |> 
+  filter(!str_detect(scenario, "rho"), porttype=="highequity") |> 
+  ggplot(aes(mean, sd, label=scenario)) +
+  geom_point(colour="blue") +
+  geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15, colour="blue") +
+  # scale_color_manual(values=c("red", "blue")) +
+  scale_x_continuous(name="mean", 
+                     breaks = seq(0, 1, .0025),
+                     labels = scales::percent_format(accuracy = .01)) +
+  scale_y_continuous(name="standard deviation", 
+                     breaks = seq(0, 1, .01),
+                     labels = scales::percent_format(accuracy = .1)) +
+  ggtitle(label = "Mean and standard deviation for ACLI scenarios",
+          subtitle = "ACLI scenarios and portfolios") +
+  theme_bw()
+
+
+```
+
+
