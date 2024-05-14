@@ -387,6 +387,7 @@ riskmeasures1 <- result |>
             vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())),
             probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())),
             proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())),
+            mdn_frt10=median(fr[year==10]),
             .by=c(scenario, porttype, modtype))
 
 riskmeasures <- riskmeasures1 |> 
@@ -406,11 +407,16 @@ riskmeasures
 riskmeasures |> 
   arrange(porttype, measure, scenario)
 
+riskmeasures |> 
+  filter(scenario=="baseline", porttype=="highequity")
+
 ```
 
 ## Model structure risk
 
 To what extent does the choice of models (baseline vs random log model vs ACLI-modeled) change the model output?
+
+NOTE: maybe add pure asset measure w/o contribs or payouts
 
 ### Gang Table 1
 
@@ -418,7 +424,8 @@ To what extent does the choice of models (baseline vs random log model vs ACLI-m
 #| label: gang-table-1
 
 mod_order <- c("constant", "rnormal", "acli")
-meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
+# meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
 base_flipped <- riskmeasures |> 
   filter(scenario=="baseline", measure %in% meas_order) |> 
@@ -431,7 +438,7 @@ base_flipped <- riskmeasures |>
   arrange(porttype, type)
   
 base_flipped |> 
-  select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
+  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
   arrange(porttype, type) |> 
   gt() |> 
   tab_header(
@@ -442,10 +449,11 @@ base_flipped |>
              type = html("Random normal<br>or<br>modeled returns"),
              vloss_a95t10 = html("VaR asset loss in 10 years"),
              verc_a95t10 = html("VaR contribution increase in 10 years"),
-             probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
+             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
+             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
   fmt_number(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 3) |> 
-  fmt_percent(columns = probfr_fr70t10,
+  fmt_percent(columns = mdn_frt10,
               decimals = 1)
 
 ```
@@ -453,8 +461,76 @@ base_flipped |>
 
 ## Model parameterization risk
 
+To what extent do changes in parameterization change model outputs?
+
+Same portfolio, Same ACLI model, Same mean, Same SD
+5-yr VaR loss 5-fr VaR erc 10-yr FR
+
+
+
+
 ```{r}
 #| label: model-parameterization-risk
+#| output: false
+
+scen_names
+
+scen_order <- scen_names |> 
+  arrange(parm, bound)
+
+# meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+
+flipped <- riskmeasures |> 
+  filter(measure %in% meas_order) |> 
+  select(porttype, scenario, measure, acli) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order
+  arrange(measure) |>
+  pivot_wider(names_from = measure, values_from = acli) |> 
+  mutate(scenario=factor(scenario, levels=scen_order$scenario)) |> 
+  arrange(porttype, scenario) |> 
+  left_join(scen_order |> select(scenario, scendesc),
+            by = join_by(scenario)) |> 
+  relocate(scendesc, .after=scenario)
+
+flipped  
+
+```
+
+
+```{r}
+#| label: show-parameter-risk
+
+flipped |> 
+  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
+  arrange(porttype, scenario) |> 
+  gt() |> 
+  cols_hide(column=porttype) |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Parameterizations of an ESG Model"),
+    subtitle = html("High equity and high bonds portfolios")
+  ) |>
+  cols_label(porttype="Portfolio type",
+             scenario="Parameterization",
+             scendesc="Description",
+             # type = html("Random normal<br>or<br>modeled returns"),
+             vloss_a95t10 = html("VaR asset loss in 10 years"),
+             verc_a95t10 = html("VaR contribution increase in 10 years"),
+             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
+             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
+  tab_row_group(
+    label = "High equity portfolio",
+    rows = porttype == "highequity"
+  ) |> 
+  tab_row_group(
+    label = "High bonds portfolio",
+    rows = porttype == "highfixed"
+  ) |> 
+  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 3) |> 
+  fmt_percent(columns = mdn_frt10,
+              decimals = 1)
 ```
 
 
