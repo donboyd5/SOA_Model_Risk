@@ -39,7 +39,7 @@ book:
       - penmod.qmd
     - part: "Risk evaluation"
       chapters:
-      - risk_eval.qmd      
+      - risk_evaluation.qmd      
     - part: "Appendix"
       chapters:
       - appendix_model_returns.qmd

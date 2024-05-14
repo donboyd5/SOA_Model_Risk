@@ -408,7 +408,9 @@ riskmeasures |>
 
 ```
 
-## Tables summarizing risk measures
+## Model structure risk
+
+To what extent does the choice of models (baseline vs random log model vs ACLI-modeled) change the model output?
 
 ### Gang Table 1
 
@@ -447,3 +449,12 @@ base_flipped |>
               decimals = 1)
 
 ```
+
+
+## Model parameterization risk
+
+```{r}
+#| label: model-parameterization-risk
+```
+
+
