@@ -653,8 +653,8 @@ sims
 
 saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
 
-# collapse
-
+# collapse to 30 years
+saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
 
 
 sims |> 

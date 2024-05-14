@@ -108,7 +108,9 @@ get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
 
 rnorm_prep <- port_stats |> 
   rowwise() |> 
-  mutate(rnormal=get_normal(mean_logreturn, sd_logreturn, nsims, nyears) |> list()) |> 
+  mutate(
+    constant=matrix(data=mean_logreturn, nrow=nsims, ncol=nyears) |> list(),
+    rnormal=get_normal(mean_logreturn, sd_logreturn, nsims, nyears) |> list()) |> 
   mutate(mean_rnorm=pluck(rnormal, "mean_norm"),
          sd_rnorm=pluck(rnormal, "sd_norm"),
          irmat=pluck(rnormal, "ir_norm") |> list(),
