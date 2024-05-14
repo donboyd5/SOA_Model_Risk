@@ -33,16 +33,18 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 #| output: false
 
 # result <- readRDS(here::here("data", "penmod_results.rds"))
-result <- readRDS(here::here("data", "acli_normal_penmod.rds"))
+result <- readRDS(here::here("data", "acli_and_comparison_penmod.rds"))
 
 result
 
 result |> 
-  select(-irmat) |> 
-  unnest(penmod)
+  slice_head(n=2) |> 
+  select(-lrmat) |> 
+  unnest(penmod) |> 
+  ht()
 
 result |> 
-  select(-irmat) |> 
+  select(-lrmat) |> 
   filter(scenario=="baseline") |> 
   unnest(col=penmod) |> 
   ht()
@@ -53,27 +55,30 @@ result |>
 
 Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years.
 
-### Comparison of modeled investment returns to random normal returns
-
-
 ```{r}
 #| label: explore-data
 
 tabdata <- result |> 
-  select(-c(irmat, mean_rnorm, sd_rnorm)) |> 
-  # filter(scenario %in% c("baseline", "phi_m.05")) |> 
+  filter(!str_detect(scenario, "rho")) |> 
+  select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |> 
   unnest(col=penmod) |> 
   filter(year==30) |> 
   summarise(
-    mean_logreturn=first(mean_logreturn),
-    sd_logreturn=first(sd_logreturn),
-    frmdn=median(fr), .by=c(scenario, porttype, version)) |> 
-  pivot_wider(names_from = version, values_from = frmdn)
+    mean_model=first(mean_model),
+    sd_model=first(sd_model),
+    frmdn=median(fr), .by=c(scenario, porttype, modtype)) |> 
+  pivot_wider(names_from = modtype, values_from = frmdn) |> 
+  select(porttype, scenario, mean_model, sd_model, constant, rnormal, acli)
+
+# tabdata |> 
+#   arrange(porttype, scenario) |> 
+#   kable(digits=3)
 
 ```
 
+### Year 30 median funded ratio, modeled investment returns, deterministic, and random normal returns
 
-This table compares, for each scenario, the median funded ratio at 30 years using ACLI-modeled investment return to the funded ratio using a random normal distribution with the same mean and standard deviatio. It is sorted by the largest difference in median funded ratio between modeled and random normal returns.
+This table compares, for each scenario, the median funded ratio at 30 years using ACLI-modeled investment return to the funded ratio using a random normal distribution with the same mean and standard deviation. It is sorted by the largest difference in median funded ratio between modeled and random normal returns.
 
 Observations:
 
@@ -85,34 +90,32 @@ Observations:
 
 -   The difference is much greater for the high fixed-income portfolio than for the high equity portfolio. In these portfolios, mean returns (and standard deviations) are lower than in the high equity portfolios and so median funded ratios are lower as well, but this doesn't explain why the difference from random normal would be large.
 
--   I am not sure why the differences from random normal are larger with the high fixed portfolios. If we had time it would make sense to try to figure out what the ACLI model is doing that has a bigger impact when fixed income plays a bigger role.
-
-
 
 ```{r}
 #| label: explore-table
 #| output: true
 
-tabdata |> 
-  relocate(rnormal, .before=model) |> 
-  mutate(diff_vsrnorm=model - rnormal) |> 
+tabdata |>  
+  arrange(porttype, scenario) |> 
+  mutate(diff_vsrnorm=acli - rnormal) |> 
   left_join(scen_names |> 
               select(scenario, scendesc), by = join_by(scenario)) |> 
   relocate(scendesc) |> 
   arrange(desc(diff_vsrnorm)) |> 
   gt() |> 
   tab_header(
-    title = html("Median funded ratio at 30 years for different scenarios and portfolio types"),
-    subtitle = html("Modeled portfolio and random normal counter part (same mean, sd)")
+    title = html("Median funded ratio at 30 years for different scenarios and portfolio types - sorted by difference from normal"),
+    subtitle = html("Modeled portfolio, deterministic (same mean, sd=0), and random normal (same mean, sd)")
   ) |>
-  tab_spanner(columns = contains("_logreturn"),
-              label="Portfolio log returns") |>
-  tab_spanner(columns = c(rnormal, model, diff_vsrnorm),
+  tab_spanner(columns = contains("_model"),
+              label="Portfolio mean and sd of log returns") |>
+  tab_spanner(columns = c(constant, rnormal, acli, diff_vsrnorm),
               label="Median funded ratio at 30 years") |>
-  cols_label(mean_logreturn="mean",
-             sd_logreturn="sd",
+  cols_label(mean_model="mean",
+             sd_model="sd",
+             constant="Deterministic",
              rnormal=html("Random<br>normal"),
-             model = html("Model"),
+             acli = html("Model"),
              diff_vsrnorm = html("Model<br>minus<br>normal")) |>
   fmt_percent(columns=-c(scendesc, scenario, porttype),
              scale=1,
@@ -121,121 +124,158 @@ tabdata |>
 
 ```
 
+### Year 30 median funded ratio, comparison to baseline for same portfolio type and model type
+
+Modeled investment returns, deterministic, and random normal returns
+
+Here the funded ratio baseline is median FR in year 30 for baseline scenario with random normal returns, for the same portfolio type.
+
+frmdn is the median FR in year 30 for the ACLI model.
+
+frdiff is model minus baseline (random normal).
+
+Probably need to think about a better way to compare to baseline.
 
 ```{r}
-#| label: explore-plot
 
-
-tabdata |> 
-  ggplot(aes(rnormal, model, colour=porttype, label=scenario)) +
-  geom_point() +
-  # geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) +
-  geom_text(vjust = -0.5, hjust = 0.5) +
-  geom_abline(slope=1) +
-  scale_color_manual(values=c("red", "blue")) +
-  scale_x_continuous(name="Funded ratio with random normal returns corresponding to model (same mean, sd)", 
-                     breaks = seq(0, 1, .05),
-                     labels = scales::percent_format(accuracy = .1)) +
-  scale_y_continuous(name="Funded ratio with ACLI-modeled returns", 
-                     breaks = seq(0, 1, .05),
-                     labels = scales::percent_format(accuracy = .1)) +
-  ggtitle(label = "Median funded ratio at 30 years",
-          subtitle = "ACLI scenarios and portfolios") +
-  guides(col= guide_legend(title= "Portfolio\ntype")) +
-  theme_bw()
-
-```
-
-
-### Comparison to baseline for the same portfolio type
-
-
-```{r}
-#| label: explore-baseline-table-data
-#| output: false
-
-tabdata2 <- tabdata |> 
+tabdata <- result |> 
   filter(!str_detect(scenario, "rho")) |> 
-  select(-rnormal) |> 
-  rename(frmdn30=model, mean=mean_logreturn, sd=sd_logreturn) |> 
-  pivot_longer(cols=c(mean, sd, frmdn30),
-               names_to = "measure",
-               values_to = "variant") |> 
-  group_by(porttype, measure) |> 
-  mutate(baseline=variant[scenario=="baseline"]) |> 
+  select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |> 
+  unnest(col=penmod) |> 
+  filter(year==30) |> 
+  summarise(
+    mean_model=first(mean_model),
+    sd_model=first(sd_model),
+    frmdn=median(fr), .by=c(scenario, porttype, modtype)) |> 
+  group_by(porttype) |> 
+  mutate(frbaseline=frmdn[scenario=="baseline" & modtype=="rnormal"],
+         frdiff=frmdn - frbaseline) |> 
+  relocate(frbaseline, .after=sd_model) |> 
   ungroup() |> 
   filter(scenario != "baseline") |> 
-  relocate(variant, .after = baseline) |> 
-  mutate(diff=variant - baseline) |> 
-  pivot_wider(names_from = measure, values_from = c(baseline, variant, diff)) |> 
-  select(-contains("variant")) |> 
-  left_join(scen_names, by = join_by(scenario)) |> 
-  relocate(scendesc) |> 
-  arrange(porttype, desc(diff_frmdn30))
+  arrange(porttype, desc(frdiff))
 
+tabdata |> 
+  kable(digits=3)
+  
 ```
 
 
-#### High-equity portfolio
 
-```{r}
-
-tabdata2 |> 
-  filter(porttype=="highequity") |> 
-  select(-porttype) |> 
-  gt() |>
-  tab_header(
-    title = html("Median funded ratio at 30 years for different scenarios: High equity portfolio"),
-    subtitle = html("Comparison to baseline scenario")
-  ) |>
-  tab_spanner(columns = contains("baseline"),
-              label="Baseline results") |>
-  tab_spanner(columns = contains("diff"),
-              label="Alternative minus baseline") |>
-  cols_label(baseline_mean="mean return",
-             diff_mean="mean return",
-             baseline_sd="sd return",
-             diff_sd="sd return",
-             baseline_frmdn30=html("Funded ratio<br>year 30"),
-             diff_frmdn30=html("Funded ratio<br>year 30")
-             ) |>
-  fmt_percent(columns=-c(scendesc, scenario),
-             scale=1,
-             decimals=1) |>
-  opt_row_striping()
-
-```
+<!-- ```{r} -->
+<!-- #| label: explore-plot -->
 
 
-#### High-fixed portfolio
+<!-- tabdata |>  -->
+<!--   ggplot(aes(rnormal, model, colour=porttype, label=scenario)) + -->
+<!--   geom_point() + -->
+<!--   # geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) + -->
+<!--   geom_text(vjust = -0.5, hjust = 0.5) + -->
+<!--   geom_abline(slope=1) + -->
+<!--   scale_color_manual(values=c("red", "blue")) + -->
+<!--   scale_x_continuous(name="Funded ratio with random normal returns corresponding to model (same mean, sd)",  -->
+<!--                      breaks = seq(0, 1, .05), -->
+<!--                      labels = scales::percent_format(accuracy = .1)) + -->
+<!--   scale_y_continuous(name="Funded ratio with ACLI-modeled returns",  -->
+<!--                      breaks = seq(0, 1, .05), -->
+<!--                      labels = scales::percent_format(accuracy = .1)) + -->
+<!--   ggtitle(label = "Median funded ratio at 30 years", -->
+<!--           subtitle = "ACLI scenarios and portfolios") + -->
+<!--   guides(col= guide_legend(title= "Portfolio\ntype")) + -->
+<!--   theme_bw() -->
 
-```{r}
+<!-- ``` -->
 
-tabdata2 |> 
-  filter(porttype=="highfixed") |> 
-  select(-porttype) |> 
-  gt() |>
-  tab_header(
-    title = html("Median funded ratio at 30 years for different scenarios: High fixed income portfolio"),
-    subtitle = html("Comparison to baseline scenario")
-  ) |>
-  tab_spanner(columns = contains("baseline"),
-              label="Baseline results") |>
-  tab_spanner(columns = contains("diff"),
-              label="Alternative minus baseline") |>
-  cols_label(baseline_mean="mean return",
-             diff_mean="mean return",
-             baseline_sd="sd return",
-             diff_sd="sd return",
-             baseline_frmdn30=html("Funded ratio<br>year 30"),
-             diff_frmdn30=html("Funded ratio<br>year 30")
-             ) |>
-  fmt_percent(columns=-c(scendesc, scenario),
-             scale=1,
-             decimals=1) |>
-  opt_row_striping()
 
-```
+<!-- ### Comparison to baseline for the same portfolio type -->
+
+
+<!-- ```{r} -->
+<!-- #| label: explore-baseline-table-data -->
+<!-- #| output: false -->
+
+<!-- tabdata2 <- tabdata |>  -->
+<!--   filter(!str_detect(scenario, "rho")) |>  -->
+<!--   select(-rnormal) |>  -->
+<!--   rename(frmdn30=model, mean=mean_logreturn, sd=sd_logreturn) |>  -->
+<!--   pivot_longer(cols=c(mean, sd, frmdn30), -->
+<!--                names_to = "measure", -->
+<!--                values_to = "variant") |>  -->
+<!--   group_by(porttype, measure) |>  -->
+<!--   mutate(baseline=variant[scenario=="baseline"]) |>  -->
+<!--   ungroup() |>  -->
+<!--   filter(scenario != "baseline") |>  -->
+<!--   relocate(variant, .after = baseline) |>  -->
+<!--   mutate(diff=variant - baseline) |>  -->
+<!--   pivot_wider(names_from = measure, values_from = c(baseline, variant, diff)) |>  -->
+<!--   select(-contains("variant")) |>  -->
+<!--   left_join(scen_names, by = join_by(scenario)) |>  -->
+<!--   relocate(scendesc) |>  -->
+<!--   arrange(porttype, desc(diff_frmdn30)) -->
+
+<!-- ``` -->
+
+
+<!-- #### High-equity portfolio -->
+
+<!-- ```{r} -->
+
+<!-- tabdata2 |>  -->
+<!--   filter(porttype=="highequity") |>  -->
+<!--   select(-porttype) |>  -->
+<!--   gt() |> -->
+<!--   tab_header( -->
+<!--     title = html("Median funded ratio at 30 years for different scenarios: High equity portfolio"), -->
+<!--     subtitle = html("Comparison to baseline scenario") -->
+<!--   ) |> -->
+<!--   tab_spanner(columns = contains("baseline"), -->
+<!--               label="Baseline results") |> -->
+<!--   tab_spanner(columns = contains("diff"), -->
+<!--               label="Alternative minus baseline") |> -->
+<!--   cols_label(baseline_mean="mean return", -->
+<!--              diff_mean="mean return", -->
+<!--              baseline_sd="sd return", -->
+<!--              diff_sd="sd return", -->
+<!--              baseline_frmdn30=html("Funded ratio<br>year 30"), -->
+<!--              diff_frmdn30=html("Funded ratio<br>year 30") -->
+<!--              ) |> -->
+<!--   fmt_percent(columns=-c(scendesc, scenario), -->
+<!--              scale=1, -->
+<!--              decimals=1) |> -->
+<!--   opt_row_striping() -->
+
+<!-- ``` -->
+
+
+<!-- #### High-fixed portfolio -->
+
+<!-- ```{r} -->
+
+<!-- tabdata2 |>  -->
+<!--   filter(porttype=="highfixed") |>  -->
+<!--   select(-porttype) |>  -->
+<!--   gt() |> -->
+<!--   tab_header( -->
+<!--     title = html("Median funded ratio at 30 years for different scenarios: High fixed income portfolio"), -->
+<!--     subtitle = html("Comparison to baseline scenario") -->
+<!--   ) |> -->
+<!--   tab_spanner(columns = contains("baseline"), -->
+<!--               label="Baseline results") |> -->
+<!--   tab_spanner(columns = contains("diff"), -->
+<!--               label="Alternative minus baseline") |> -->
+<!--   cols_label(baseline_mean="mean return", -->
+<!--              diff_mean="mean return", -->
+<!--              baseline_sd="sd return", -->
+<!--              diff_sd="sd return", -->
+<!--              baseline_frmdn30=html("Funded ratio<br>year 30"), -->
+<!--              diff_frmdn30=html("Funded ratio<br>year 30") -->
+<!--              ) |> -->
+<!--   fmt_percent(columns=-c(scendesc, scenario), -->
+<!--              scale=1, -->
+<!--              decimals=1) |> -->
+<!--   opt_row_striping() -->
+
+<!-- ``` -->
 
 
 
@@ -258,12 +298,6 @@ Put the functions here for now. Later put them in a separate file.
 # Note: Monte Carlo simulation method for VaR: Under the Monte Carlo method, Value at Risk is calculated by randomly 
 # creating a number of scenarios for future rates to estimate the change in value for each scenario, 
 # and then calculating the VaR according to the worst losses.
-
-# test data
-test <- result |> 
-  filter(scenario=="baseline", porttype=="highequity", version=="model") |> 
-  select(scenario, porttype, version, mean_logreturn, sd_logreturn, penmod) |> 
-  unnest(penmod)
 
 VaR_loss <- function(alpha, t, res) {
   # Worst (alpha percentile) asset loss at the end of year 5
@@ -343,31 +377,34 @@ prob_erc <- function(erc_threshold, t, res) {
 #| output: false
 
 riskmeasures1 <- result |> 
-  select(-c(irmat, mean_rnorm, sd_rnorm)) |> 
-  # filter(scenario %in% c("baseline", "phi_m.05")) |> 
+  filter(!str_detect(scenario, "rho")) |> 
+  select(-c(lrmat, mean, sd)) |> 
   unnest(col=penmod) |> 
-  summarise(mean=first(mean_logreturn),
-            sd=first(sd_logreturn),
+  summarise(mean=first(mean_model),
+            sd=first(sd_model),
             vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())),
             verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())),
             vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())),
             probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())),
             proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())),
-            .by=c(scenario, porttype, version))
+            .by=c(scenario, porttype, modtype))
 
 riskmeasures <- riskmeasures1 |> 
-  pivot_longer(-c(scenario, porttype, version, mean, sd),
+  pivot_longer(-c(scenario, porttype, modtype, mean, sd),
                names_to = "measure") |> 
-  pivot_wider(names_from = version) |> 
-  relocate(model, .after = rnormal) |> 
+  pivot_wider(names_from = modtype) |> 
+  relocate(acli, .after = rnormal) |> 
   relocate(measure) |> 
-  mutate(diff=model - rnormal) |> 
+  mutate(diff=acli - rnormal) |> 
+  left_join(scen_names |> 
+              select(scenario, scendesc), by = join_by(scenario)) |> 
+  relocate(scendesc) |> 
   arrange(measure, scenario, porttype)
 
 riskmeasures
 
 riskmeasures |> 
-  arrange(porttype, measure)
+  arrange(porttype, measure, scenario)
 
 ```
 
@@ -378,24 +415,22 @@ riskmeasures |>
 ```{r}
 #| label: gang-table-1
 
-norms <- riskmeasures |> 
-  filter(scenario=="baseline") |> 
-  select(scenario, porttype, measure, rnormal)  |> 
-  mutate(type="normal") |> 
-  pivot_wider(names_from = measure, values_from = rnormal)
+mod_order <- c("constant", "rnormal", "acli")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
 
-mods <- riskmeasures |> 
-  filter(scenario=="baseline") |> 
-  select(scenario, porttype, measure, model)  |> 
-  mutate(type="model") |> 
-  pivot_wider(names_from = measure, values_from = model)
-
-tots <- bind_rows(norms, mods) |> 
-  arrange(desc(type), porttype)
-
-tots |> 
+base_flipped <- riskmeasures |> 
+  filter(scenario=="baseline", measure %in% meas_order) |> 
+  select(porttype, measure, constant, rnormal, acli) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, acli), names_to = "type") |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  mutate(type=factor(type, levels=mod_order)) |> 
+  arrange(porttype, type)
+  
+base_flipped |> 
   select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
-  arrange(porttype, desc(type)) |> 
+  arrange(porttype, type) |> 
   gt() |> 
   tab_header(
     title = html("Selected Risk Measures for Baseline Runs of ESG Model"),
@@ -406,7 +441,9 @@ tots |>
              vloss_a95t10 = html("VaR asset loss in 10 years"),
              verc_a95t10 = html("VaR contribution increase in 10 years"),
              probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
-  fmt_number(columns = c(vloss_a95t10, verc_a95t10, probfr_fr70t10),
-             decimals = 3)
+  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 3) |> 
+  fmt_percent(columns = probfr_fr70t10,
+              decimals = 1)
 
 ```

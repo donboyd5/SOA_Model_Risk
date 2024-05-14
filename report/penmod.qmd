@@ -46,7 +46,7 @@ source(here::here("report", "function_penmod.R"))
 
 # acliport <- readRDS(here::here("data", "acli_portfolios.rds"))
 
-portfolios <- readRDS(here::here("data", "acli_rnorm_portfolios.rds"))
+portfolios <- readRDS(here::here("data", "acli_and_comparison_portfolios.rds"))
 
 
 ```
@@ -58,12 +58,12 @@ result <- portfolios  |>
   # next stament "loops" (via map) through the 3 rows (the 3 scenarios), and for each row it
   # calls penmod using nsims, nyears, and the investment return matrix for the scenario in the row
   mutate(penmod = 
-           purrr::map(seq_along(irmat),
+           purrr::map(seq_along(lrmat),
                       ~penmod2(
-                        ir = irmat[[.x]])))
+                        ir = lrmat[[.x]])))
 result
 
-saveRDS(result, here::here("data", "acli_normal_penmod.rds"))
+saveRDS(result, here::here("data", "acli_and_comparison_penmod.rds"))
 
 
 ```

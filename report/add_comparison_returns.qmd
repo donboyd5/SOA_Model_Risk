@@ -1,0 +1,131 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Prepare for apples-to-apples comparisons
+
+For every ACLI scenario and portfolio, create a corresponding random-normal scenario with the same mean and standard deviation over the ACLI-simulated number of years and simulations.
+
+This will allow head-to-head comparison for each scenario-portfolio combination.
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(fs::path(rptdir, "function_penmod.R")) # for flatmat
+
+```
+
+
+```{r}
+#| label: get-acli-portfolios
+#| output: false
+
+acli <- readRDS(here::here("data", "acli_portfolios.rds"))
+glimpse(acli)
+count(acli, scenario)
+count(acli, porttype)
+
+```
+
+
+## Prepare constant and random normal comparisons
+
+Construct constant returns and random normals corresponding to each scenario-portfolio combination.
+
+The constant matrix has a constant log return equal to the mean of the ACLI scenario.
+
+The random normal matrix has a mean and sd equal to the mean and sd of the ACLI scenario.
+
+Save the results as a tibble with list columns, for ease of understanding.
+
+```{r}
+#| label: functions
+#| output: false
+
+get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
+  # ensure that we hit the desired mean and sd exactly
+  set.seed(seed)
+  irnorm <- rnorm(n = nsims * nyears)
+  # standardize to hit the targets
+  irnorm <- (irnorm - mean(irnorm)) / sd(irnorm) # standardize to exactly mean 0, sd 1
+  irnorm <- irnorm * sdreturn + meanreturn # adjust to target mean, target sd
+  irnorm <- irnorm |> matrix(nrow = nsims, ncol = nyears) # convert to matrix
+  return(irnorm)
+}
+
+
+```
+
+
+```{r}
+#| label: get-stats
+#| output: false
+
+port1 <- acli |> 
+  filter(year > 0) |> 
+  arrange(scenario, porttype, sim, year) |> 
+  group_by(scenario, porttype) |> 
+  summarise(nsims=length(unique(sim)),
+            nyears=length(unique(year)),
+            mean_model=mean(logreturn),
+            sd_model=sd(logreturn),
+            acli=matrix(logreturn, 
+                         nrow=length(unique(sim)),
+                         ncol=length(unique(year)),
+                         byrow=FALSE) |>
+              list(),
+            .groups="drop")
+
+port1
+
+# enhance with a constant matrix and a random normal matrix
+# modorder <- c("acli, constant", "rnormal")
+
+port2 <- port1 |> 
+  group_by(scenario, porttype) |> 
+  mutate(
+    constant=matrix(data=mean_model, nrow=nsims, ncol=nyears) |> list(),
+    rnormal=get_normal(mean_model, sd_model, nsims, nyears, seed=1234) |> list()) |> 
+  pivot_longer(c(acli, constant, rnormal),
+               names_to = "modtype",
+               values_to = "lrmat") |> # lrmat for log returns matrix
+  group_by(scenario, porttype, modtype) |> 
+  mutate(mean=mean(unlist(lrmat)),
+         sd=sd(unlist(lrmat))) |> 
+  select(scenario, porttype, modtype, nsims, nyears, mean, sd, mean_model, sd_model, lrmat) |> 
+  arrange(scenario, porttype, modtype) |> 
+  ungroup()
+
+port2  
+  
+saveRDS(port2, here::here("data", "acli_and_comparison_portfolios.rds"))
+
+
+```
+
+
+## Show the resulting tibble
+
+Note that:
+
+-   mean and sd are the values calculated from the matrix lrmat (log returns matrix)
+-   mean_model and sd_model are the mean and sd from the ACLI model that we are trying to match
+-   mean should always equal mean_model, possibly with very small differences
+-   sd should equal sd_model for the rnormal (random normal) matrix, and be 0 for the constant matrix
+
+```{r}
+
+df <- readRDS(here::here("data", "acli_and_comparison_portfolios.rds"))
+
+df
+
+
+```
+
+

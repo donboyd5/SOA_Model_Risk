@@ -62,11 +62,7 @@ HY.csv, U.S. Corporate high yield (Below investment grade)
 
 # alternative parameter runs ----
 
-# E:\data\soa\acli_report
-
-runs <- paste0(c("phi", "tau", "sigma_v"), "_", c("lbound", "ubound"))
-
-parms <- c("phi", "tau", "sigma_v")
+parms <- c("phi", "tau", "sigma_v", "rho")
 types <- c("lbound", "ubound")
 runs <- outer(parms, types, paste, sep = "_") |> as.vector()
 (runs <- setNames(runs, runs))
@@ -79,6 +75,7 @@ scen_names <- tibble(scenario=runs) |>
   mutate(parmdesc=case_when(
     parm=="baseline" ~ "Baseline",
     parm=="phi" ~ "Speed of mean reversion in volatility (phi)",
+    parm=="rho" ~ "Correlation between random shock to vol and random component of return (rho)",
     parm=="sigma_v" ~ "Monthly sd of the log volatility process (sigma(v))",
     parm=="tau" ~ "Target volatility (tau)")) |> 
   mutate(scendesc=case_when(
@@ -188,35 +185,5 @@ slong <- readRDS(here::here("data", "acli_scenarios.rds"))
 slong |> 
   filter(year==30, scenario=="baseline") |> 
   summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr), .by = c(fnbase, fdesc))
-
-# slong |> 
-#   filter(year==10, scenario=="baseline", fnbase=="aggr") |> 
-#   summarise(uvmeasures(return))
-# 
-# slong |> 
-#   filter(scenario=="baseline", fnbase=="aggr") |> 
-#   summarise(uvmeasures(return), .by=year)
-# 
-# slong |> 
-#   filter(scenario=="baseline", year > 0) |> 
-#   summarise(uvmeasures(return), .by=fnbase)
-# 
-# slong |> 
-#   filter(fnbase=="aggr", year > 0) |> 
-#   summarise(uvmeasures(return), .by=scenario)
-
-# measures <- slong |> 
-#   filter(year > 0) |> 
-#   summarise(uvmeasures(return), .by=c(scenario, fnbase))
-# 
-# cagr <- slong |> 
-#   filter(year==30) |> 
-#   summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr),
-#             .by = c(scenario, fnbase, fdesc))
-# 
-# cagr |> 
-#   arrange(desc(cagrmdn)) |> 
-#   filter(fnbase=="aggr")
-
 
 ```
