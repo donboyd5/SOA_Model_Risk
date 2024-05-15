@@ -530,6 +530,8 @@ Get assets needed to construct two equity-bonds portfolios: 70-30 and 30-70.
 # and small cap stocks globally, covering over 7,400 securities in 47 countries,
 # including both developed and emerging markets.
 
+# The iShares Core U.S. Aggregate Bond ETF seeks to track the investment results of an index composed of the total U.S. investment-grade bond market.
+
 equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-01-03 forward
 bonds <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
 

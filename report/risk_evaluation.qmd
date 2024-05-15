@@ -412,6 +412,9 @@ riskmeasures |>
 riskmeasures |> 
   filter(scenario=="baseline", porttype=="highequity")
 
+riskmeasures |> 
+  filter(scenario=="baseline", porttype=="highfixed")
+
 ```
 
 ## Model structure risk
@@ -596,6 +599,10 @@ slvriskmeasures <- slvriskmeasures1 |>
 slvriskmeasures
 
 slvriskmeasures |> 
+  arrange(porttype, measure, scenario)
+
+slvriskmeasures |> 
+  filter(porttype=="highequity") |> 
   arrange(porttype, measure, scenario)
 
 ```
