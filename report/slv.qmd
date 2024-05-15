@@ -38,7 +38,7 @@ Also useful:
 
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
-
+source(here::here("report", "function_penmod.R")) # for flatmat
 
 library(quantmod)
 library(stats4)
@@ -619,6 +619,8 @@ params2 |> arrange(vname, aic)
 params2 |> unnest(params) |> arrange(vname, parameter, modtype)
 params2 |> unnest(params) |> arrange(vname, modtype, parameter)
 
+saveRDS(list(res2=res2, params2=params2), here::here("data", "slv_model_results.rds"))
+
 ```
 
 
@@ -642,30 +644,25 @@ params2 |> unnest(params) |> arrange(vname, modtype, parameter)
 # str(pred2)
 
 # pm1 <- simulate_parameters(m1[[1]], nsim = 1000) # get 1000 sets of parameters
+modlist <- readRDS(here::here("data", "slv_model_results.rds"))
+res2 <- modlist$res2
+params2 <- modlist$params2
+
+nmonths <- 360; nsims <- 10000
+
+# nmonths <- 36; nsims <- 100
+
 
 sims <- params2 |>
   filter(!(modtype=="tmod" & vname=="highbonds")) |> # error 'Sigma' is not positive definite
   select(vname, modtype, mod) |> 
   mutate(pred=purrr::map(mod,
-                         \(x) predict(x, steps=360, nsim = 10000, include_parameters = TRUE)),
+                         \(x) predict(x, steps=nmonths, nsim = nsims,
+                                      include_parameters = TRUE)),
          y=purrr::map(pred, \(x) pluck(x, "y") |> t()))
 sims
 
 saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
-
-# collapse to 30 years
-saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
-
-
-sims |> 
-  mutate(nrows=purrr::map(y, \(x) dim(x)[1]) |> unlist(),
-         ncols=purrr::map(y, \(x) dim(x)[2]) |> unlist(),
-         mean=purrr::map(y, \(x) mean(x) |> unlist())) |> 
-  unnest(col=mean)
-
-
-
-
 
 # tmp <- sims |> 
 #   filter(row_number()==1) |> 
@@ -691,6 +688,63 @@ sims |>
 #   seed = NULL,
 #   model = "gaussian"
 # )
+
+
+```
+
+
+## Collapse to 30 years
+
+
+```{r}
+
+# function to create a matrix of sims x years from matrix of sims x months
+# Example matrix with 100 rows and 36 columns
+
+f <- function(mat, period=3){
+  # collapse a matrix of arbitary number of columns to a new matrix with the same
+  # number of rows but where each column is the sum of period columns
+  # for example, if the matrix has 360 columns and period=12 the result will be 
+  # a matrix with 30 columns, each of which is the sum of 12 columns
+  # it uses R's fast built-in rowsum function combined with a group vector
+  # because there is not a corresponding colsum function (which is what we really want)
+  # we transpose, use rowsum, and transpose the result back
+  # reuse mat to avoid unnecessary memory use
+  mat <- t(mat)
+  nnewrows <- nrow(mat) / period
+  group <- rep(1:nnewrows, each=period)
+  # group gives the new-column index that each old column will be summed into
+  mat <- rowsum(mat, group)
+  t(mat)
+}
+
+# (mat <- matrix(1:24, nrow=3, byrow = TRUE))
+# (newmat <- f(mat, period=4))
+# sum(mat); sum(newmat)
+# 
+# mat <- matrix(runif(10e3 * 360), nrow = 10e3, ncol = 360)
+# newmat <- f(mat, period=12)
+# sum(mat); sum(newmat)
+
+```
+
+
+```{r}
+
+# collapse to 30 years
+sims <- readRDS(here::here("data", "slvsims_sims_by_months.rds"))
+# glimpse(sims)
+# dim(sims)
+
+# pare it down and delete what we don't need - sims is very slow
+slv_sims <- sims |> 
+  select(vname, modtype, y) |> 
+  mutate(lrmat=map(y, \(x) f(x, period=12)))
+slv_sims
+
+saveRDS(slv_sims |> select(vname, modtype, lrmat), 
+        here::here("data", "slvsims.rds"))
+
 
 
 ```

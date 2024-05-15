@@ -69,3 +69,32 @@ saveRDS(result, here::here("data", "acli_and_comparison_penmod.rds"))
 ```
 
 
+## slv portfolios and corresponding random normal
+
+```{r}
+
+# acliport <- readRDS(here::here("data", "acli_portfolios.rds"))
+
+slvport <- readRDS(here::here("data", "slv_and_comparison_portfolios.rds"))
+
+
+```
+
+
+```{r}
+
+slvresult <- slvport  |> 
+  # next stament "loops" (via map) through the 3 rows (the 3 scenarios), and for each row it
+  # calls penmod using nsims, nyears, and the investment return matrix for the scenario in the row
+  mutate(penmod = 
+           purrr::map(seq_along(lrmat),
+                      ~penmod2(
+                        ir = lrmat[[.x]])))
+slvresult
+
+saveRDS(slvresult, here::here("data", "slv_and_comparison_penmod.rds"))
+
+
+```
+
+

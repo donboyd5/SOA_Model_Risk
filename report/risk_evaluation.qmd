@@ -534,3 +534,32 @@ flipped |>
 ```
 
 
+## SLV analysis
+
+```{r}
+
+slvresult <- readRDS(here::here("data", "slv_and_comparison_penmod.rds"))
+
+tabdata <- slvresult |> 
+  filter(porttype=="highequity") |> 
+  select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |> 
+  unnest(col=penmod) |> 
+  filter(year==30) |> 
+  summarise(
+    mean_model=first(mean_model),
+    sd_model=first(sd_model),
+    frmdn=median(fr), .by=c(scenario, porttype, modtype)) |> 
+  group_by(porttype) |> 
+  mutate(frbaseline=frmdn[scenario=="gaussmod" & modtype=="rnormal"],
+         frdiff=frmdn - frbaseline) |> 
+  relocate(frbaseline, .after=sd_model) |> 
+  ungroup() |> 
+  # filter(scenario != "baseline") |> 
+  arrange(porttype, desc(frdiff))
+
+tabdata |> 
+  kable(digits=3)
+  
+
+```
+
