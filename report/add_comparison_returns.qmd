@@ -174,7 +174,7 @@ count(slv_sims, modtype)
 # enhance with a constant matrix and a random normal matrix
 # modorder <- c("acli, constant", "rnormal")
 
-mean_annual_logreturn <- .0875
+mean_annual_logreturn <- .0625 # same as highequity acli portfolio
 
 slv2 <- slv_sims |> 
   rename(porttype=vname, scenario=modtype, slv=lrmat) |> 
