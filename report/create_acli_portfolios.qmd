@@ -62,6 +62,15 @@ weights <- weights1 |>
 weights |> 
   summarise(weight=sum(weight), .by=porttype)
 
+# get equity share of each portfolio
+weights |> 
+  mutate(equity=case_when(
+    fnbase %in% c("aggr", "int", "small", "us") ~ weight,
+    fnbase == "balanced" ~ weight * .60,
+    .default = 0)) |> 
+  summarise(equity=sum(equity), .by=porttype)
+
+
 
 ```
 
@@ -144,22 +153,30 @@ df <- portfolios |>
 #| label: scenario-portfolio-plot
 #| output: true
 
-df |> 
+p <- df |> 
+  filter(!str_detect(scenario, "rho")) |> 
+  mutate(porttype=factor(porttype,
+                         levels=c("highequity", "highfixed"),
+                         labels=c("High equity", "High fixed"))) |> 
   ggplot(aes(mean, sd, colour=porttype, label=scenario)) +
   geom_point() +
-  geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) +
-  scale_color_manual(values=c("red", "blue")) +
+  geom_text_repel(vjust = -0.5, hjust = 0.5, min.segment.length = .5, max.overlaps = 15) +
+  scale_color_manual(values=c("darkgreen", "blue")) +
   scale_x_continuous(name="mean", 
-                     breaks = seq(0, 1, .0025),
-                     labels = scales::percent_format(accuracy = .01)) +
+                     breaks = seq(0, 1, .005),
+                     labels = scales::percent_format(accuracy = .01),
+                     limits = c(0.03, 0.085)) +
   scale_y_continuous(name="standard deviation", 
                      breaks = seq(0, 1, .01),
                      labels = scales::percent_format(accuracy = .1)) +
-  ggtitle(label = "Mean and standard deviation for ACLI scenarios",
-          subtitle = "ACLI scenarios and portfolios") +
+  ggtitle(label = "Mean and standard deviation of returns for the complex ESG",
+          subtitle = "Under alternative scenarios and portfolios") +
   guides(col= guide_legend(title= "Portfolio\ntype")) +
   theme_bw()
+p
 
+ggsave(here::here(rptdir, "results", "esg_meansd.png"),
+       scale=1.1, width=9, height = 9)
 
 ```
 
