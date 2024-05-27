@@ -27,8 +27,8 @@ book:
       - probability.qmd # this is just exploratory - I'll add substance later
     - part: "Model-based investment returns"
       chapters:
-      # - esg.qmd # not ready yet
-      - slv.qmd
+      - slv_parameters.qmd
+      - slv_models.qmd
       - get_acli_scenarios.qmd
     - part: "Portfolios"
       chapters: 
