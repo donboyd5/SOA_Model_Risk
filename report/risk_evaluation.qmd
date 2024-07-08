@@ -208,115 +208,442 @@ riskmeasures |>
 ```
 
 
+## Model structure risk
 
-## OLD Exploratory analysis
+To what extent does the choice of models change the model output?
 
-Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years.
+NOTE: maybe add pure asset measure w/o contribs or payouts
 
-```{r}
-#| label: explore-data
+### Gang Table 1
 
-tabdata <- result |> 
-  filter(!str_detect(scenario, "rho")) |> 
-  select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |> 
-  unnest(col=penmod) |> 
-  filter(year==30) |> 
-  summarise(
-    mean_model=first(mean_model),
-    sd_model=first(sd_model),
-    frmdn=median(fr), .by=c(scenario, porttype, modtype)) |> 
-  pivot_wider(names_from = modtype, values_from = frmdn) |> 
-  select(porttype, scenario, mean_model, sd_model, constant, rnormal, acli)
+#### High-equity portfolio
 
-# tabdata |> 
-#   arrange(porttype, scenario) |> 
-#   kable(digits=3)
+Baseline (Gaussian) SLV model vs. constant returns and model-equivalent random normal returns
 
-```
+Takeaways:
 
-### Year 30 median funded ratio, modeled investment returns, deterministic, and random normal returns
-
-This table compares, for each scenario, the median funded ratio at 30 years using ACLI-modeled investment return to the funded ratio using a random normal distribution with the same mean and standard deviation. It is sorted by the largest difference in median funded ratio between modeled and random normal returns.
-
-Observations:
-
--   In general, the differences from random normal at 30 years hardly look large - the most is 2 percentage points after 30 years. We can easily see swings of 2 percent or more in a single year.
-
--   Partly, this is because of automatic adjustments built into pension funding - if returns are low, contributions go up, helping to stabilize the funded ratio. That is why we need to look at contributions also. This suggests there's value in just looking at cumulative returns, without considering contributions, to help understand the pure effects of alternative returns. I probably should do that.
-
--   Modeled median funded ratio is always slightly higher than the random normal counterpart, even though mean log return and sd of log return is virtually identical for both.
-
--   The difference is much greater for the high fixed-income portfolio than for the high equity portfolio. In these portfolios, mean returns (and standard deviations) are lower than in the high equity portfolios and so median funded ratios are lower as well, but this doesn't explain why the difference from random normal would be large.
+-   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
+-   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
+-   Risk measures are slightly worse for the modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
 
 
 ```{r}
-#| label: explore-table
-#| output: true
+#| label: table1-gaussian-highequity
 
-tabdata |>  
-  arrange(porttype, scenario) |> 
-  mutate(diff_vsrnorm=acli - rnormal) |> 
-  left_join(scen_names |> 
-              select(scenario, scendesc), by = join_by(scenario)) |> 
-  relocate(scendesc) |> 
-  arrange(desc(diff_vsrnorm)) |> 
+mod_order <- c("constant", "rnormal", "model")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+base_flipped_equity <- riskmeasures |> 
+  filter(framework=="slv", scenario=="gaussmod", 
+         porttype=="highequity", measure %in% meas_order) |> 
+  select(framework, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  relocate(type, .after = scenario) |> 
+  mutate(type=factor(type, levels=mod_order)) |>
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(type)
+
+
+base_flipped_equity |> 
+  select(-c(framework, scenario, mean, sd)) |> 
   gt() |> 
   tab_header(
-    title = html("Median funded ratio at 30 years for different scenarios and portfolio types - sorted by difference from normal"),
-    subtitle = html("Modeled portfolio, deterministic (same mean, sd=0), and random normal (same mean, sd)")
+    title = html("Selected Risk Measures for Stochastic Volatility Model with Gaussian Errors, High Equity Portfolio"),
+    subtitle = html("Normal returns have same mean and SD as SV model")
   ) |>
-  tab_spanner(columns = contains("_model"),
-              label="Portfolio mean and sd of log returns") |>
-  tab_spanner(columns = c(constant, rnormal, acli, diff_vsrnorm),
-              label="Median funded ratio at 30 years") |>
-  cols_label(mean_model="mean",
-             sd_model="sd",
-             constant="Deterministic",
-             rnormal=html("Random<br>normal"),
-             acli = html("Model"),
-             diff_vsrnorm = html("Model<br>minus<br>normal")) |>
-  fmt_percent(columns=-c(scendesc, scenario, porttype),
-             scale=1,
-             decimals=1) |>
-  opt_row_striping()
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = mdn_frt10,
+              decimals = 1)
+  
+# tab_source_note(source_note = "Asset loss at 5th percentile")
+
+
+#   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
 
 ```
 
-### Year 30 median funded ratio, comparison to baseline for same portfolio type and model type
+The next table shows risk measures for selected alternative models:
 
-Modeled investment returns, deterministic, and random normal returns
+-   Gaussian errors (as above)
+-   Skewed errors
+-   Leverage model (volatility correlated with returns)
 
-Here the funded ratio baseline is median FR in year 30 for baseline scenario with random normal returns, for the same portfolio type.
 
-frmdn is the median FR in year 30 for the ACLI model.
+Takeaways:
 
-frdiff is model minus baseline (random normal).
+-   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
+-   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
+-   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+-   Risk measures are slightly worse for the skewed and leverage models than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
+-   The leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
 
-Probably need to think about a better way to compare to baseline.
 
 ```{r}
+#| label: table1-slv-highequity
 
-tabdata <- result |> 
-  filter(!str_detect(scenario, "rho")) |> 
-  select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |> 
-  unnest(col=penmod) |> 
-  filter(year==30) |> 
-  summarise(
-    mean_model=first(mean_model),
-    sd_model=first(sd_model),
-    frmdn=median(fr), .by=c(scenario, porttype, modtype)) |> 
-  group_by(porttype) |> 
-  mutate(frbaseline=frmdn[scenario=="baseline" & modtype=="rnormal"],
-         frdiff=frmdn - frbaseline) |> 
-  relocate(frbaseline, .after=sd_model) |> 
-  ungroup() |> 
-  filter(scenario != "baseline") |> 
-  arrange(porttype, desc(frdiff))
+mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod")
+mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
-tabdata |> 
-  kable(digits=3)
+base_flipped_equity <- riskmeasures |> 
+  filter(framework=="slv", 
+         porttype=="highequity", measure %in% meas_order) |> 
+  select(framework, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  filter(!(type %in% c("constant", "rnormal") & scenario != "gaussmod")) |> 
+  mutate(type=ifelse(type %in% c("constant", "rnormal"),
+                     type,
+                     scenario)) |> 
+  select(-scenario, -framework) |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  relocate(type) |> 
+  mutate(type=factor(type, levels=mod_order, labels=mod_labs)) |>
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(type)
+
+
+base_flipped_equity |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
+    subtitle = html("Normal returns have same mean and SD as SV model")
+  ) |>
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10, mean, sd),
+              decimals = 1)
   
+# tab_source_note(source_note = "Asset loss at 5th percentile")
+
+
+#   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
+
 ```
+
+
+
+#### Repeat for high fixed portfolio
+
+Baseline (Gaussian) SLV model vs. constant returns and model-equivalent random normal returns
+
+Takeaways:
+
+-   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
+-   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
+-   Risk measures are slightly worse for the modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+
+
+```{r}
+#| label: table1-gaussian-highfixed
+
+mod_order <- c("constant", "rnormal", "model")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+base_flipped_fixed <- riskmeasures |> 
+  filter(framework=="slv", scenario=="gaussmod", 
+         porttype=="highfixed", measure %in% meas_order) |> 
+  select(framework, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  relocate(type, .after = scenario) |> 
+  mutate(type=factor(type, levels=mod_order)) |>
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(type)
+
+
+base_flipped_fixed |> 
+  select(-c(framework, scenario, mean, sd)) |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Stochastic Volatility Model with Gaussian Errors, High Fixed Portfolio"),
+    subtitle = html("Normal returns have same mean and SD as SV model")
+  ) |>
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = mdn_frt10,
+              decimals = 1)
+  
+# tab_source_note(source_note = "Asset loss at 5th percentile")
+
+
+#   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
+
+```
+
+The next table shows risk measures for selected alternative models:
+
+-   Gaussian errors (as above)
+-   Skewed errors
+-   Leverage model (volatility correlated with returns)
+
+
+Takeaways:
+
+-   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
+-   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
+-   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+-   Risk measures for the skewed model are slightly better than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
+-   Risk measures for the leverage model are moderately worse for the leverage model than for the Gaussian model.
+-   As with the high-equity portfolio, the leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
+
+
+```{r}
+#| label: table1-slv-highfixed
+
+mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod")
+mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+base_flipped_fixed <- riskmeasures |> 
+  filter(framework=="slv", 
+         porttype=="highfixed", measure %in% meas_order) |> 
+  select(framework, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  filter(!(type %in% c("constant", "rnormal") & scenario != "gaussmod")) |> 
+  mutate(type=ifelse(type %in% c("constant", "rnormal"),
+                     type,
+                     scenario)) |> 
+  select(-scenario, -framework) |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  relocate(type) |> 
+  mutate(type=factor(type, levels=mod_order, labels=mod_labs)) |>
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(type)
+
+base_flipped_fixed |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed Poftfolio"),
+    subtitle = html("Normal returns have same mean and SD as SV model")
+  ) |>
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10, mean, sd),
+              decimals = 1)
+  
+# tab_source_note(source_note = "Asset loss at 5th percentile")
+
+
+#   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
+
+```
+
+
+
+
+## Model parameterization risk
+
+To what extent do changes in parameterization change model outputs?
+
+Same portfolio, Same ACLI model, Same mean, Same SD
+5-yr VaR loss 5-fr VaR erc 10-yr FR
+
+
+```{r}
+#| label: model-parameterization-risk
+#| output: false
+
+scen_names
+
+scen_order <- scen_names |> 
+  filter(framework=="acli") |> 
+  arrange(parm, bound)
+
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+flipped <- riskmeasures |> 
+  filter(framework=="acli", measure %in% meas_order) |> 
+  select(porttype, scenario, measure, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order
+  arrange(measure) |>
+  pivot_wider(names_from = measure, values_from = model) |> 
+  mutate(scenario=factor(scenario, levels=scen_order$scenario)) |> 
+  arrange(porttype, scenario) |> 
+  left_join(scen_order |> select(scenario, scendesc),
+            by = join_by(scenario)) |> 
+  relocate(scendesc, .after=scenario)
+
+flipped  
+
+```
+
+
+```{r}
+#| label: show-parameter-risk
+
+flipped |> 
+  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
+  arrange(porttype, scenario) |> 
+  gt() |> 
+  cols_hide(column=porttype) |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Parameterizations of an ESG Model"),
+    subtitle = html("High equity and high bonds portfolios")
+  ) |>
+  cols_label(porttype="Portfolio type",
+             scenario="Parameterization",
+             scendesc="Description",
+             # type = html("Random normal<br>or<br>modeled returns"),
+             vloss_a95t10 = html("VaR asset loss in 10 years"),
+             verc_a95t10 = html("VaR contribution increase in 10 years"),
+             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
+             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
+  tab_row_group(
+    label = "High equity portfolio",
+    rows = porttype == "highequity"
+  ) |> 
+  tab_row_group(
+    label = "High bonds portfolio",
+    rows = porttype == "highfixed"
+  ) |> 
+  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 3) |> 
+  fmt_percent(columns = mdn_frt10,
+              decimals = 1)
+```
+
+
+
+<!-- ## OLD Exploratory analysis -->
+
+<!-- Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years. -->
+
+<!-- ```{r} -->
+<!-- #| label: explore-data -->
+<!-- #| eval: false -->
+<!-- #| output: false -->
+
+<!-- tabdata <- result |>  -->
+<!--   filter(!str_detect(scenario, "rho")) |>  -->
+<!--   select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |>  -->
+<!--   unnest(col=penmod) |>  -->
+<!--   filter(year==30) |>  -->
+<!--   summarise( -->
+<!--     mean_model=first(mean_model), -->
+<!--     sd_model=first(sd_model), -->
+<!--     frmdn=median(fr), .by=c(scenario, porttype, modtype)) |>  -->
+<!--   pivot_wider(names_from = modtype, values_from = frmdn) |>  -->
+<!--   select(porttype, scenario, mean_model, sd_model, constant, rnormal, acli) -->
+
+<!-- # tabdata |>  -->
+<!-- #   arrange(porttype, scenario) |>  -->
+<!-- #   kable(digits=3) -->
+
+<!-- ``` -->
+
+<!-- ### Year 30 median funded ratio, modeled investment returns, deterministic, and random normal returns -->
+
+<!-- This table compares, for each scenario, the median funded ratio at 30 years using ACLI-modeled investment return to the funded ratio using a random normal distribution with the same mean and standard deviation. It is sorted by the largest difference in median funded ratio between modeled and random normal returns. -->
+
+<!-- Observations: -->
+
+<!-- -   In general, the differences from random normal at 30 years hardly look large - the most is 2 percentage points after 30 years. We can easily see swings of 2 percent or more in a single year. -->
+
+<!-- -   Partly, this is because of automatic adjustments built into pension funding - if returns are low, contributions go up, helping to stabilize the funded ratio. That is why we need to look at contributions also. This suggests there's value in just looking at cumulative returns, without considering contributions, to help understand the pure effects of alternative returns. I probably should do that. -->
+
+<!-- -   Modeled median funded ratio is always slightly higher than the random normal counterpart, even though mean log return and sd of log return is virtually identical for both. -->
+
+<!-- -   The difference is much greater for the high fixed-income portfolio than for the high equity portfolio. In these portfolios, mean returns (and standard deviations) are lower than in the high equity portfolios and so median funded ratios are lower as well, but this doesn't explain why the difference from random normal would be large. -->
+
+
+<!-- ```{r} -->
+<!-- #| label: explore-table -->
+<!-- #| output: false -->
+<!-- #| eval: false -->
+
+<!-- tabdata |>   -->
+<!--   arrange(porttype, scenario) |>  -->
+<!--   mutate(diff_vsrnorm=acli - rnormal) |>  -->
+<!--   left_join(scen_names |>  -->
+<!--               select(scenario, scendesc), by = join_by(scenario)) |>  -->
+<!--   relocate(scendesc) |>  -->
+<!--   arrange(desc(diff_vsrnorm)) |>  -->
+<!--   gt() |>  -->
+<!--   tab_header( -->
+<!--     title = html("Median funded ratio at 30 years for different scenarios and portfolio types - sorted by difference from normal"), -->
+<!--     subtitle = html("Modeled portfolio, deterministic (same mean, sd=0), and random normal (same mean, sd)") -->
+<!--   ) |> -->
+<!--   tab_spanner(columns = contains("_model"), -->
+<!--               label="Portfolio mean and sd of log returns") |> -->
+<!--   tab_spanner(columns = c(constant, rnormal, acli, diff_vsrnorm), -->
+<!--               label="Median funded ratio at 30 years") |> -->
+<!--   cols_label(mean_model="mean", -->
+<!--              sd_model="sd", -->
+<!--              constant="Deterministic", -->
+<!--              rnormal=html("Random<br>normal"), -->
+<!--              acli = html("Model"), -->
+<!--              diff_vsrnorm = html("Model<br>minus<br>normal")) |> -->
+<!--   fmt_percent(columns=-c(scendesc, scenario, porttype), -->
+<!--              scale=1, -->
+<!--              decimals=1) |> -->
+<!--   opt_row_striping() -->
+
+<!-- ``` -->
+
+<!-- ### Year 30 median funded ratio, comparison to baseline for same portfolio type and model type -->
+
+<!-- Modeled investment returns, deterministic, and random normal returns -->
+
+<!-- Here the funded ratio baseline is median FR in year 30 for baseline scenario with random normal returns, for the same portfolio type. -->
+
+<!-- frmdn is the median FR in year 30 for the ACLI model. -->
+
+<!-- frdiff is model minus baseline (random normal). -->
+
+<!-- Probably need to think about a better way to compare to baseline. -->
+
+<!-- ```{r} -->
+<!-- #| label: old-stuff -->
+<!-- #| eval: false -->
+<!-- #| output: false -->
+
+<!-- tabdata <- result |>  -->
+<!--   filter(!str_detect(scenario, "rho")) |>  -->
+<!--   select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |>  -->
+<!--   unnest(col=penmod) |>  -->
+<!--   filter(year==30) |>  -->
+<!--   summarise( -->
+<!--     mean_model=first(mean_model), -->
+<!--     sd_model=first(sd_model), -->
+<!--     frmdn=median(fr), .by=c(scenario, porttype, modtype)) |>  -->
+<!--   group_by(porttype) |>  -->
+<!--   mutate(frbaseline=frmdn[scenario=="baseline" & modtype=="rnormal"], -->
+<!--          frdiff=frmdn - frbaseline) |>  -->
+<!--   relocate(frbaseline, .after=sd_model) |>  -->
+<!--   ungroup() |>  -->
+<!--   filter(scenario != "baseline") |>  -->
+<!--   arrange(porttype, desc(frdiff)) -->
+
+<!-- tabdata |>  -->
+<!--   kable(digits=3) -->
+
+<!-- ``` -->
 
 
 
@@ -437,281 +764,51 @@ tabdata |>
 
 
 
-## Construct risk measures from pension model results
+<!-- ## Construct risk measures from pension model results -->
 
 
-## OLD Calculate risk measures
+<!-- ## OLD Calculate risk measures -->
 
-```{r}
-#| label: risk-measures-OLD
-#| output: false
+<!-- ```{r} -->
+<!-- #| label: risk-measures-OLD -->
+<!-- #| output: false -->
 
-riskmeasures1 <- result |> 
-  filter(!str_detect(scenario, "rho")) |> 
-  select(-c(lrmat, mean, sd)) |> 
-  unnest(col=penmod) |> 
-  summarise(mean=first(mean_model),
-            sd=first(sd_model),
-            vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())),
-            verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())),
-            vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())),
-            probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())),
-            proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())),
-            mdn_frt10=median(fr[year==10]),
-            .by=c(scenario, porttype, modtype))
+<!-- riskmeasures1 <- result |>  -->
+<!--   filter(!str_detect(scenario, "rho")) |>  -->
+<!--   select(-c(lrmat, mean, sd)) |>  -->
+<!--   unnest(col=penmod) |>  -->
+<!--   summarise(mean=first(mean_model), -->
+<!--             sd=first(sd_model), -->
+<!--             vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())), -->
+<!--             verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())), -->
+<!--             vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())), -->
+<!--             probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())), -->
+<!--             proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())), -->
+<!--             mdn_frt10=median(fr[year==10]), -->
+<!--             .by=c(scenario, porttype, modtype)) -->
 
-riskmeasures <- riskmeasures1 |> 
-  pivot_longer(-c(scenario, porttype, modtype, mean, sd),
-               names_to = "measure") |> 
-  pivot_wider(names_from = modtype) |> 
-  relocate(acli, .after = rnormal) |> 
-  relocate(measure) |> 
-  mutate(diff=acli - rnormal) |> 
-  left_join(scen_names |> 
-              select(scenario, scendesc), by = join_by(scenario)) |> 
-  relocate(scendesc) |> 
-  arrange(measure, scenario, porttype)
+<!-- riskmeasures <- riskmeasures1 |>  -->
+<!--   pivot_longer(-c(scenario, porttype, modtype, mean, sd), -->
+<!--                names_to = "measure") |>  -->
+<!--   pivot_wider(names_from = modtype) |>  -->
+<!--   relocate(acli, .after = rnormal) |>  -->
+<!--   relocate(measure) |>  -->
+<!--   mutate(diff=acli - rnormal) |>  -->
+<!--   left_join(scen_names |>  -->
+<!--               select(scenario, scendesc), by = join_by(scenario)) |>  -->
+<!--   relocate(scendesc) |>  -->
+<!--   arrange(measure, scenario, porttype) -->
 
-riskmeasures
+<!-- riskmeasures -->
 
-riskmeasures |> 
-  arrange(porttype, measure, scenario)
+<!-- riskmeasures |>  -->
+<!--   arrange(porttype, measure, scenario) -->
 
-riskmeasures |> 
-  filter(scenario=="baseline", porttype=="highequity")
+<!-- riskmeasures |>  -->
+<!--   filter(scenario=="baseline", porttype=="highequity") -->
 
-riskmeasures |> 
-  filter(scenario=="baseline", porttype=="highfixed")
+<!-- riskmeasures |>  -->
+<!--   filter(scenario=="baseline", porttype=="highfixed") -->
 
-```
+<!-- ``` -->
 
-## Model structure risk
-
-To what extent does the choice of models (baseline vs random log model vs ACLI-modeled) change the model output?
-
-NOTE: maybe add pure asset measure w/o contribs or payouts
-
-### Gang Table 1
-
-```{r}
-#| label: gang-table-1
-
-mod_order <- c("constant", "rnormal", "acli")
-# meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
-meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
-
-base_flipped <- riskmeasures |> 
-  filter(scenario=="baseline", measure %in% meas_order) |> 
-  select(porttype, measure, constant, rnormal, acli) |> 
-  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
-  pivot_longer(c(constant, rnormal, acli), names_to = "type") |> 
-  arrange(measure) |>
-  pivot_wider(names_from = measure) |> 
-  mutate(type=factor(type, levels=mod_order)) |> 
-  arrange(porttype, type)
-  
-base_flipped |> 
-  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
-  arrange(porttype, type) |> 
-  gt() |> 
-  tab_header(
-    title = html("Selected Risk Measures for Baseline Runs of ESG Model"),
-    subtitle = html("Normal returns have same mean and SD as ESG model")
-  ) |>
-  cols_label(porttype="Portfolio type",
-             type = html("Random normal<br>or<br>modeled returns"),
-             vloss_a95t10 = html("VaR asset loss in 10 years"),
-             verc_a95t10 = html("VaR contribution increase in 10 years"),
-             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
-             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
-  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 3) |> 
-  fmt_percent(columns = mdn_frt10,
-              decimals = 1)
-
-```
-
-
-## Model parameterization risk
-
-To what extent do changes in parameterization change model outputs?
-
-Same portfolio, Same ACLI model, Same mean, Same SD
-5-yr VaR loss 5-fr VaR erc 10-yr FR
-
-
-
-
-```{r}
-#| label: model-parameterization-risk
-#| output: false
-
-scen_names
-
-scen_order <- scen_names |> 
-  arrange(parm, bound)
-
-# meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
-meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
-
-
-flipped <- riskmeasures |> 
-  filter(measure %in% meas_order) |> 
-  select(porttype, scenario, measure, acli) |> 
-  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order
-  arrange(measure) |>
-  pivot_wider(names_from = measure, values_from = acli) |> 
-  mutate(scenario=factor(scenario, levels=scen_order$scenario)) |> 
-  arrange(porttype, scenario) |> 
-  left_join(scen_order |> select(scenario, scendesc),
-            by = join_by(scenario)) |> 
-  relocate(scendesc, .after=scenario)
-
-flipped  
-
-```
-
-
-```{r}
-#| label: show-parameter-risk
-
-flipped |> 
-  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
-  arrange(porttype, scenario) |> 
-  gt() |> 
-  cols_hide(column=porttype) |> 
-  tab_header(
-    title = html("Selected Risk Measures for Alternative Parameterizations of an ESG Model"),
-    subtitle = html("High equity and high bonds portfolios")
-  ) |>
-  cols_label(porttype="Portfolio type",
-             scenario="Parameterization",
-             scendesc="Description",
-             # type = html("Random normal<br>or<br>modeled returns"),
-             vloss_a95t10 = html("VaR asset loss in 10 years"),
-             verc_a95t10 = html("VaR contribution increase in 10 years"),
-             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
-             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
-  tab_row_group(
-    label = "High equity portfolio",
-    rows = porttype == "highequity"
-  ) |> 
-  tab_row_group(
-    label = "High bonds portfolio",
-    rows = porttype == "highfixed"
-  ) |> 
-  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 3) |> 
-  fmt_percent(columns = mdn_frt10,
-              decimals = 1)
-```
-
-
-## SLV analysis
-
-```{r}
-
-slvresult <- readRDS(here::here("data", "slv_and_comparison_penmod.rds"))
-
-tabdata <- slvresult |> 
-  filter(porttype=="highequity") |> 
-  select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |> 
-  unnest(col=penmod) |> 
-  filter(year==30) |> 
-  summarise(
-    mean_model=first(mean_model),
-    sd_model=first(sd_model),
-    frmdn=median(fr), .by=c(scenario, porttype, modtype)) |> 
-  group_by(porttype) |> 
-  mutate(frbaseline=frmdn[scenario=="gaussmod" & modtype=="rnormal"],
-         frdiff=frmdn - frbaseline) |> 
-  relocate(frbaseline, .after=sd_model) |> 
-  ungroup() |> 
-  # filter(scenario != "baseline") |> 
-  arrange(porttype, desc(frdiff))
-
-tabdata |> 
-  kable(digits=3)
-  
-
-```
-
-
-### SLV Gang Table 1
-
-```{r}
-
-
-slvriskmeasures1 <- slvresult |> 
-  # filter(porttype=="highequity") |> 
-  select(-c(lrmat, mean, sd)) |> 
-  unnest(col=penmod) |> 
-  summarise(mean=first(mean_model),
-            sd=first(sd_model),
-            vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())),
-            verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())),
-            vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())),
-            probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())),
-            proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())),
-            mdn_frt10=median(fr[year==10]),
-            .by=c(scenario, porttype, modtype))
-
-slvriskmeasures <- slvriskmeasures1 |> 
-  pivot_longer(-c(scenario, porttype, modtype, mean, sd),
-               names_to = "measure") |> 
-  pivot_wider(names_from = modtype) |> 
-  relocate(measure) |> 
-  mutate(diff=slv - rnormal) |> 
-  arrange(measure, scenario, porttype)
-
-slvriskmeasures
-
-slvriskmeasures |> 
-  arrange(porttype, measure, scenario)
-
-slvriskmeasures |> 
-  filter(porttype=="highequity") |> 
-  arrange(porttype, measure, scenario)
-
-```
-
-
-```{r}
-#| label: slv-gang-table-1
-#| eval: false
-#| output: false
-
-mod_order <- c("constant", "rnormal", "acli")
-# meas_order <- c("vloss_a95t10", "verc_a95t10", "probfr_fr70t10")
-meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
-
-base_flipped <- slvriskmeasures |> 
-  filter(scenario=="baseline", measure %in% meas_order) |> 
-  select(porttype, measure, constant, rnormal, acli) |> 
-  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
-  pivot_longer(c(constant, rnormal, acli), names_to = "type") |> 
-  arrange(measure) |>
-  pivot_wider(names_from = measure) |> 
-  mutate(type=factor(type, levels=mod_order)) |> 
-  arrange(porttype, type)
-  
-base_flipped |> 
-  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
-  arrange(porttype, type) |> 
-  gt() |> 
-  tab_header(
-    title = html("Selected Risk Measures for Baseline Runs of ESG Model"),
-    subtitle = html("Normal returns have same mean and SD as ESG model")
-  ) |>
-  cols_label(porttype="Portfolio type",
-             type = html("Random normal<br>or<br>modeled returns"),
-             vloss_a95t10 = html("VaR asset loss in 10 years"),
-             verc_a95t10 = html("VaR contribution increase in 10 years"),
-             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
-             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
-  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 3) |> 
-  fmt_percent(columns = mdn_frt10,
-              decimals = 1)
-
-```
