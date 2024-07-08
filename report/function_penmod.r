@@ -31,7 +31,7 @@ flatmat <- function(matrix){
 }
 
 
-penmod <- function(
+penmod_gang <- function(
     irates=.07,
     nsims=5,
     nyears=10,
@@ -99,7 +99,7 @@ penmod <- function(
 }
 
 
-penmod2 <- function(
+penmod <- function(
     ir,
     params=default_params){
   

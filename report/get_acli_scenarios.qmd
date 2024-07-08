@@ -81,7 +81,9 @@ scen_names <- tibble(scenario=runs) |>
   mutate(scendesc=case_when(
     bound=="lbound" ~ paste0(parmdesc, ": reduced to lower bound of 90% CI"),
     bound=="ubound" ~ paste0(parmdesc, ": increased to upper bound of 90% CI"),
-    scenario=="baseline" ~ "Baseline"))
+    scenario=="baseline" ~ "Baseline"),
+    framework="acli") |> 
+  relocate(framework)
 scen_names
 
 saveRDS(scen_names, here::here("data", "acli_scenario_names.rds"))

@@ -29,12 +29,13 @@ book:
       chapters:
       - slv_models.qmd
     - part: "Alternative model parameterizations using ACLI/AIRG model"
-      - slv_parameter_uncertainty.qmd    
-      - get_acli_scenarios.qmd
-      - create_acli_portfolios.qmd
-      - add_comparison_returns.qmd
-    - part: "Pension model for examining alternative ESG models and parameterizations"
       chapters:
+      - acli_parameter_uncertainty_from_slv.qmd    
+      - get_acli_scenarios.qmd
+      - create_acli_portfolios_and_save.qmd
+    - part: "Run pension model on alternative ESG models and parameterizations"
+      chapters:
+      - add_comparison_returns.qmd
       - penmod.qmd
     - part: "Risk evaluation of results from pension model"
       chapters:
