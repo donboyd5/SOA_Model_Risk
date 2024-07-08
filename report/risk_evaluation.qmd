@@ -138,7 +138,6 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 #| label: get-penmod-results
 #| output: false
 
-# result <- readRDS(here::here("data", "penmod_results.rds"))
 result <- readRDS(here::here("data", "allscen_and_comparison_penmod.rds"))
 
 result
@@ -161,8 +160,6 @@ result |>
 ## Construct risk measures from pension model results
 
 
-## Calculate risk measures
-
 ```{r}
 #| label: risk-measures
 #| output: false
@@ -173,7 +170,7 @@ riskmeasures1 <- result |>
   filter(!(framework=="slv" & scenario=="tmod")) |>  # t models did not work well for slv models
   # NOTE: leaves us with about 60 framework-scenario-portfolio-modtype combinations
   select(-c(lrmat, mean, sd)) |> # we don't need these
-  unnest(col=penmod) |> # 6.6 million observations
+  unnest(col=penmod) |> # 6.66 million observations
   summarise(mean=first(mean_model),
             sd=first(sd_model),
             vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())), # asset loss at alpha percentile, year t
@@ -182,19 +179,20 @@ riskmeasures1 <- result |>
             probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())), # prob FR below x% at end year t
             proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())), # prob ERC above x% payroll at end year t
             mdn_frt10=median(fr[year==10]), # median FR at end year t
-            .by=c(framework, scenario, porttype, modtype))
+            .by=c(framework, scenario, porttype, modtype)) # 60 combos
 
 riskmeasures <- riskmeasures1 |> 
   pivot_longer(-c(framework, scenario, porttype, modtype, mean, sd),
-               names_to = "measure") |> 
-  pivot_wider(names_from = modtype) |> 
-  relocate(acli, .after = rnormal) |> 
+               names_to = "measure") |> # 6 measures for each combo=360 recs
+  pivot_wider(names_from = modtype) |> # 3 modtypes means 120 recs
   relocate(measure) |> 
-  mutate(diff=acli - rnormal) |> 
+  relocate(model, .after = rnormal) |> 
+  mutate(diff=model - rnormal) |> 
   left_join(scen_names |> 
-              select(scenario, scendesc), by = join_by(scenario)) |> 
+              select(framework, scenario, scendesc), 
+            by = join_by(framework, scenario)) |> 
   relocate(scendesc) |> 
-  arrange(measure, scenario, porttype)
+  arrange(measure, framework, scenario, porttype)
 
 riskmeasures
 
@@ -202,7 +200,7 @@ riskmeasures |>
   arrange(porttype, measure, scenario)
 
 riskmeasures |> 
-  filter(scenario=="baseline", porttype=="highequity")
+  filter(framework=="acli", scenario=="baseline", porttype=="highequity")
 
 riskmeasures |> 
   filter(scenario=="baseline", porttype=="highfixed")
@@ -442,7 +440,7 @@ tabdata |>
 ## Construct risk measures from pension model results
 
 
-## Calculate risk measures
+## OLD Calculate risk measures
 
 ```{r}
 #| label: risk-measures-OLD

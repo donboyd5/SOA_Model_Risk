@@ -87,19 +87,19 @@ mean_annual_logreturn_highfixed <- 0.0499 # same as highfixed acli portfolio
 slv2 <- slv_sims |> 
   rename(porttype=vname, scenario=modtype) |> # djb used to say slv=lrmat -- why??
   group_by(porttype, scenario) |> 
-  mutate(slv=map(lrmat, \(x) x + ifelse(porttype=="highequity",
+  mutate(model=map(lrmat, \(x) x + ifelse(porttype=="highequity",
                                         mean_annual_logreturn_highequity,
                                         mean_annual_logreturn_highfixed))) |>  # add target mean annual log return to innovations
   # base stats on the targeted return, not the raw innovations
   select(-lrmat) |> 
-  mutate(nsims=map(slv, \(x) nrow(x)) |> pluck(1),
-         nyears=map(slv, \(x) ncol(x)) |> pluck(1),
-         mean_model=map(slv, \(x) mean(x)) |> pluck(1),
-         sd_model=map(slv, \(x) sd(x)) |> pluck(1)) |> 
+  mutate(nsims=map(model, \(x) nrow(x)) |> pluck(1),
+         nyears=map(model, \(x) ncol(x)) |> pluck(1),
+         mean_model=map(model, \(x) mean(x)) |> pluck(1),
+         sd_model=map(model, \(x) sd(x)) |> pluck(1)) |> 
   mutate(
     constant=matrix(data=mean_model, nrow=nsims, ncol=nyears) |> list(),
     rnormal=get_normal(mean_model, sd_model, nsims, nyears, seed=1234) |> list()) |> 
-  pivot_longer(c(slv, constant, rnormal),
+  pivot_longer(c(model, constant, rnormal),
                names_to = "modtype",
                values_to = "lrmat") |> # lrmat for log returns matrix
   group_by(scenario, porttype, modtype) |> 
@@ -156,7 +156,7 @@ port1 <- acli |>
             nyears=length(unique(year)),
             mean_model=mean(logreturn),
             sd_model=sd(logreturn),
-            acli=matrix(logreturn, 
+            model=matrix(logreturn, 
                          nrow=length(unique(sim)),
                          ncol=length(unique(year)),
                          byrow=FALSE) |>
@@ -173,7 +173,7 @@ port2 <- port1 |>
   mutate(
     constant=matrix(data=mean_model, nrow=nsims, ncol=nyears) |> list(),
     rnormal=get_normal(mean_model, sd_model, nsims, nyears, seed=1234) |> list()) |> 
-  pivot_longer(c(acli, constant, rnormal),
+  pivot_longer(c(model, constant, rnormal),
                names_to = "modtype",
                values_to = "lrmat") |> # lrmat for log returns matrix
   group_by(scenario, porttype, modtype) |> 
@@ -211,7 +211,7 @@ head(all_scen)
 count(all_scen, modtype)
 
 all_scen |> 
-  filter(modtype %in% c("acli", "slv")) |>
+  filter(modtype %in% c("model")) |>
   filter(scenario != "tmod") |> 
   # mutate(lab=paste0(porttype, "-", modtype, "-", scenario)) |>
   mutate(lab=paste0(modtype, "-", scenario)) |> 
