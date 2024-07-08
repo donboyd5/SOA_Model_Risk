@@ -4,9 +4,8 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Stochastic log volatility prototypical models
+# Simple stochastic log volatility models
 
-Note: This uses S&P 500 data from the slv_parameters.qmd analysis
 
 ## Setup
 
@@ -28,11 +27,6 @@ options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
 
-
-# library(rstan)
-# library(V8)
-# options(mc.cores = parallel::detectCores())
-# rstan_options(auto_write = TRUE) # avoids recompiling
 
 ```
 
@@ -68,7 +62,6 @@ runslv <- function(data, vname, start, end, modtype="leverage"){
 ```
 
 
-
 ## SLV models for a 2-asset portfolio
 
 Get assets needed to construct two equity-bonds portfolios: 70-30 and 30-70.
@@ -92,13 +85,17 @@ equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-0
 bonds <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
 
 combo2 <- merge(Ad(equity), Ad(bonds), all = FALSE) # adjusted close; drop missing
+
+# establish portfolio weights ----
 highequity_weights <- c(equity=.7, bonds=.3)
 highbonds_weights <- c(equity=.3, bonds=.7) 
 
+# calculate log returns and cumulative assets for high-equity and high-bonds portfolios ----
 aggrport2 <- combo2 |> 
   fortify() |> 
   tibble() |> 
   setNames(c("date", "equity", "bonds")) |> 
+  arrange(date) |> 
   mutate(across(c(equity, bonds), \(x) log(x / lag(x)))) |> 
   filter(date > min(date)) |> 
   mutate(equity_portret= equity * highequity_weights["equity"] + bonds * highequity_weights["bonds"],
@@ -109,22 +106,18 @@ ht(aggrport2)
 
 saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 
-
-# getSymbols("^INSYBUC", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
-
-# equity <- getSymbols("ACWI", auto.assign = FALSE, from = "1950-01-01") # 2008-03-28 forward
-# equity <- getSymbols("GEISAC.FGI", auto.assign = FALSE, from = "1950-01-01") # most recent only
-# saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
-
-# spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
-# saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+# take a look
+# tmp <- readRDS(here::here("data", "simportfolios_rawdaily.rds"))
+# ht(tmp)
 
 ```
 
-## Estimate 4 SLV models, each for 2 portfolios, and recover parameters
+## Prepare data for model estimation
+
 
 ```{r}
-#| label: estimate-slv-simple
+#| label: prepare-data
+#| output: false
 
 # get previously saved assets and construct log returns ----
 port_monthly1 <- readRDS(here::here("data", "simportfolios_rawdaily.rds"))
@@ -149,14 +142,38 @@ data <- port_monthly |>
 data
 summary(data)
 
+```
+
+## Estimate 4 SLV models, each for 2 portfolios, and recover parameters
+
+Estimate 4 models using estimate_parameters from stochvolTMB.
+
+The four models are:
+
+-   Gaussian distribution -- normal
+-   t-distribution -- heavy tails
+-   Skew gaussian distribution -- skewness parameter alpha
+-   Leverage: Gaussian distribution with leverage -- volatility correlated with returns via rho
+
+
+See [stochvolTMB: Likelihood estimation of stochastic volatility](https://cran.r-project.org/web/packages/stochvolTMB/vignettes/stochvolTMB_vignette.html)
+
+
+```{r}
+#| label: estimate-slv-simple
+
 # run the slv model on each portfolio for all available periods
 # data must have vname, date, and lr columns
 # get_subset
+
+# estimate 4 models ----
 res2 <- data |> 
   nest(.by=vname) |> 
-  mutate(gaussmod=purrr::map(
-    data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="gaussian")),
-    tmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", modtype="t")),
+  mutate(
+    gaussmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", 
+                                          modtype="gaussian")),
+    tmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30", 
+                                      modtype="t")),
     levmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30",
                                         modtype="leverage")),
     skewmod=purrr::map(data, \(x) runslv(x, start="2003-09-30", end="2024-04-30",
@@ -165,7 +182,7 @@ res2 <- data |>
 res2
 
 
-# get the model parameters
+# get the model parameters ----
 params2 <- res2 |> 
   pivot_longer(cols=contains("mod"), names_to = "modtype", values_to = "mod") |> 
   mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),

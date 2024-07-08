@@ -25,19 +25,18 @@ book:
     - part: "Probability distributions"
       chapters:
       - probability.qmd # this is just exploratory - I'll add substance later
-    - part: "Model-based investment returns"
+    - part: "Alternative models using simple SLV model"
       chapters:
-      - slv_parameters.qmd
       - slv_models.qmd
+    - part: "Alternative model parameterizations using ACLI/AIRG model"
+      - slv_parameter_uncertainty.qmd    
       - get_acli_scenarios.qmd
-    - part: "Portfolios"
-      chapters: 
-        - create_acli_portfolios.qmd
-        - add_comparison_returns.qmd
-    - part: "Pension model"
+      - create_acli_portfolios.qmd
+      - add_comparison_returns.qmd
+    - part: "Pension model for examining alternative ESG models and parameterizations"
       chapters:
       - penmod.qmd
-    - part: "Risk evaluation"
+    - part: "Risk evaluation of results from pension model"
       chapters:
       - risk_evaluation.qmd      
     - part: "Appendix"
