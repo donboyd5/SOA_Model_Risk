@@ -4,7 +4,11 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Stochastic log volatility AIRG-ACLI parameter estimation
+# Estimate parameter uncertainty so we can construct AIRG-ACLI parameter scenarios
+
+Estimate simple stochastic log volatility models to get uncertainty estimates.
+
+We do this because we need uncertainty estimates to establish lower and upper bounds
 
 ## AIRG documentation and reported results
 

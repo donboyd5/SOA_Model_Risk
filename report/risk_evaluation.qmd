@@ -19,7 +19,21 @@ Summarize the results for each scenario (each row of the result tibble) by unnes
 
 source(here::here("report", "_common.R"))
 
-scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+slv_scen_names <- read_csv(
+"scenario,parm,parmdesc,scendesc
+gaussmod, none, none, slv model with gaussian errors
+tmod, df, degrees of freedom, slv model with heavy tails
+skewmod, alpha, skewness parameter, slv model with skewed returns
+levmod, rho, correlation parameter, slv model with volatility correlated with returns") |> 
+  mutate(framework="slv")
+slv_scen_names
+
+acli_scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+
+scen_names <- bind_rows(
+  slv_scen_names,
+  acli_scen_names) |> 
+  relocate(framework)
 
 ```
 
@@ -43,7 +57,7 @@ Put the functions here for now. Later put them in a separate file.
 # and then calculating the VaR according to the worst losses.
 
 VaR_loss <- function(alpha, t, res) {
-  # Worst (alpha percentile) asset loss at the end of year 5
+  # Worst (alpha percentile) asset loss at the end of year t
   res_cut <- res |> filter(year==t)
   assets_tail <- quantile(res_cut$assets, (1-alpha)) # assets at the tail
   assets_initial <- res$assets[1] # first simulation in first year
@@ -57,6 +71,7 @@ VaR_loss <- function(alpha, t, res) {
 
 
 VaR_erc <- function(alpha, t, res) {
+  # ERC amount at year t, alpha percentile
   res_cut <- res |> filter(year==t) # data in year t
   erc_tail <- quantile(res_cut$contrib, alpha) # contribution at alpha percentile
   erc_initial <- res$contrib[1] # initial contribution
@@ -77,6 +92,7 @@ VaR_erc <- function(alpha, t, res) {
 
 
 VaR_uaal <- function(alpha, t, res) {
+  # fr in year t, at 1 - alpha percentile 
   res_cut <- res |> filter(year==t)
   VaR_fr <- quantile(res_cut$fr, (1-alpha)) # fr at the 1-alpha percentile
   # just return the VaR_fr since VaR_uaal is easily computable if desired
@@ -123,7 +139,7 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 #| output: false
 
 # result <- readRDS(here::here("data", "penmod_results.rds"))
-result <- readRDS(here::here("data", "acli_and_comparison_penmod.rds"))
+result <- readRDS(here::here("data", "allscen_and_comparison_penmod.rds"))
 
 result
 
@@ -141,7 +157,61 @@ result |>
 
 ```
 
-## Exploratory analysis
+
+## Construct risk measures from pension model results
+
+
+## Calculate risk measures
+
+```{r}
+#| label: risk-measures
+#| output: false
+
+riskmeasures1 <- result |> 
+  # weed out bad results
+  filter(!(framework=="acli" & str_detect(scenario, "rho"))) |> # rho doesn't affect ACLI results
+  filter(!(framework=="slv" & scenario=="tmod")) |>  # t models did not work well for slv models
+  # NOTE: leaves us with about 60 framework-scenario-portfolio-modtype combinations
+  select(-c(lrmat, mean, sd)) |> # we don't need these
+  unnest(col=penmod) |> # 6.6 million observations
+  summarise(mean=first(mean_model),
+            sd=first(sd_model),
+            vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())), # asset loss at alpha percentile, year t
+            verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())), # ERC amount at year t, alpha percentile
+            vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())), # fr in year t, (1 - alpha) percentile 
+            probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())), # prob FR below x% at end year t
+            proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())), # prob ERC above x% payroll at end year t
+            mdn_frt10=median(fr[year==10]), # median FR at end year t
+            .by=c(framework, scenario, porttype, modtype))
+
+riskmeasures <- riskmeasures1 |> 
+  pivot_longer(-c(framework, scenario, porttype, modtype, mean, sd),
+               names_to = "measure") |> 
+  pivot_wider(names_from = modtype) |> 
+  relocate(acli, .after = rnormal) |> 
+  relocate(measure) |> 
+  mutate(diff=acli - rnormal) |> 
+  left_join(scen_names |> 
+              select(scenario, scendesc), by = join_by(scenario)) |> 
+  relocate(scendesc) |> 
+  arrange(measure, scenario, porttype)
+
+riskmeasures
+
+riskmeasures |> 
+  arrange(porttype, measure, scenario)
+
+riskmeasures |> 
+  filter(scenario=="baseline", porttype=="highequity")
+
+riskmeasures |> 
+  filter(scenario=="baseline", porttype=="highfixed")
+
+```
+
+
+
+## OLD Exploratory analysis
 
 Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years.
 
@@ -375,7 +445,7 @@ tabdata |>
 ## Calculate risk measures
 
 ```{r}
-#| label: risk-measures
+#| label: risk-measures-OLD
 #| output: false
 
 riskmeasures1 <- result |> 
