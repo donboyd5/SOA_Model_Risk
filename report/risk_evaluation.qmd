@@ -385,8 +385,10 @@ base_flipped_equity |>
              mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
   fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 1) |> 
-  fmt_percent(columns = c(mdn_frt10, mean, sd),
-              decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10),
+              decimals = 1) |>
+  fmt_percent(columns = c(mean, sd),
+              decimals = 2) |> 
   tab_footnote(
     footnote = "Complex model differs from other models in multiple ways",
     locations = cells_body(
@@ -601,8 +603,10 @@ base_flipped_fixed |>
              mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
   fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 1) |> 
-  fmt_percent(columns = c(mdn_frt10, mean, sd),
-              decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10),
+              decimals = 1) |>
+  fmt_percent(columns = c(mean, sd),
+              decimals = 2) |> 
   tab_footnote(
     footnote = "Complex model differs from other models in multiple ways",
     locations = cells_body(
@@ -667,23 +671,35 @@ Same portfolio, Same ACLI model, Same mean, Same SD
 
 scen_names
 
-scen_order <- scen_names |> 
+parm_order <- c("constant", "rnormal", "baseline", "phi", "rho", "sigma_v", "tau")
+mod_order <- scen_names |> 
   filter(framework=="acli") |> 
-  arrange(parm, bound)
+  rename(type=scenario, typedesc=scendesc) |> 
+  add_row(framework="acli", type="constant", parm="constant", typedesc="constant") |> 
+  add_row(framework="acli", type="rnormal", parm="rnormal", typedesc="Random normal") |> 
+  mutate(parm=factor(parm, levels=parm_order)) |> 
+  arrange(parm, bound) |> 
+  mutate(order=row_number())
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
 flipped <- riskmeasures |> 
   filter(framework=="acli", measure %in% meas_order) |> 
-  select(porttype, scenario, measure, model) |> 
-  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order
+  select(framework, porttype, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |>  # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  filter(!(type %in% c("constant", "rnormal") & scenario != "baseline")) |> 
+  mutate(type=case_when(
+    type %in% c("constant", "rnormal") ~ type,
+    .default = scenario)) |> 
+  select(-scenario) |> 
   arrange(measure) |>
-  pivot_wider(names_from = measure, values_from = model) |> 
-  mutate(scenario=factor(scenario, levels=scen_order$scenario)) |> 
-  arrange(porttype, scenario) |> 
-  left_join(scen_order |> select(scenario, scendesc),
-            by = join_by(scenario)) |> 
-  relocate(scendesc, .after=scenario)
+  pivot_wider(names_from = measure) |> 
+  relocate(type) |> 
+  left_join(mod_order, by = join_by(type, framework)) |> 
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(porttype, order) |> 
+  select(-c(parmdesc, bound))
 
 flipped  
 
@@ -691,37 +707,53 @@ flipped
 
 
 ```{r}
-#| label: show-parameter-risk
+#| label: equity-parameter-risk
+
 
 flipped |> 
-  # select(porttype, type, vloss_a95t10, verc_a95t10, probfr_fr70t10) |> 
-  arrange(porttype, scenario) |> 
+  filter(porttype=="highequity") |> 
+  select(type, mean, sd, vloss_a95t10:mdn_frt10, typedesc ) |> 
   gt() |> 
-  cols_hide(column=porttype) |> 
   tab_header(
-    title = html("Selected Risk Measures for Alternative Parameterizations of an ESG Model"),
-    subtitle = html("High equity and high bonds portfolios")
+    title = html("Selected Risk Measures for Alternative Complex ESG Parameterizations, High Equity Portfolio"),
+    subtitle = html("Normal returns have same mean and SD as ESG model")
   ) |>
-  cols_label(porttype="Portfolio type",
-             scenario="Parameterization",
-             scendesc="Description",
-             # type = html("Random normal<br>or<br>modeled returns"),
-             vloss_a95t10 = html("VaR asset loss in 10 years"),
-             verc_a95t10 = html("VaR contribution increase in 10 years"),
-             mdn_frt10 = html("Median funded ratio in 10 years")) |> 
-             # probfr_fr70t10 = html("Probability of funded ratio below 70% in 10 years")) |>
-  tab_row_group(
-    label = "High equity portfolio",
-    rows = porttype == "highequity"
-  ) |> 
-  tab_row_group(
-    label = "High bonds portfolio",
-    rows = porttype == "highfixed"
-  ) |> 
-  fmt_number(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 3) |> 
-  fmt_percent(columns = mdn_frt10,
-              decimals = 1)
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10),
+              decimals = 1) |> 
+  fmt_percent(columns = c(mean, sd),
+              decimals = 2)  
+
+```
+
+
+```{r}
+#| label: fixed-parameter-risk
+
+flipped |> 
+  filter(porttype=="highfixed") |> 
+  select(type, mean, sd, vloss_a95t10:mdn_frt10, typedesc ) |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Complex ESG Parameterizations, High Fixed-Income Portfolio"),
+    subtitle = html("Normal returns have same mean and SD as ESG model")
+  ) |>
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10),
+              decimals = 1) |> 
+  fmt_percent(columns = c(mean, sd),
+              decimals = 2)  
+
 ```
 
 
@@ -735,13 +767,17 @@ NOTE: all scenarios come from a complex ESG.
 #| output: true
 
 flipped |>
-  filter(porttype=="highequity") |> 
-  select(porttype, scenario, vloss_a95t10, verc_a95t10) |> 
-  # mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
+  filter(porttype=="highequity", type != "constant") |> 
+  select(type, vloss_a95t10, verc_a95t10) |> 
+  mutate(rnorm=type=="rnormal") |> 
+  mutate(group=case_when(type=="rnormal" ~ 1,
+                         type=="baseline" ~ 2,
+                         .default=3),
+         group=factor(group)) |> 
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
   geom_point(colour="black") +
-  geom_text_repel(aes(label=scenario), colour="blue") +
-  # geom_vline(xintercept = 0) +
+  geom_text_repel(aes(label=type, colour=group)) +
+  scale_colour_manual(values=c("red", "darkgreen", "blue")) +
   scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
                      breaks=seq(-1, 1, by=.02),
                      labels = scales::percent_format(accuracy=1)) +
@@ -750,17 +786,16 @@ flipped |>
                      labels = scales::percent_format(accuracy=1)) +  
   ggtitle("Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
           subtitle="Complex ESG, High-equity portfolios") +
-  # labs(caption="All portfolios have mean log return of ~5.00%") +
   theme_bw() +
   theme(plot.title = element_text(size = 11),
-        plot.subtitle = element_text(size = 8))
-
-# + caption_left
+        plot.subtitle = element_text(size = 8)) +
+  legend_none
 
 ```
 
 
 ### High fixed-income parameterization risk in complex ESG
+
 
 ```{r}
 #| label: parameters-fixed-plot
@@ -768,27 +803,29 @@ flipped |>
 #| output: true
 
 flipped |>
-  filter(porttype=="highfixed") |> 
-  select(porttype, scenario, vloss_a95t10, verc_a95t10) |> 
-  # mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
+  filter(porttype=="highfixed", type != "constant") |> 
+  select(type, vloss_a95t10, verc_a95t10) |> 
+  mutate(rnorm=type=="rnormal") |> 
+  mutate(group=case_when(type=="rnormal" ~ 1,
+                         type=="baseline" ~ 2,
+                         .default=3),
+         group=factor(group)) |> 
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
   geom_point(colour="black") +
-  geom_text_repel(aes(label=scenario), colour="blue") +
-  # geom_vline(xintercept = 0) +
+  geom_text_repel(aes(label=type, colour=group)) +
+  scale_colour_manual(values=c("red", "darkgreen", "blue")) +
   scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
-                     breaks=seq(-1, 1, by=.01),
+                     breaks=seq(-1, 1, by=.02),
                      labels = scales::percent_format(accuracy=1)) +
   scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
-                     breaks=seq(-1, 2, by=.01),
+                     breaks=seq(-1, 2, by=.02),
                      labels = scales::percent_format(accuracy=1)) +  
   ggtitle("Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
           subtitle="Complex ESG, High fixed-income portfolios") +
-  # labs(caption="All portfolios have mean log return of ~5.00%") +
   theme_bw() +
   theme(plot.title = element_text(size = 11),
-        plot.subtitle = element_text(size = 8))
-
-# + caption_left
+        plot.subtitle = element_text(size = 8))+
+  legend_none
 
 ```
 
