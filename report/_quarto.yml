@@ -20,26 +20,35 @@ book:
   author: "Don Boyd and Gang Chen"
   date: today
   date-format: long
+  page-navigation: true
+  # toc: true  # Enable the TOC in the sidebar
+  # toc-depth: 3  # Set the depth of the TOC  
   chapters:
     - index.qmd
+    
     - part: "Probability distributions"
       chapters:
       - probability.qmd # this is just exploratory - I'll add substance later
+      
     - part: "Alternative models using simple SLV model"
       chapters:
       - slv_models.qmd
+      
     - part: "Alternative model parameterizations using ACLI/AIRG model"
       chapters:
       - acli_parameter_uncertainty_from_slv.qmd    
       - get_acli_scenarios.qmd
       - create_acli_portfolios_and_save.qmd
+      
     - part: "Run pension model on alternative ESG models and parameterizations"
       chapters:
       - add_comparison_returns.qmd
       - penmod.qmd
+      
     - part: "Risk evaluation of results from pension model"
       chapters:
       - risk_evaluation.qmd      
+      
     - part: "Appendix"
       chapters:
       - appendix_model_returns.qmd
@@ -51,6 +60,8 @@ format:
   html:
     theme: cosmo
     code-fold: true
+    toc: true
+    toc-depth: 4
   # pdf:
   #   documentclass: scrreprt
 

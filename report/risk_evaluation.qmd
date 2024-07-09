@@ -214,21 +214,21 @@ To what extent does the choice of models change the model output?
 
 NOTE: maybe add pure asset measure w/o contribs or payouts
 
-### Gang Table 1
-
-#### High-equity portfolio
+### High-equity portfolio
 
 Baseline (Gaussian) SLV model vs. constant returns and model-equivalent random normal returns
 
-Takeaways:
+<!-- Takeaways: -->
 
--   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
--   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
--   Risk measures are slightly worse for the modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+<!-- -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario -->
+<!-- -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets) -->
+<!-- -   Risk measures are slightly worse for the modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant. -->
 
 
 ```{r}
 #| label: table1-gaussian-highequity
+#| eval: false
+#| output: false
 
 mod_order <- c("constant", "rnormal", "model")
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
@@ -270,24 +270,26 @@ base_flipped_equity |>
 
 ```
 
-The next table shows risk measures for selected alternative models:
+<!-- The next table shows risk measures for selected alternative models: -->
 
--   Gaussian errors (as above)
--   Skewed errors
--   Leverage model (volatility correlated with returns)
+<!-- -   Gaussian errors (as above) -->
+<!-- -   Skewed errors -->
+<!-- -   Leverage model (volatility correlated with returns) -->
 
 
-Takeaways:
+<!-- Takeaways: -->
 
--   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
--   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
--   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
--   Risk measures are slightly worse for the skewed and leverage models than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
--   The leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
+<!-- -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario -->
+<!-- -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets) -->
+<!-- -   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant. -->
+<!-- -   Risk measures are slightly worse for the skewed and leverage models than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns -->
+<!-- -   The leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC). -->
 
 
 ```{r}
 #| label: table1-slv-highequity
+#| eval: false
+#| output: false
 
 mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod")
 mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage")
@@ -334,21 +336,112 @@ base_flipped_equity |>
 
 ```
 
-
-
-#### Repeat for high fixed portfolio
-
-Baseline (Gaussian) SLV model vs. constant returns and model-equivalent random normal returns
-
 Takeaways:
 
 -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
 -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
--   Risk measures are slightly worse for the modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+-   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+-   Risk measures are slightly worse for the skewed and leverage models than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
+-   The leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
+
+```{r}
+#| label: table1-all-highequity
+#| eval: true
+#| output: true
+
+mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod", "acli")
+mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage", "Complex ESG")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+base_flipped_equity <- riskmeasures |> 
+  filter(framework=="slv" | (framework=="acli" & scenario=="baseline")) |> 
+  filter(porttype=="highequity", measure %in% meas_order) |> 
+  select(framework, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  filter(!(type %in% c("constant", "rnormal") & scenario != "gaussmod")) |> 
+  mutate(type=case_when(
+    type %in% c("constant", "rnormal") ~ type,
+    framework == "acli" & scenario=="baseline" ~ "acli",
+    .default = scenario)) |> 
+  select(-scenario, -framework) |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  relocate(type) |> 
+  mutate(type=factor(type, levels=mod_order, labels=mod_labs)) |>
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(type)
+
+
+base_flipped_equity |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
+    subtitle = html("Normal returns have same mean and SD as SV model")
+  ) |>
+  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10, mean, sd),
+              decimals = 1) |> 
+  tab_footnote(
+    footnote = "Complex model differs from other models in multiple ways",
+    locations = cells_body(
+      columns = c(type),
+      rows = type == "Complex ESG"))
+  
+# tab_source_note(source_note = "Asset loss at 5th percentile")
+#   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
+
+```
+
+
+```{r}
+#| label: equity-plot
+#| eval: true
+#| output: true
+
+base_flipped_equity |> 
+  filter(type != "constant") |> 
+  mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour="black") +
+  geom_text_repel(aes(label=type), colour="blue") +
+  # geom_vline(xintercept = 0) +
+  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
+                     breaks=seq(-1, 1, by=.01),
+                     labels = scales::percent_format(accuracy=1)) +
+  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
+                     breaks=seq(-1, 2, by=.01),
+                     labels = scales::percent_format(accuracy=1)) +  
+  ggtitle("Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+          subtitle="High-equity portfolios") +
+  labs(caption="All portfolios have have mean log return of ~6.25%") +
+  theme_bw() +
+  caption_left
+  
+
+```
+
+
+### High fixed portfolio
+
+<!-- Baseline (Gaussian) SLV model vs. constant returns and model-equivalent random normal returns -->
+
+<!-- Takeaways: -->
+
+<!-- -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario -->
+<!-- -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets) -->
+<!-- -   Risk measures are slightly worse for the modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant. -->
 
 
 ```{r}
 #| label: table1-gaussian-highfixed
+#| eval: false
+#| output: false
 
 mod_order <- c("constant", "rnormal", "model")
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
@@ -374,7 +467,7 @@ base_flipped_fixed |>
     title = html("Selected Risk Measures for Stochastic Volatility Model with Gaussian Errors, High Fixed Portfolio"),
     subtitle = html("Normal returns have same mean and SD as SV model")
   ) |>
-  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+  cols_label(type = html("Constant,<br>random normal, or<br>modeled returns"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
              verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
              mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
@@ -390,25 +483,27 @@ base_flipped_fixed |>
 
 ```
 
-The next table shows risk measures for selected alternative models:
+<!-- The next table shows risk measures for selected alternative models: -->
 
--   Gaussian errors (as above)
--   Skewed errors
--   Leverage model (volatility correlated with returns)
+<!-- -   Gaussian errors (as above) -->
+<!-- -   Skewed errors -->
+<!-- -   Leverage model (volatility correlated with returns) -->
 
 
-Takeaways:
+<!-- Takeaways: -->
 
--   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
--   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
--   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
--   Risk measures for the skewed model are slightly better than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
--   Risk measures for the leverage model are moderately worse for the leverage model than for the Gaussian model.
--   As with the high-equity portfolio, the leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
+<!-- -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario -->
+<!-- -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets) -->
+<!-- -   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant. -->
+<!-- -   Risk measures for the skewed model are slightly better than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns -->
+<!-- -   Risk measures for the leverage model are moderately worse for the leverage model than for the Gaussian model. -->
+<!-- -   As with the high-equity portfolio, the leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC). -->
 
 
 ```{r}
 #| label: table1-slv-highfixed
+#| eval: false
+#| output: false
 
 mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod")
 mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage")
@@ -454,6 +549,98 @@ base_flipped_fixed |>
 
 ```
 
+Takeaways:
+
+-   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
+-   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
+-   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
+-   Risk measures for the skewed model are slightly better than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
+-   Risk measures for the leverage model are moderately worse for the leverage model than for the Gaussian model.
+-   As with the high-equity portfolio, the leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
+
+```{r}
+#| label: table1-all-highfixed
+#| eval: true
+#| output: true
+
+mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod", "acli")
+mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage", "Complex ESG")
+meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
+
+base_flipped_fixed <- riskmeasures |> 
+  filter(framework=="slv" | (framework=="acli" & scenario=="baseline")) |> 
+  filter(porttype=="highfixed", measure %in% meas_order) |> 
+  select(framework, scenario, measure, mean, sd, constant, rnormal, model) |> 
+  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
+  filter(!(type %in% c("constant", "rnormal") & scenario != "gaussmod")) |> 
+  mutate(type=case_when(
+    type %in% c("constant", "rnormal") ~ type,
+    framework == "acli" & scenario=="baseline" ~ "acli",
+    .default = scenario)) |> 
+  select(-scenario, -framework) |> 
+  arrange(measure) |>
+  pivot_wider(names_from = measure) |> 
+  relocate(type) |> 
+  mutate(type=factor(type, levels=mod_order, labels=mod_labs)) |>
+  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  arrange(type)
+
+
+base_flipped_fixed |> 
+  gt() |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed Poftfolio"),
+    subtitle = html("Normal returns have same mean and SD as SV model")
+  ) |>
+  cols_label(type = html("Constant,<br>random normal, or<br>modeled returns"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
+             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mdn_frt10, mean, sd),
+              decimals = 1) |> 
+  tab_footnote(
+    footnote = "Complex model differs from other models in multiple ways",
+    locations = cells_body(
+      columns = c(type),
+      rows = type == "Complex ESG"))
+
+#  tab_source_note(source_note = "Complex model differs from other models in multiple ways")
+  
+# tab_source_note(source_note = "Asset loss at 5th percentile")
+#   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
+
+```
+
+
+
+```{r}
+#| label: fixed-plot
+#| eval: true
+#| output: true
+
+base_flipped_fixed |> 
+  filter(type != "constant") |> 
+  mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour="black") +
+  geom_text_repel(aes(label=type), colour="blue") +
+  # geom_vline(xintercept = 0) +
+  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
+                     breaks=seq(-1, 1, by=.01),
+                     labels = scales::percent_format(accuracy=1)) +
+  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
+                     breaks=seq(-1, 2, by=.01),
+                     labels = scales::percent_format(accuracy=1)) +  
+  ggtitle("Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+          subtitle="High fixed-income portfolios") +
+  labs(caption="All portfolios have have mean log return of ~5.00%") +
+  theme_bw() +
+  caption_left
+
+```
 
 
 
