@@ -400,7 +400,7 @@ base_flipped_equity |>
 
 
 ```{r}
-#| label: equity-plot
+#| label: structure-equity-plot
 #| eval: true
 #| output: true
 
@@ -619,7 +619,7 @@ base_flipped_fixed |>
 
 
 ```{r}
-#| label: fixed-plot
+#| label: structure-fixed-plot
 #| eval: true
 #| output: true
 
@@ -723,6 +723,76 @@ flipped |>
   fmt_percent(columns = mdn_frt10,
               decimals = 1)
 ```
+
+
+### High-equity parameterization risk in complex ESG
+
+NOTE: all scenarios come from a complex ESG.
+
+```{r}
+#| label: parameters-equity-plot
+#| eval: true
+#| output: true
+
+flipped |>
+  filter(porttype=="highequity") |> 
+  select(porttype, scenario, vloss_a95t10, verc_a95t10) |> 
+  # mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour="black") +
+  geom_text_repel(aes(label=scenario), colour="blue") +
+  # geom_vline(xintercept = 0) +
+  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
+                     breaks=seq(-1, 1, by=.02),
+                     labels = scales::percent_format(accuracy=1)) +
+  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
+                     breaks=seq(-1, 2, by=.02),
+                     labels = scales::percent_format(accuracy=1)) +  
+  ggtitle("Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
+          subtitle="Complex ESG, High-equity portfolios") +
+  # labs(caption="All portfolios have mean log return of ~5.00%") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 11),
+        plot.subtitle = element_text(size = 8))
+
+# + caption_left
+
+```
+
+
+### High fixed-income parameterization risk in complex ESG
+
+```{r}
+#| label: parameters-fixed-plot
+#| eval: true
+#| output: true
+
+flipped |>
+  filter(porttype=="highfixed") |> 
+  select(porttype, scenario, vloss_a95t10, verc_a95t10) |> 
+  # mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour="black") +
+  geom_text_repel(aes(label=scenario), colour="blue") +
+  # geom_vline(xintercept = 0) +
+  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
+                     breaks=seq(-1, 1, by=.01),
+                     labels = scales::percent_format(accuracy=1)) +
+  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
+                     breaks=seq(-1, 2, by=.01),
+                     labels = scales::percent_format(accuracy=1)) +  
+  ggtitle("Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
+          subtitle="Complex ESG, High fixed-income portfolios") +
+  # labs(caption="All portfolios have mean log return of ~5.00%") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 11),
+        plot.subtitle = element_text(size = 8))
+
+# + caption_left
+
+```
+
+
 
 
 
