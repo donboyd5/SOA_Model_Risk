@@ -419,8 +419,10 @@ base_flipped_equity |>
                      labels = scales::percent_format(accuracy=1)) +  
   ggtitle("Impact of model structure on risk of extreme asset loss and extreme contribution increase",
           subtitle="High-equity portfolios") +
-  labs(caption="All portfolios have have mean log return of ~6.25%") +
+  labs(caption="All portfolios have mean log return of ~6.25%") +
   theme_bw() +
+  theme(plot.title = element_text(size = 11),
+        plot.subtitle = element_text(size = 8)) +
   caption_left
   
 
@@ -636,9 +638,16 @@ base_flipped_fixed |>
                      labels = scales::percent_format(accuracy=1)) +  
   ggtitle("Impact of model structure on risk of extreme asset loss and extreme contribution increase",
           subtitle="High fixed-income portfolios") +
-  labs(caption="All portfolios have have mean log return of ~5.00%") +
+  labs(caption="All portfolios have mean log return of ~5.00%") +
   theme_bw() +
+  theme(plot.title = element_text(size = 11),
+        plot.subtitle = element_text(size = 8)) +
   caption_left
+
+ # theme(
+ #    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
+ #    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
+ #  )
 
 ```
 
