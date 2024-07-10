@@ -220,7 +220,8 @@ NOTE: maybe add pure asset measure w/o contribs or payouts
 #| output: false
 
 mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod", "acli")
-mod_labs <- c("constant", "rnormal", "Gaussian", "Skewed", "Leverage", "Complex ESG")
+mod_labs <- c("Constant", "Random\nnormal", "Gaussian SLV", "Skewed SLV", "Leverage SLV", "Complex ESG")
+
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
 base_flipped <- riskmeasures |> 
@@ -234,11 +235,12 @@ base_flipped <- riskmeasures |>
     type %in% c("constant", "rnormal") ~ type,
     framework == "acli" & scenario=="baseline" ~ "acli",
     .default = scenario)) |> 
+  mutate(type=factor(type, levels=mod_order), # for proper ordering
+         typef=factor(type, levels=mod_order, labels=mod_labs)) |> # nice labels
+  relocate(type, typef) |> 
   select(-scenario, -framework) |> 
   arrange(measure) |>
   pivot_wider(names_from = measure) |> 
-  relocate(type) |> 
-  mutate(type=factor(type, levels=mod_order, labels=mod_labs)) |>
   mutate(sd=ifelse(type=="constant", 0, sd)) |> 
   arrange(type)
 
@@ -266,11 +268,14 @@ base_flipped |>
   filter(porttype=="highequity") |> 
   select(-porttype) |> 
   gt() |> 
+  cols_hide(c(type)) |> 
   tab_header(
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
     subtitle = html("Normal returns have same mean and SD as SV model")
   ) |>
-  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+  cols_label(typef = html("Constant,<br>Random normal, or<br>modeled returns"),
+             mean = html("Mean annual<br>log return"),
+             sd = html("Standard deviation"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
              verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
              mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
@@ -283,8 +288,8 @@ base_flipped |>
   tab_footnote(
     footnote = "Complex model differs from other models in multiple ways",
     locations = cells_body(
-      columns = c(type),
-      rows = type == "Complex ESG"))
+      columns = c(typef),
+      rows = type == "acli"))
   
 # tab_source_note(source_note = "Asset loss at 5th percentile")
 #   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
@@ -300,11 +305,9 @@ base_flipped |>
 base_flipped |> 
   filter(porttype=="highequity") |> 
   filter(type != "constant") |> 
-  mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
   geom_point(colour="black") +
-  geom_text_repel(aes(label=type), colour="blue") +
-  # geom_vline(xintercept = 0) +
+  geom_text_repel(aes(label=typef), colour="blue") +
   scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
                      breaks=seq(-1, 1, by=.01),
                      labels = scales::percent_format(accuracy=1)) +
@@ -339,16 +342,18 @@ Takeaways:
 #| eval: true
 #| output: true
 
-
 base_flipped |> 
   filter(porttype=="highfixed") |> 
   select(-porttype) |> 
   gt() |> 
+  cols_hide(c(type)) |> 
   tab_header(
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed-Income Portfolio"),
     subtitle = html("Normal returns have same mean and SD as SV model")
   ) |>
-  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+  cols_label(typef = html("Constant,<br>Random normal, or<br>modeled returns"),
+             mean = html("Mean annual<br>log return"),
+             sd = html("Standard deviation"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
              verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
              mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
@@ -361,12 +366,10 @@ base_flipped |>
   tab_footnote(
     footnote = "Complex model differs from other models in multiple ways",
     locations = cells_body(
-      columns = c(type),
-      rows = type == "Complex ESG"))
-  
+      columns = c(typef),
+      rows = type == "acli"))
 
 ```
-
 
 
 ```{r}
@@ -377,11 +380,9 @@ base_flipped |>
 base_flipped |> 
   filter(porttype=="highfixed") |> 
   filter(type != "constant") |> 
-  mutate(type=fct_recode(type, "Random\nnormal" = "rnormal")) |> 
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
   geom_point(colour="black") +
-  geom_text_repel(aes(label=type), colour="blue") +
-  # geom_vline(xintercept = 0) +
+  geom_text_repel(aes(label=typef), colour="blue") +
   scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
                      breaks=seq(-1, 1, by=.01),
                      labels = scales::percent_format(accuracy=1)) +
@@ -400,6 +401,51 @@ base_flipped |>
  #    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
  #    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
  #  )
+
+```
+
+### Bar charts
+
+```{r}
+#| label: bar-charts-varloss
+#| output: true
+
+base_flipped |> 
+  # filter(porttype=="highequity") |> 
+  mutate(porttype=factor(porttype,
+                         levels=c("highequity", "highfixed"),
+                         labels=c("High-Equity Portfolio", "High-Fixed Portfolio"))) |> 
+  ggplot(aes(x = typef, y = vloss_a95t10)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  scale_y_continuous(name="% Change",
+                     breaks = seq(-1, 1, .1), labels = label_percent(accuracy=1)) +
+  labs(x=NULL) +
+  theme_bw() +
+  ggtitle("Asset % change year 10 vs. year 1, 5th percentile",
+          subtitle = "Alternative models, mean log return ~6.25%") +
+  facet_wrap(~porttype, ncol = 1, scales = "fixed")
+
+```
+
+
+```{r}
+#| label: bar-charts-ercrise
+#| output: true
+
+base_flipped |> 
+  # filter(porttype=="highequity") |> 
+  mutate(porttype=factor(porttype,
+                         levels=c("highequity", "highfixed"),
+                         labels=c("High-Equity Portfolio", "High-Fixed Portfolio"))) |> 
+  ggplot(aes(x = typef, y = verc_a95t10)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  scale_y_continuous(name="% Change",
+                     breaks = seq(-1, 2, .2), labels = label_percent(accuracy=1)) +
+  labs(x=NULL) +
+  theme_bw() +
+  ggtitle("Contribution % change year 10 vs. year 1, 5th percentile",
+          subtitle = "Alternative models, mean log return ~6.25%") +
+  facet_wrap(~porttype, ncol = 1, scales = "fixed")
 
 ```
 
