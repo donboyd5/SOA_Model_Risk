@@ -830,288 +830,79 @@ flipped |>
 ```
 
 
-
-
-
-<!-- ## OLD Exploratory analysis -->
-
-<!-- Take a look at a couple of simple results before running Gang's risk measures. Here we look at the median funded ratio at 30 years. -->
-
-<!-- ```{r} -->
-<!-- #| label: explore-data -->
-<!-- #| eval: false -->
-<!-- #| output: false -->
-
-<!-- tabdata <- result |>  -->
-<!--   filter(!str_detect(scenario, "rho")) |>  -->
-<!--   select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |>  -->
-<!--   unnest(col=penmod) |>  -->
-<!--   filter(year==30) |>  -->
-<!--   summarise( -->
-<!--     mean_model=first(mean_model), -->
-<!--     sd_model=first(sd_model), -->
-<!--     frmdn=median(fr), .by=c(scenario, porttype, modtype)) |>  -->
-<!--   pivot_wider(names_from = modtype, values_from = frmdn) |>  -->
-<!--   select(porttype, scenario, mean_model, sd_model, constant, rnormal, acli) -->
-
-<!-- # tabdata |>  -->
-<!-- #   arrange(porttype, scenario) |>  -->
-<!-- #   kable(digits=3) -->
-
-<!-- ``` -->
-
-<!-- ### Year 30 median funded ratio, modeled investment returns, deterministic, and random normal returns -->
-
-<!-- This table compares, for each scenario, the median funded ratio at 30 years using ACLI-modeled investment return to the funded ratio using a random normal distribution with the same mean and standard deviation. It is sorted by the largest difference in median funded ratio between modeled and random normal returns. -->
-
-<!-- Observations: -->
-
-<!-- -   In general, the differences from random normal at 30 years hardly look large - the most is 2 percentage points after 30 years. We can easily see swings of 2 percent or more in a single year. -->
-
-<!-- -   Partly, this is because of automatic adjustments built into pension funding - if returns are low, contributions go up, helping to stabilize the funded ratio. That is why we need to look at contributions also. This suggests there's value in just looking at cumulative returns, without considering contributions, to help understand the pure effects of alternative returns. I probably should do that. -->
-
-<!-- -   Modeled median funded ratio is always slightly higher than the random normal counterpart, even though mean log return and sd of log return is virtually identical for both. -->
-
-<!-- -   The difference is much greater for the high fixed-income portfolio than for the high equity portfolio. In these portfolios, mean returns (and standard deviations) are lower than in the high equity portfolios and so median funded ratios are lower as well, but this doesn't explain why the difference from random normal would be large. -->
-
-
-<!-- ```{r} -->
-<!-- #| label: explore-table -->
-<!-- #| output: false -->
-<!-- #| eval: false -->
-
-<!-- tabdata |>   -->
-<!--   arrange(porttype, scenario) |>  -->
-<!--   mutate(diff_vsrnorm=acli - rnormal) |>  -->
-<!--   left_join(scen_names |>  -->
-<!--               select(scenario, scendesc), by = join_by(scenario)) |>  -->
-<!--   relocate(scendesc) |>  -->
-<!--   arrange(desc(diff_vsrnorm)) |>  -->
-<!--   gt() |>  -->
-<!--   tab_header( -->
-<!--     title = html("Median funded ratio at 30 years for different scenarios and portfolio types - sorted by difference from normal"), -->
-<!--     subtitle = html("Modeled portfolio, deterministic (same mean, sd=0), and random normal (same mean, sd)") -->
-<!--   ) |> -->
-<!--   tab_spanner(columns = contains("_model"), -->
-<!--               label="Portfolio mean and sd of log returns") |> -->
-<!--   tab_spanner(columns = c(constant, rnormal, acli, diff_vsrnorm), -->
-<!--               label="Median funded ratio at 30 years") |> -->
-<!--   cols_label(mean_model="mean", -->
-<!--              sd_model="sd", -->
-<!--              constant="Deterministic", -->
-<!--              rnormal=html("Random<br>normal"), -->
-<!--              acli = html("Model"), -->
-<!--              diff_vsrnorm = html("Model<br>minus<br>normal")) |> -->
-<!--   fmt_percent(columns=-c(scendesc, scenario, porttype), -->
-<!--              scale=1, -->
-<!--              decimals=1) |> -->
-<!--   opt_row_striping() -->
-
-<!-- ``` -->
-
-<!-- ### Year 30 median funded ratio, comparison to baseline for same portfolio type and model type -->
-
-<!-- Modeled investment returns, deterministic, and random normal returns -->
-
-<!-- Here the funded ratio baseline is median FR in year 30 for baseline scenario with random normal returns, for the same portfolio type. -->
-
-<!-- frmdn is the median FR in year 30 for the ACLI model. -->
-
-<!-- frdiff is model minus baseline (random normal). -->
-
-<!-- Probably need to think about a better way to compare to baseline. -->
-
-<!-- ```{r} -->
-<!-- #| label: old-stuff -->
-<!-- #| eval: false -->
-<!-- #| output: false -->
-
-<!-- tabdata <- result |>  -->
-<!--   filter(!str_detect(scenario, "rho")) |>  -->
-<!--   select(scenario, porttype, modtype, nsims, nyears, mean_model, sd_model, penmod) |>  -->
-<!--   unnest(col=penmod) |>  -->
-<!--   filter(year==30) |>  -->
-<!--   summarise( -->
-<!--     mean_model=first(mean_model), -->
-<!--     sd_model=first(sd_model), -->
-<!--     frmdn=median(fr), .by=c(scenario, porttype, modtype)) |>  -->
-<!--   group_by(porttype) |>  -->
-<!--   mutate(frbaseline=frmdn[scenario=="baseline" & modtype=="rnormal"], -->
-<!--          frdiff=frmdn - frbaseline) |>  -->
-<!--   relocate(frbaseline, .after=sd_model) |>  -->
-<!--   ungroup() |>  -->
-<!--   filter(scenario != "baseline") |>  -->
-<!--   arrange(porttype, desc(frdiff)) -->
-
-<!-- tabdata |>  -->
-<!--   kable(digits=3) -->
-
-<!-- ``` -->
-
-
-
-<!-- ```{r} -->
-<!-- #| label: explore-plot -->
-
-
-<!-- tabdata |>  -->
-<!--   ggplot(aes(rnormal, model, colour=porttype, label=scenario)) + -->
-<!--   geom_point() + -->
-<!--   # geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15) + -->
-<!--   geom_text(vjust = -0.5, hjust = 0.5) + -->
-<!--   geom_abline(slope=1) + -->
-<!--   scale_color_manual(values=c("red", "blue")) + -->
-<!--   scale_x_continuous(name="Funded ratio with random normal returns corresponding to model (same mean, sd)",  -->
-<!--                      breaks = seq(0, 1, .05), -->
-<!--                      labels = scales::percent_format(accuracy = .1)) + -->
-<!--   scale_y_continuous(name="Funded ratio with ACLI-modeled returns",  -->
-<!--                      breaks = seq(0, 1, .05), -->
-<!--                      labels = scales::percent_format(accuracy = .1)) + -->
-<!--   ggtitle(label = "Median funded ratio at 30 years", -->
-<!--           subtitle = "ACLI scenarios and portfolios") + -->
-<!--   guides(col= guide_legend(title= "Portfolio\ntype")) + -->
-<!--   theme_bw() -->
-
-<!-- ``` -->
-
-
-<!-- ### Comparison to baseline for the same portfolio type -->
-
-
-<!-- ```{r} -->
-<!-- #| label: explore-baseline-table-data -->
-<!-- #| output: false -->
-
-<!-- tabdata2 <- tabdata |>  -->
-<!--   filter(!str_detect(scenario, "rho")) |>  -->
-<!--   select(-rnormal) |>  -->
-<!--   rename(frmdn30=model, mean=mean_logreturn, sd=sd_logreturn) |>  -->
-<!--   pivot_longer(cols=c(mean, sd, frmdn30), -->
-<!--                names_to = "measure", -->
-<!--                values_to = "variant") |>  -->
-<!--   group_by(porttype, measure) |>  -->
-<!--   mutate(baseline=variant[scenario=="baseline"]) |>  -->
-<!--   ungroup() |>  -->
-<!--   filter(scenario != "baseline") |>  -->
-<!--   relocate(variant, .after = baseline) |>  -->
-<!--   mutate(diff=variant - baseline) |>  -->
-<!--   pivot_wider(names_from = measure, values_from = c(baseline, variant, diff)) |>  -->
-<!--   select(-contains("variant")) |>  -->
-<!--   left_join(scen_names, by = join_by(scenario)) |>  -->
-<!--   relocate(scendesc) |>  -->
-<!--   arrange(porttype, desc(diff_frmdn30)) -->
-
-<!-- ``` -->
-
-
-<!-- #### High-equity portfolio -->
-
-<!-- ```{r} -->
-
-<!-- tabdata2 |>  -->
-<!--   filter(porttype=="highequity") |>  -->
-<!--   select(-porttype) |>  -->
-<!--   gt() |> -->
-<!--   tab_header( -->
-<!--     title = html("Median funded ratio at 30 years for different scenarios: High equity portfolio"), -->
-<!--     subtitle = html("Comparison to baseline scenario") -->
-<!--   ) |> -->
-<!--   tab_spanner(columns = contains("baseline"), -->
-<!--               label="Baseline results") |> -->
-<!--   tab_spanner(columns = contains("diff"), -->
-<!--               label="Alternative minus baseline") |> -->
-<!--   cols_label(baseline_mean="mean return", -->
-<!--              diff_mean="mean return", -->
-<!--              baseline_sd="sd return", -->
-<!--              diff_sd="sd return", -->
-<!--              baseline_frmdn30=html("Funded ratio<br>year 30"), -->
-<!--              diff_frmdn30=html("Funded ratio<br>year 30") -->
-<!--              ) |> -->
-<!--   fmt_percent(columns=-c(scendesc, scenario), -->
-<!--              scale=1, -->
-<!--              decimals=1) |> -->
-<!--   opt_row_striping() -->
-
-<!-- ``` -->
-
-
-<!-- #### High-fixed portfolio -->
-
-<!-- ```{r} -->
-
-<!-- tabdata2 |>  -->
-<!--   filter(porttype=="highfixed") |>  -->
-<!--   select(-porttype) |>  -->
-<!--   gt() |> -->
-<!--   tab_header( -->
-<!--     title = html("Median funded ratio at 30 years for different scenarios: High fixed income portfolio"), -->
-<!--     subtitle = html("Comparison to baseline scenario") -->
-<!--   ) |> -->
-<!--   tab_spanner(columns = contains("baseline"), -->
-<!--               label="Baseline results") |> -->
-<!--   tab_spanner(columns = contains("diff"), -->
-<!--               label="Alternative minus baseline") |> -->
-<!--   cols_label(baseline_mean="mean return", -->
-<!--              diff_mean="mean return", -->
-<!--              baseline_sd="sd return", -->
-<!--              diff_sd="sd return", -->
-<!--              baseline_frmdn30=html("Funded ratio<br>year 30"), -->
-<!--              diff_frmdn30=html("Funded ratio<br>year 30") -->
-<!--              ) |> -->
-<!--   fmt_percent(columns=-c(scendesc, scenario), -->
-<!--              scale=1, -->
-<!--              decimals=1) |> -->
-<!--   opt_row_striping() -->
-
-<!-- ``` -->
-
-
-
-<!-- ## Construct risk measures from pension model results -->
-
-
-<!-- ## OLD Calculate risk measures -->
-
-<!-- ```{r} -->
-<!-- #| label: risk-measures-OLD -->
-<!-- #| output: false -->
-
-<!-- riskmeasures1 <- result |>  -->
-<!--   filter(!str_detect(scenario, "rho")) |>  -->
-<!--   select(-c(lrmat, mean, sd)) |>  -->
-<!--   unnest(col=penmod) |>  -->
-<!--   summarise(mean=first(mean_model), -->
-<!--             sd=first(sd_model), -->
-<!--             vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())), -->
-<!--             verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())), -->
-<!--             vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())), -->
-<!--             probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())), -->
-<!--             proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())), -->
-<!--             mdn_frt10=median(fr[year==10]), -->
-<!--             .by=c(scenario, porttype, modtype)) -->
-
-<!-- riskmeasures <- riskmeasures1 |>  -->
-<!--   pivot_longer(-c(scenario, porttype, modtype, mean, sd), -->
-<!--                names_to = "measure") |>  -->
-<!--   pivot_wider(names_from = modtype) |>  -->
-<!--   relocate(acli, .after = rnormal) |>  -->
-<!--   relocate(measure) |>  -->
-<!--   mutate(diff=acli - rnormal) |>  -->
-<!--   left_join(scen_names |>  -->
-<!--               select(scenario, scendesc), by = join_by(scenario)) |>  -->
-<!--   relocate(scendesc) |>  -->
-<!--   arrange(measure, scenario, porttype) -->
-
-<!-- riskmeasures -->
-
-<!-- riskmeasures |>  -->
-<!--   arrange(porttype, measure, scenario) -->
-
-<!-- riskmeasures |>  -->
-<!--   filter(scenario=="baseline", porttype=="highequity") -->
-
-<!-- riskmeasures |>  -->
-<!--   filter(scenario=="baseline", porttype=="highfixed") -->
-
-<!-- ``` -->
+### Range plots
+
+```{r}
+#| label: range-plots
+#| eval: true
+#| output: true
+
+# ns(riskmeasures)
+# ns(riskmeasures1)
+
+range_data <- riskmeasures |> 
+  filter(framework=="acli", measure %in% c("vloss_a95t10", "verc_a95t10")) |> 
+  select(scenario, measure, porttype, rnormal, model) |> 
+  mutate(scenario=str_replace(scenario, "sigma_v", "sigmaV")) |> 
+  separate_wider_delim(cols=scenario, names=c("parameter", "bound"), delim="_", too_few = "align_start") |>
+  mutate(bound=ifelse(is.na(bound), "point", bound),
+         measure=factor(measure,
+                        levels=c("vloss_a95t10", "verc_a95t10"),
+                        labels=c("VaR_loss", "VaR_ERC")),
+         porttype=factor(porttype,
+                         levels=c("highequity", "highfixed"),
+                         labels=c("High-Equity Portfolio", "High-Fixed Portfolio"))) |> 
+  pivot_longer(cols = c(rnormal, model)) |> 
+  filter((parameter=="baseline") | name=="model") |>  
+  pivot_wider(names_from = bound) |> 
+  mutate(lowloss=pmin(lbound, ubound),
+         highloss=pmax(lbound, ubound))
+
+stats <- range_data |> 
+  filter(parameter=="baseline") |> 
+  select(measure, porttype, name, point)
+
+p <- range_data |>
+  filter(parameter!="baseline") |> 
+  filter(measure == "VaR_loss") |>
+  # filter(porttype=="High-Equity") |> 
+  ggplot(aes(y = parameter)) +
+  geom_linerange(aes(xmin = lowloss, xmax = highloss), size = 10, color = "gray70") +
+  geom_text(aes(lowloss, label=percent(lowloss, accuracy=.1)), hjust=1, size = 3.5, nudge_x=-0.0015) +
+  geom_text(aes(highloss, label=percent(highloss, accuracy=.1)), hjust=0, size = 3.5, nudge_x=0.0015) +
+  # geom_vline(aes(xintercept = point), colour="blue", data=stats |> filter(name=="model", measure == "VaR_loss")) +
+  # geom_vline(aes(xintercept = point), colour="red", data=stats |> filter(name=="rnormal", measure == "VaR_loss")) +
+  scale_x_continuous(labels = scales::label_percent(accuracy=1), breaks = seq(-1, 1, .05)) +
+  xlab("Range of VaR Asset Loss (5th percentile) at 10th Year") +
+  ylab(NULL) +
+  theme_bw() +
+  facet_wrap(~ porttype, scales = "fixed",  ncol = 1) +
+  ggtitle("VaR of Asset Loss Under Alternative ESG Model Parameterizations",
+          subtitle = "Based on upper-bound and lower-bound values of important model parameters")
+p
+ggsave(filename=here::here("report", "results", "FigureVaRLoss.png"), plot=p, width=10, height=6, scale=1.5)
+
+
+
+p <- range_data |>
+  filter(parameter!="baseline") |> 
+  filter(measure == "VaR_ERC") |>
+  # filter(porttype=="High-Equity") |> 
+  ggplot(aes(y = parameter)) +
+  geom_linerange(aes(xmin = lowloss, xmax = highloss), size = 10, color = "gray70") +
+  geom_text(aes(lowloss, label=percent(lowloss, accuracy=.1)), hjust=1, size = 3.5, nudge_x=-0.0015) +
+  geom_text(aes(highloss, label=percent(highloss, accuracy=.1)), hjust=0, size = 3.5, nudge_x=0.0015) +
+  # geom_vline(aes(xintercept = point), colour="blue", data=stats |> filter(name=="model", measure == "VaR_loss")) +
+  # geom_vline(aes(xintercept = point), colour="red", data=stats |> filter(name=="rnormal", measure == "VaR_loss")) +
+  scale_x_continuous(labels = scales::label_percent(accuracy=1), breaks = seq(0, 2, .05)) +
+  xlab("Range of Employer Contribution Increase (Worst 95th percentile) at 10th Year") +
+  ylab(NULL) +
+  theme_bw() +
+  facet_wrap(~ porttype, scales = "fixed",  ncol = 1) +
+  ggtitle("VaR of Employer Contribution Increase Under Alternative ESG Model Parameterizations",
+          subtitle = "Based on upper-bound and lower-bound values of important model parameters")
+p
+ggsave(filename=here::here("report", "results", "FigureVaRERC.png"), plot=p, width=10, height=6, scale=1.5)
+
+```
 
