@@ -57,6 +57,7 @@ runslv <- function(data, vname, start, end, modtype="leverage"){
   mod
 }
 # runslv(stack, "us", start="1950-01-01", end="2024-05-10")
+# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
 
 
 ```
@@ -161,6 +162,139 @@ See [stochvolTMB: Likelihood estimation of stochastic volatility](https://cran.r
 
 
 ```{r}
+#| label: test
+
+data
+
+startdate <- "2003-10-31"
+enddate <- "2024-06-30"
+
+start <- as.Date(startdate)
+end <- as.Date(enddate)
+# vname <- "us"
+df <- data |>
+  filter(vname=="highequity", date >= start, date <= end) |>
+  filter(!is.na(lr)) |>
+  mutate(lrc=lr - mean(lr))
+df
+
+vec <- df$lrc
+modtype <- "gaussian"
+modtype <- "t"
+modtype <- "leverage"
+modtype <- "skew_gaussian"
+mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
+
+summary(mod, report="transformed")
+
+```
+
+
+```{r}
+
+get_subset2 <- function(vname, start, end, data=stack){
+  # get a time-period subset of the stacked data and demean the log returns
+  # only keep the portion of the time-period subset that has values for the
+  #   demeaned log returns
+  start <- as.Date(start)
+  end <- as.Date(end)
+  df <- data |> 
+    filter(vname==!!vname, date >= start, date <= end) |> 
+    filter(!is.na(lr)) |> 
+    mutate(lrc=lr - mean(lr))
+  df
+}
+
+runslv2 <- function(data, vname, start, end, modtype="leverage"){
+  # get the demeaned log return from a data subset and estimate an slv model
+  # data must have vname, date, and lr columns
+  vec <- get_subset2(vname, start, end, data)$lrc
+  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
+  mod
+}
+
+startdate <- "2003-10-31"
+enddate <- "2024-06-30"
+res2 <- data |> 
+  nest(.by=vname) |> 
+  mutate(
+    gaussmod=purrr::map2(data, vname, 
+                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="gaussian")),
+    tmod=purrr::map2(data, vname, 
+                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="t")),
+    levmod=purrr::map2(data, vname, 
+                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="leverage")),
+    skewmod=purrr::map2(data, vname, 
+                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="skew_gaussian")))
+res2
+# CAUTION: high equity t model generating nans for df std_error, z_value, p_value transformed
+
+# stochvol_gauss <- svsample(spy$log_return, quiet = T)
+
+# get the model parameters ----
+params2 <- res2 |> 
+  pivot_longer(cols=contains("mod"), names_to = "modtype", values_to = "mod") |> 
+  mutate(summ_trans=map(mod, \(x) summary(x, report="transformed") |> list()),
+         summ_fix=map(mod, \(x) summary(x, report="fixed") |> list()),
+         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
+         aic=map(mod, \(x) AIC(x)) |> unlist(),
+         params=map(summ_trans, \(x) pluck(x, 1)),
+         params_fix=map(summ_fix, \(x) pluck(x, 1)))
+
+# params2
+params2 |> arrange(vname, aic)
+# params2 |> unnest(params) |> arrange(vname, parameter, modtype)
+params2 |> unnest(params) |> arrange(vname, modtype, parameter) |> mutate(bad=is.na(std_error))
+
+
+# get the high equity data
+vec <- data |> 
+  filter(vname=="highequity") |> 
+  filter(date >= startdate, date <= enddate) |> 
+  filter(!is.na(lr)) |> 
+  mutate(lrc=lr - mean(lr)) |> 
+  pull(lrc)
+vec
+svgauss <- svsample(vec, quiet = TRUE)
+svlev <- svlsample(vec, quiet = TRUE)
+svt <- svtsample(vec, quiet = TRUE)
+svtl <- svtlsample(vec, quiet = TRUE)
+
+# svgauss$para
+
+# stochvolTMB stochvol
+# sigma_y   exp(mu / 2)
+# sigma_h   sigma
+# phi       phi
+# rho       rho
+# df        nu  degrees of freedom of the t distribution
+
+summary(svgauss)
+params2 |> 
+  filter(vname=="highequity", modtype=="gaussmod") |> 
+  select(vname, modtype, params=params) |> # or params=params_fix
+  unnest(params)
+
+summary(svt)
+params2 |> 
+  filter(vname=="highequity", modtype=="tmod") |> 
+  select(vname, modtype, params) |> 
+  unnest(params)
+
+summary(svlev)
+params2 |> 
+  filter(vname=="highequity", modtype=="levmod") |> 
+  select(vname, modtype, params) |> 
+  unnest(params)
+
+summary(svtl)
+
+
+
+```
+
+
+```{r}
 #| label: estimate-slv-simple
 #| output: false
 
@@ -187,6 +321,8 @@ res2 <- data |>
     )
 res2
 # CAUTION: high equity t model generating nans for df std_error, z_value, p_value transformed
+
+# stochvol_gauss <- svsample(spy$log_return, quiet = T)
 
 # get the model parameters ----
 params2 <- res2 |> 
