@@ -295,23 +295,24 @@ Takeaways:
 
 tab <- base_flipped |> 
   filter(porttype=="highequity") |> 
-  select(-porttype) |> 
+  select(-porttype, -mdn_frt10) |> 
+  mutate(rn=row_number()) |> 
+  relocate(rn) |> 
   gt() |> 
   cols_hide(c(type)) |> 
   tab_header(
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
     subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
-  cols_label(typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+  cols_label(rn="Row number",
+             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              mean = html("Mean annual<br>log return"),
              sd = html("Standard deviation"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
-             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
+             ) |> 
   fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 1) |> 
-  fmt_percent(columns = c(mdn_frt10),
-              decimals = 1) |>
   fmt_percent(columns = c(mean, sd),
               decimals = 1) |> 
   tab_footnote(
@@ -377,23 +378,24 @@ Takeaways:
 
 tab <- base_flipped |> 
   filter(porttype=="highfixed") |> 
-  select(-porttype) |> 
+  select(-porttype, -mdn_frt10) |>  
+  mutate(rn=row_number()) |> 
+  relocate(rn) |> 
   gt() |> 
   cols_hide(c(type)) |> 
   tab_header(
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed-Income Portfolio"),
     subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
-  cols_label(typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+  cols_label(rn="Row number",
+             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              mean = html("Mean annual<br>log return"),
              sd = html("Standard deviation"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
-             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
+  ) |> 
   fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 1) |> 
-  fmt_percent(columns = c(mdn_frt10),
-              decimals = 1) |>
   fmt_percent(columns = c(mean, sd),
               decimals = 1) |> 
   tab_footnote(
