@@ -246,19 +246,43 @@ params2 |> arrange(vname, aic)
 # params2 |> unnest(params) |> arrange(vname, parameter, modtype)
 params2 |> unnest(params) |> arrange(vname, modtype, parameter) |> mutate(bad=is.na(std_error))
 
+params2 |> 
+  select(-c(data, mod, summ_trans, summ_fix, params_fix)) |> 
+  #filter(modtype != "tmod") |> 
+  unnest(params) |> 
+  arrange(vname, parameter, modtype)
 
-# get the high equity data
-vec <- data |> 
-  filter(vname=="highequity") |> 
-  filter(date >= startdate, date <= enddate) |> 
-  filter(!is.na(lr)) |> 
-  mutate(lrc=lr - mean(lr)) |> 
+params2 |> 
+  select(-c(data, mod, summ_trans, summ_fix)) |> 
+  # filter(modtype != "tmod") |> 
+  unnest(params_fix) |> 
+  arrange(vname, parameter, modtype)
+
+
+
+# experiment with stochvol as opposed to stochvoltmb -- get the high equity data
+vec <- data |>
+  filter(vname=="highequity") |>
+  filter(date >= startdate, date <= enddate) |>
+  filter(!is.na(lr)) |>
+  mutate(lrc=lr - mean(lr)) |>
   pull(lrc)
-vec
-svgauss <- svsample(vec, quiet = TRUE)
-svlev <- svlsample(vec, quiet = TRUE)
-svt <- svtsample(vec, quiet = TRUE)
-svtl <- svtlsample(vec, quiet = TRUE)
+
+mtype <- "gaussian"
+mtype <- "t"
+mtype <- "skew_gaussian"
+mtype <- "leverage"
+mod <- estimate_parameters(vec, model = mtype, silent = TRUE)
+summary(mod, report = "fixed")
+summary(mod, report = "transformed")
+
+
+
+# vec
+# svgauss <- svsample(vec, quiet = TRUE)
+# svlev <- svlsample(vec, quiet = TRUE)
+# svt <- svtsample(vec, quiet = TRUE)
+# svtl <- svtlsample(vec, quiet = TRUE)
 
 # svgauss$para
 
