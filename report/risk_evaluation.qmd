@@ -220,7 +220,7 @@ NOTE: maybe add pure asset measure w/o contribs or payouts
 #| output: false
 
 mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod", "acli")
-mod_labs <- c("Constant", "Random\nnormal", "Gaussian SLV", "Skewed SLV", "Leverage SLV", "Complex ESG")
+mod_labs <- c("Deterministic", "Random\nnormal", "Gaussian SV", "Skewed SV", "Leverage SV", "Complex ESG")
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
@@ -249,7 +249,7 @@ base_flipped <- riskmeasures |>
 
 ### High-equity portfolio
 
-Baseline (Gaussian) SLV model vs. constant returns and model-equivalent random normal returns
+Baseline (Gaussian) SV model vs. constant returns and model-equivalent random normal returns
 
 Takeaways:
 
@@ -273,7 +273,7 @@ base_flipped |>
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
     subtitle = html("Normal returns have same mean and SD as SV model")
   ) |>
-  cols_label(typef = html("Constant,<br>Random normal, or<br>modeled returns"),
+  cols_label(typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              mean = html("Mean annual<br>log return"),
              sd = html("Standard deviation"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
@@ -351,7 +351,7 @@ base_flipped |>
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed-Income Portfolio"),
     subtitle = html("Normal returns have same mean and SD as SV model")
   ) |>
-  cols_label(typef = html("Constant,<br>Random normal, or<br>modeled returns"),
+  cols_label(typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              mean = html("Mean annual<br>log return"),
              sd = html("Standard deviation"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
@@ -562,7 +562,7 @@ flipped |>
     title = html("Selected Risk Measures for Alternative Complex ESG Parameterizations, High Equity Portfolio"),
     subtitle = html("Normal returns have same mean and SD as ESG model")
   ) |>
-  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
+  cols_label(type = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
              verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
              mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
