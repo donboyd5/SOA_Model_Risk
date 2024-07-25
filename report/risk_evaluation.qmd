@@ -35,6 +35,35 @@ scen_names <- bind_rows(
   acli_scen_names) |> 
   relocate(framework)
 
+## prepare raw excel tables ----
+# library(openxlsx)
+library(writexl)
+
+tabdir <- here::here("report", "results") # where we want to write tables
+
+# use this function to write tables
+write_tab <- function(tabname, tab=NULL, tabdir=NULL) {
+  # create a small excel file from a table - regardless of whether it is a tibble or a gt table
+  # assumes tab and tabdir exist in the environment, by those names - but can be passed
+  
+  if (is.null(tab)) tab <- get("tab", envir = parent.frame())
+  if (is.null(tabdir)) tabdir <- get("tabdir", envir = parent.frame())
+  tpath <- fs::path(tabdir, paste0(tabname, ".xlsx"))
+  
+  if (inherits(tab, "gt_tbl")) {
+    data <- tab$`_data`
+  } else if (tibble::is_tibble(tab)) {
+    data <- tab
+  } else {
+    return("ERROR: tab is neither gt table nor tibble!")
+  }
+  write_xlsx(data, tpath)
+  
+  # example:
+  # write_tab("risk_equity")
+}
+
+
 ```
 
 
@@ -264,14 +293,14 @@ Takeaways:
 #| eval: true
 #| output: true
 
-base_flipped |> 
+tab <- base_flipped |> 
   filter(porttype=="highequity") |> 
   select(-porttype) |> 
   gt() |> 
   cols_hide(c(type)) |> 
   tab_header(
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
-    subtitle = html("Normal returns have same mean and SD as SV model")
+    subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
   cols_label(typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              mean = html("Mean annual<br>log return"),
@@ -284,15 +313,19 @@ base_flipped |>
   fmt_percent(columns = c(mdn_frt10),
               decimals = 1) |>
   fmt_percent(columns = c(mean, sd),
-              decimals = 2) |> 
+              decimals = 1) |> 
   tab_footnote(
     footnote = "Complex model differs from other models in multiple ways",
     locations = cells_body(
       columns = c(typef),
       rows = type == "acli"))
-  
+tab
+
+write_tab("risk_measures_highequity")  
+
 # tab_source_note(source_note = "Asset loss at 5th percentile")
 #   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
+
 
 ```
 
@@ -342,14 +375,14 @@ Takeaways:
 #| eval: true
 #| output: true
 
-base_flipped |> 
+tab <- base_flipped |> 
   filter(porttype=="highfixed") |> 
   select(-porttype) |> 
   gt() |> 
   cols_hide(c(type)) |> 
   tab_header(
     title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed-Income Portfolio"),
-    subtitle = html("Normal returns have same mean and SD as SV model")
+    subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
   cols_label(typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
              mean = html("Mean annual<br>log return"),
@@ -362,12 +395,16 @@ base_flipped |>
   fmt_percent(columns = c(mdn_frt10),
               decimals = 1) |>
   fmt_percent(columns = c(mean, sd),
-              decimals = 2) |> 
+              decimals = 1) |> 
   tab_footnote(
     footnote = "Complex model differs from other models in multiple ways",
     locations = cells_body(
       columns = c(typef),
       rows = type == "acli"))
+
+tab
+
+write_tab("risk_measures_highfixed")  
 
 ```
 
@@ -435,21 +472,6 @@ figure_Vloss_model <- base_flipped |>
 figure_Vloss_model
 ggsave(filename=here::here("report", "results", "Figure_vloss_model.png"), plot=figure_Vloss_model, width=10, height=6)
 
-# base_flipped |> 
-#   # filter(porttype=="highequity") |> 
-#   mutate(porttype=factor(porttype,
-#                          levels=c("highequity", "highfixed"),
-#                          labels=c("High-Equity Portfolio", "High-Fixed Portfolio"))) |> 
-#   ggplot(aes(x = typef, y = vloss_a95t10)) +
-#   geom_bar(stat = "identity", fill = "blue") +
-#   scale_y_continuous(name="% Change",
-#                      breaks = seq(-1, 1, .1), labels = label_percent(accuracy=1)) +
-#   labs(x=NULL) +
-#   theme_bw() +
-#   ggtitle("Asset % change year 10 vs. year 1, 5th percentile",
-#           subtitle = "Alternative models, mean log return ~6.25%") +
-#   facet_wrap(~porttype, ncol = 1, scales = "fixed")
-
 ```
 
 
@@ -482,20 +504,6 @@ figure_VERC_model
 
 ggsave(filename=here::here("report", "results", "Figure_VERC_model.png"), plot=figure_VERC_model, width=10, height=6)
 
-# base_flipped |> 
-#   # filter(porttype=="highequity") |> 
-#   mutate(porttype=factor(porttype,
-#                          levels=c("highequity", "highfixed"),
-#                          labels=c("High-Equity Portfolio", "High-Fixed Portfolio"))) |> 
-#   ggplot(aes(x = typef, y = verc_a95t10)) +
-#   geom_bar(stat = "identity", fill = "blue") +
-#   scale_y_continuous(name="% Change",
-#                      breaks = seq(-1, 2, .2), labels = label_percent(accuracy=1)) +
-#   labs(x=NULL) +
-#   theme_bw() +
-#   ggtitle("Contribution % change year 10 vs. year 1, 5th percentile",
-#           subtitle = "Alternative models, mean log return ~6.25%") +
-#   facet_wrap(~porttype, ncol = 1, scales = "fixed")
 
 ```
 
@@ -553,8 +561,7 @@ flipped
 ```{r}
 #| label: equity-parameter-risk
 
-
-flipped |> 
+tab <- flipped |> 
   filter(porttype=="highequity") |> 
   select(type, mean, sd, vloss_a95t10:mdn_frt10, typedesc ) |> 
   gt() |> 
@@ -573,13 +580,17 @@ flipped |>
   fmt_percent(columns = c(mean, sd),
               decimals = 2)  
 
+tab
+
+write_tab("parameter_risk_highequity")
+
 ```
 
 
 ```{r}
 #| label: fixed-parameter-risk
 
-flipped |> 
+tab <- flipped |> 
   filter(porttype=="highfixed") |> 
   select(type, mean, sd, vloss_a95t10:mdn_frt10, typedesc ) |> 
   gt() |> 
@@ -597,6 +608,9 @@ flipped |>
               decimals = 1) |> 
   fmt_percent(columns = c(mean, sd),
               decimals = 2)  
+tab
+
+write_tab("parameter_risk_highfixed")
 
 ```
 
@@ -711,7 +725,7 @@ p <- range_data |>
   filter(measure == "VaR_loss") |>
   # filter(porttype=="High-Equity") |> 
   ggplot(aes(y = parameter)) +
-  geom_linerange(aes(xmin = lowloss, xmax = highloss), size = 10, color = "gray70") +
+  geom_linerange(aes(xmin = lowloss, xmax = highloss), linewidth=10, color = "gray70") + # size = 10, 
   geom_text(aes(lowloss, label=percent(lowloss, accuracy=.1)), hjust=1, size = 3.5, nudge_x=-0.0015) +
   geom_text(aes(highloss, label=percent(highloss, accuracy=.1)), hjust=0, size = 3.5, nudge_x=0.0015) +
   # geom_vline(aes(xintercept = point), colour="blue", data=stats |> filter(name=="model", measure == "VaR_loss")) +
@@ -733,7 +747,7 @@ p <- range_data |>
   filter(measure == "VaR_ERC") |>
   # filter(porttype=="High-Equity") |> 
   ggplot(aes(y = parameter)) +
-  geom_linerange(aes(xmin = lowloss, xmax = highloss), size = 10, color = "gray70") +
+  geom_linerange(aes(xmin = lowloss, xmax = highloss), linewidth = 10, color = "gray70") +
   geom_text(aes(lowloss, label=percent(lowloss, accuracy=.1)), hjust=1, size = 3.5, nudge_x=-0.0015) +
   geom_text(aes(highloss, label=percent(highloss, accuracy=.1)), hjust=0, size = 3.5, nudge_x=0.0015) +
   # geom_vline(aes(xintercept = point), colour="blue", data=stats |> filter(name=="model", measure == "VaR_loss")) +
@@ -747,6 +761,38 @@ p <- range_data |>
           subtitle = "Based on upper-bound and lower-bound values of important model parameters")
 p
 ggsave(filename=here::here("report", "results", "FigureVaRERC.png"), plot=p, width=10, height=6, scale=1.5)
+
+```
+
+
+```{r}
+#| label: how-to-write-xl-workbook
+#| eval: false
+#| output: false
+
+# Not using this, but saving it so that the technique is available if wanted
+
+library(openxlsx)
+
+tabdir <- here::here("report", "results") # where we want to write tables
+wbpath <- fs::path(tabdir, "wb.xlsx")
+saveWorkbook(wb, wbpath, overwrite = TRUE)
+
+
+addxl <- function(tabname, tab = NULL, wbpath = NULL) {
+  # add worksheet to a saved workbook
+  if (is.null(tab)) tab <- get("tab", envir = parent.frame())
+  if (is.null(wbpath)) wbpath <- get("wbpath", envir = parent.frame())
+
+  wb <- loadWorkbook(wbpath)
+  addWorksheet(wb, tabname)
+  writeData(wb, tabname, tab)
+  # note that overwrite is FALSE so we don't lose worksheets already added!
+  saveWorkbook(wb, wbpath, overwrite = TRUE)
+  # example: addxl("risk_equity")  # if we have a new table named tab and want to call it risk_equity in the xlsx file
+}
+
+addxl("risk_equity")
 
 ```
 
