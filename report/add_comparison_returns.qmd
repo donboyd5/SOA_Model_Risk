@@ -68,6 +68,8 @@ count(slv_sims, vname)
 count(slv_sims, modtype)
 count(slv_sims, vname, modtype) # missing highfixed, tmod
 
+slv_sims
+
 ```
 
 

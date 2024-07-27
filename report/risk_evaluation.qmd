@@ -289,7 +289,7 @@ Takeaways:
 -   The leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
 
 ```{r}
-#| label: table1-all-highequity
+#| label: table1-structure-all-highequity
 #| eval: true
 #| output: true
 
@@ -374,7 +374,7 @@ Takeaways:
 -   As with the high-equity portfolio, the leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
 
 ```{r}
-#| label: table1-all-highfixed
+#| label: table1-structure-all-highfixed
 #| eval: true
 #| output: true
 
@@ -631,64 +631,6 @@ write_tab("parm_risk_measures_highfixed")
 
 
 
-
-```{r}
-#| label: equity-parameter-risk-old
-
-tab <- flipped |> 
-  filter(porttype=="highequity") |> 
-  select(type, mean, sd, vloss_a95t10:mdn_frt10, typedesc ) |> 
-  gt() |> 
-  tab_header(
-    title = html("Selected Risk Measures for Alternative Complex ESG Parameterizations, High Equity Portfolio"),
-    subtitle = html("Normal returns have same mean and SD as ESG model")
-  ) |>
-  cols_label(type = html("Deterministic,<br>Random normal, or<br>modeled returns"),
-             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
-             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
-  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 1) |> 
-  fmt_percent(columns = c(mdn_frt10),
-              decimals = 1) |> 
-  fmt_percent(columns = c(mean, sd),
-              decimals = 2)  
-
-tab
-
-write_tab("parameter_risk_highequity")
-
-```
-
-
-```{r}
-#| label: fixed-parameter-risk
-
-tab <- flipped |> 
-  filter(porttype=="highfixed") |> 
-  select(type, mean, sd, vloss_a95t10:mdn_frt10, typedesc ) |> 
-  gt() |> 
-  tab_header(
-    title = html("Selected Risk Measures for Alternative Complex ESG Parameterizations, High Fixed-Income Portfolio"),
-    subtitle = html("Normal returns have same mean and SD as ESG model")
-  ) |>
-  cols_label(type = html("Constant,<br>Random normal, or<br>modeled returns"),
-             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"),
-             mdn_frt10 = html("Median funded ratio<br>Year 10")) |> 
-  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 1) |> 
-  fmt_percent(columns = c(mdn_frt10),
-              decimals = 1) |> 
-  fmt_percent(columns = c(mean, sd),
-              decimals = 2)  
-tab
-
-write_tab("parameter_risk_highfixed")
-
-```
-
-
 ### High-equity parameterization risk in complex ESG
 
 NOTE: all scenarios come from a complex ESG.
@@ -698,7 +640,7 @@ NOTE: all scenarios come from a complex ESG.
 #| eval: true
 #| output: true
 
-flipped |>
+parm_flipped |>
   filter(porttype=="highequity", type != "constant") |> 
   select(type, vloss_a95t10, verc_a95t10) |> 
   mutate(rnorm=type=="rnormal") |> 
@@ -734,7 +676,7 @@ flipped |>
 #| eval: true
 #| output: true
 
-flipped |>
+parm_flipped |>
   filter(porttype=="highfixed", type != "constant") |> 
   select(type, vloss_a95t10, verc_a95t10) |> 
   mutate(rnorm=type=="rnormal") |> 

@@ -34,30 +34,19 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 ```{r}
 #| label: functions-for-slv-models
 
-get_subset <- function(vname, start, end, data=stack){
-  # get a time-period subset of the stacked data and demean the log returns
-  # only keep the portion of the time-period subset that has values for the
-  #   demeaned log returns
-  start <- as.Date(start)
-  end <- as.Date(end)
-  vname <- "us"
-  df <- data |> 
-    filter(vname==!!vname, date >= start, date <= end) |> 
-    filter(!is.na(lr)) |> 
-    mutate(lrc=lr - mean(lr))
-  df
-}
-# get_subset("us", "2020-01-31", "2020-05-02")
-
-runslv <- function(data, vname, start, end, modtype="leverage"){
+runslv <- function(data, start, end, modtype="leverage"){
   # get the demeaned log return from a data subset and estimate an slv model
-  # data must have vname, date, and lr columns
-  vec <- get_subset(vname, start, end, data)$lrc
+  # data must have date and lr columns
+  
+  vec <- data |> 
+    filter(date >= as.Date(start), date <= as.Date(end)) |> 
+    filter(!is.na(lr)) |> 
+    mutate(lrc=lr - mean(lr)) |> 
+    pull(lrc)
+  
   mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
   mod
 }
-# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
-# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
 
 
 ```
@@ -161,162 +150,6 @@ The four models are:
 See [stochvolTMB: Likelihood estimation of stochastic volatility](https://cran.r-project.org/web/packages/stochvolTMB/vignettes/stochvolTMB_vignette.html)
 
 
-```{r}
-#| label: test
-
-data
-
-startdate <- "2003-10-31"
-enddate <- "2024-06-30"
-
-start <- as.Date(startdate)
-end <- as.Date(enddate)
-# vname <- "us"
-df <- data |>
-  filter(vname=="highequity", date >= start, date <= end) |>
-  filter(!is.na(lr)) |>
-  mutate(lrc=lr - mean(lr))
-df
-
-vec <- df$lrc
-modtype <- "gaussian"
-modtype <- "t"
-modtype <- "leverage"
-modtype <- "skew_gaussian"
-mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
-
-summary(mod, report="transformed")
-
-```
-
-
-```{r}
-
-get_subset2 <- function(vname, start, end, data=stack){
-  # get a time-period subset of the stacked data and demean the log returns
-  # only keep the portion of the time-period subset that has values for the
-  #   demeaned log returns
-  start <- as.Date(start)
-  end <- as.Date(end)
-  df <- data |> 
-    filter(vname==!!vname, date >= start, date <= end) |> 
-    filter(!is.na(lr)) |> 
-    mutate(lrc=lr - mean(lr))
-  df
-}
-
-runslv2 <- function(data, vname, start, end, modtype="leverage"){
-  # get the demeaned log return from a data subset and estimate an slv model
-  # data must have vname, date, and lr columns
-  vec <- get_subset2(vname, start, end, data)$lrc
-  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
-  mod
-}
-
-startdate <- "2003-10-31"
-enddate <- "2024-06-30"
-res2 <- data |> 
-  nest(.by=vname) |> 
-  mutate(
-    gaussmod=purrr::map2(data, vname, 
-                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="gaussian")),
-    tmod=purrr::map2(data, vname, 
-                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="t")),
-    levmod=purrr::map2(data, vname, 
-                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="leverage")),
-    skewmod=purrr::map2(data, vname, 
-                         \(data, vname) runslv2(data, vname, start=startdate, end=enddate, modtype="skew_gaussian")))
-res2
-# CAUTION: high equity t model generating nans for df std_error, z_value, p_value transformed
-
-# stochvol_gauss <- svsample(spy$log_return, quiet = T)
-
-# get the model parameters ----
-params2 <- res2 |> 
-  pivot_longer(cols=contains("mod"), names_to = "modtype", values_to = "mod") |> 
-  mutate(summ_trans=map(mod, \(x) summary(x, report="transformed") |> list()),
-         summ_fix=map(mod, \(x) summary(x, report="fixed") |> list()),
-         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
-         aic=map(mod, \(x) AIC(x)) |> unlist(),
-         params=map(summ_trans, \(x) pluck(x, 1)),
-         params_fix=map(summ_fix, \(x) pluck(x, 1)))
-
-# params2
-params2 |> arrange(vname, aic)
-# params2 |> unnest(params) |> arrange(vname, parameter, modtype)
-params2 |> unnest(params) |> arrange(vname, modtype, parameter) |> mutate(bad=is.na(std_error))
-
-params2 |> 
-  select(-c(data, mod, summ_trans, summ_fix, params_fix)) |> 
-  #filter(modtype != "tmod") |> 
-  unnest(params) |> 
-  arrange(vname, parameter, modtype)
-
-params2 |> 
-  select(-c(data, mod, summ_trans, summ_fix)) |> 
-  # filter(modtype != "tmod") |> 
-  unnest(params_fix) |> 
-  arrange(vname, parameter, modtype)
-
-
-
-# experiment with stochvol as opposed to stochvoltmb -- get the high equity data
-vec <- data |>
-  filter(vname=="highequity") |>
-  filter(date >= startdate, date <= enddate) |>
-  filter(!is.na(lr)) |>
-  mutate(lrc=lr - mean(lr)) |>
-  pull(lrc)
-
-mtype <- "gaussian"
-mtype <- "t"
-mtype <- "skew_gaussian"
-mtype <- "leverage"
-mod <- estimate_parameters(vec, model = mtype, silent = TRUE)
-summary(mod, report = "fixed")
-summary(mod, report = "transformed")
-
-
-
-# vec
-# svgauss <- svsample(vec, quiet = TRUE)
-# svlev <- svlsample(vec, quiet = TRUE)
-# svt <- svtsample(vec, quiet = TRUE)
-# svtl <- svtlsample(vec, quiet = TRUE)
-
-# svgauss$para
-
-# stochvolTMB stochvol
-# sigma_y   exp(mu / 2)
-# sigma_h   sigma
-# phi       phi
-# rho       rho
-# df        nu  degrees of freedom of the t distribution
-
-summary(svgauss)
-params2 |> 
-  filter(vname=="highequity", modtype=="gaussmod") |> 
-  select(vname, modtype, params=params) |> # or params=params_fix
-  unnest(params)
-
-summary(svt)
-params2 |> 
-  filter(vname=="highequity", modtype=="tmod") |> 
-  select(vname, modtype, params) |> 
-  unnest(params)
-
-summary(svlev)
-params2 |> 
-  filter(vname=="highequity", modtype=="levmod") |> 
-  select(vname, modtype, params) |> 
-  unnest(params)
-
-summary(svtl)
-
-
-
-```
-
 
 ```{r}
 #| label: estimate-slv-simple
@@ -327,23 +160,23 @@ summary(svtl)
 # get_subset
 
 # estimate 4 models ----
-# startdate <- "2003-09-30"
-# enddate <- "2024-04-30"
+
 startdate <- "2003-10-31"
 enddate <- "2024-06-30"
+
 res2 <- data |> 
   nest(.by=vname) |> 
   mutate(
-    gaussmod=purrr::map(data, \(x) runslv(x, start=startdate, end=enddate, 
-                                          modtype="gaussian")),
-    tmod=purrr::map(data, \(x) runslv(x, start=startdate, end=enddate, 
-                                      modtype="t")),
-    levmod=purrr::map(data, \(x) runslv(x, start=startdate, end=enddate,
-                                        modtype="leverage")),
-    skewmod=purrr::map(data, \(x) runslv(x, start=startdate, end=enddate,
-                                         modtype="skew_gaussian"))
-    )
+    gaussmod=purrr::map(data,
+                         \(data) runslv(data, start=startdate, end=enddate, modtype="gaussian")),
+    tmod=purrr::map(data, 
+                         \(data) runslv(data, start=startdate, end=enddate, modtype="t")),
+    levmod=purrr::map(data,
+                         \(data) runslv(data, start=startdate, end=enddate, modtype="leverage")),
+    skewmod=purrr::map(data,
+                         \(data) runslv(data, start=startdate, end=enddate, modtype="skew_gaussian")))
 res2
+
 # CAUTION: high equity t model generating nans for df std_error, z_value, p_value transformed
 
 # stochvol_gauss <- svsample(spy$log_return, quiet = T)
@@ -359,8 +192,9 @@ params2 <- res2 |>
 
 # params2
 params2 |> arrange(vname, aic)
-# params2 |> unnest(params) |> arrange(vname, parameter, modtype)
 params2 |> unnest(params) |> arrange(vname, modtype, parameter) |> mutate(bad=is.na(std_error))
+# params2 |> unnest(params) |> arrange(vname, parameter, modtype)
+
 
 summaries <- bind_rows(params2 |> 
                          select(vname, modtype, summary=summ_trans) |> 
@@ -436,7 +270,9 @@ nmonths <- 360; nsims <- 10000
 
 # exclude tmod highfixed and view other tmod suspiciously
 sims <- params2 |>
-  filter(!(modtype=="tmod" & vname=="highfixed")) |> # when using data through Apr 2024 error 'Sigma' is not positive definite
+  # filter(!(modtype=="tmod" & vname=="highfixed")) |> # when using data through Apr 2024 error 'Sigma' is not positive definite
+  # tmod has not worked out and Sigma is not positive definite
+  filter(!(modtype=="tmod")) |> 
   select(vname, modtype, mod) |> 
   mutate(pred=purrr::map(mod,
                          \(x) predict(x, steps=nmonths, nsim = nsims,
@@ -445,31 +281,6 @@ sims <- params2 |>
 sims
 
 saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
-
-# tmp <- sims |> 
-#   filter(row_number()==1) |> 
-#   mutate(yt=map(y, \(x) t(x)))
-#   pull(y)
-
-
-# str(sims$pred[1])
-# tmp <- sims |>   mutate(y=purrr::map(pred, \(x) pluck(x, "y")))
-
-# str(tmp$y[1])
-
-# sim_sv(
-#   param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
-#   nobs = 1000L,
-#   seed = NULL,
-#   model = "gaussian"
-# )
-
-# sim_sv(
-#   param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
-#   nobs = 1000L,
-#   seed = NULL,
-#   model = "gaussian"
-# )
 
 
 ```
@@ -534,5 +345,94 @@ saveRDS(slv_sims |>
 
 ```
 
+
+<!-- OLD stuff after this  -->
+
+```{r}
+#| label: stocvol-example
+#| eval: false
+#| output: false
+
+# experiment with stochvol as opposed to stochvoltmb -- get the high equity data
+vec <- data |>
+  filter(vname=="highequity") |>
+  filter(date >= startdate, date <= enddate) |>
+  filter(!is.na(lr)) |>
+  mutate(lrc=lr - mean(lr)) |>
+  pull(lrc)
+
+mtype <- "gaussian"
+mtype <- "t"
+mtype <- "skew_gaussian"
+mtype <- "leverage"
+mod <- estimate_parameters(vec, model = mtype, silent = TRUE)
+summary(mod, report = "fixed")
+summary(mod, report = "transformed")
+
+
+
+# vec
+# svgauss <- svsample(vec, quiet = TRUE)
+# svlev <- svlsample(vec, quiet = TRUE)
+# svt <- svtsample(vec, quiet = TRUE)
+# svtl <- svtlsample(vec, quiet = TRUE)
+
+# svgauss$para
+
+# stochvolTMB stochvol
+# sigma_y   exp(mu / 2)
+# sigma_h   sigma
+# phi       phi
+# rho       rho
+# df        nu  degrees of freedom of the t distribution
+
+summary(svgauss)
+params2 |> 
+  filter(vname=="highequity", modtype=="gaussmod") |> 
+  select(vname, modtype, params=params) |> # or params=params_fix
+  unnest(params)
+
+summary(svt)
+params2 |> 
+  filter(vname=="highequity", modtype=="tmod") |> 
+  select(vname, modtype, params) |> 
+  unnest(params)
+
+summary(svlev)
+params2 |> 
+  filter(vname=="highequity", modtype=="levmod") |> 
+  select(vname, modtype, params) |> 
+  unnest(params)
+
+summary(svtl)
+
+
+# tmp <- sims |> 
+#   filter(row_number()==1) |> 
+#   mutate(yt=map(y, \(x) t(x)))
+#   pull(y)
+
+
+# str(sims$pred[1])
+# tmp <- sims |>   mutate(y=purrr::map(pred, \(x) pluck(x, "y")))
+
+# str(tmp$y[1])
+
+# sim_sv(
+#   param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+#   nobs = 1000L,
+#   seed = NULL,
+#   model = "gaussian"
+# )
+
+# sim_sv(
+#   param = list(phi = 0.9, sigma_y = 0.4, sigma_h = 0.2, df = 4, alpha = -2, rho = -0.7),
+#   nobs = 1000L,
+#   seed = NULL,
+#   model = "gaussian"
+# )
+
+
+```
 
 
