@@ -253,7 +253,7 @@ mod_labs <- c("Deterministic", "Random\nnormal", "Gaussian SV", "Skewed SV", "Le
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
-base_flipped <- riskmeasures |> 
+structure_flipped <- riskmeasures |> 
   filter(framework=="slv" | (framework=="acli" & scenario=="baseline")) |> 
   filter(measure %in% meas_order) |> 
   select(framework, scenario, porttype, measure, mean, sd, constant, rnormal, model) |> 
@@ -293,7 +293,7 @@ Takeaways:
 #| eval: true
 #| output: true
 
-tab <- base_flipped |> 
+tab <- structure_flipped |> 
   filter(porttype=="highequity") |> 
   select(-porttype, -mdn_frt10) |> 
   mutate(rn=row_number()) |> 
@@ -333,10 +333,12 @@ write_tab("risk_measures_highequity")
 
 ```{r}
 #| label: structure-equity-plot
-#| eval: true
-#| output: true
+#| eval: false
+#| output: false
 
-base_flipped |> 
+# NO LONGER USED ----
+
+structure_flipped |> 
   filter(porttype=="highequity") |> 
   filter(type != "constant") |> 
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
@@ -376,7 +378,7 @@ Takeaways:
 #| eval: true
 #| output: true
 
-tab <- base_flipped |> 
+tab <- structure_flipped |> 
   filter(porttype=="highfixed") |> 
   select(-porttype, -mdn_frt10) |>  
   mutate(rn=row_number()) |> 
@@ -413,10 +415,12 @@ write_tab("risk_measures_highfixed")
 
 ```{r}
 #| label: structure-fixed-plot
-#| eval: true
-#| output: true
+#| eval: false
+#| output: false
 
-base_flipped |> 
+# NO LONGER USED ----
+
+structure_flipped |> 
   filter(porttype=="highfixed") |> 
   filter(type != "constant") |> 
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
@@ -449,7 +453,7 @@ base_flipped |>
 #| label: bar-charts-varloss
 #| output: true
 
-figure_Vloss_model <- base_flipped |>
+figure_Vloss_model <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(porttype=factor(porttype,
                          levels=c("highequity", "highfixed"),
@@ -481,7 +485,7 @@ ggsave(filename=here::here("report", "results", "Figure_vloss_model.png"), plot=
 #| label: bar-charts-ercrise
 #| output: true
 
-figure_VERC_model <- base_flipped |>
+figure_VERC_model <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(porttype=factor(porttype,
                          levels=c("highequity", "highfixed"),
@@ -506,9 +510,7 @@ figure_VERC_model
 
 ggsave(filename=here::here("report", "results", "Figure_VERC_model.png"), plot=figure_VERC_model, width=10, height=6)
 
-
 ```
-
 
 
 ## Model parameterization risk
@@ -526,18 +528,19 @@ Same portfolio, Same ACLI model, Same mean, Same SD
 scen_names
 
 parm_order <- c("constant", "rnormal", "baseline", "phi", "rho", "sigma_v", "tau")
+
 mod_order <- scen_names |> 
   filter(framework=="acli") |> 
-  rename(type=scenario, typedesc=scendesc) |> 
-  add_row(framework="acli", type="constant", parm="constant", typedesc="constant") |> 
-  add_row(framework="acli", type="rnormal", parm="rnormal", typedesc="Random normal") |> 
+  rename(type=scenario, typef=scendesc) |> 
+  add_row(framework="acli", type="constant", parm="constant", typef="Deterministic") |> 
+  add_row(framework="acli", type="rnormal", parm="rnormal", typef="Random normal") |> 
   mutate(parm=factor(parm, levels=parm_order)) |> 
   arrange(parm, bound) |> 
   mutate(order=row_number())
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
-flipped <- riskmeasures |> 
+parm_flipped <- riskmeasures |> 
   filter(framework=="acli", measure %in% meas_order) |> 
   select(framework, porttype, scenario, measure, mean, sd, constant, rnormal, model) |> 
   mutate(measure=factor(measure, levels=meas_order)) |>  # to put columns in right order when flipped
@@ -555,13 +558,82 @@ flipped <- riskmeasures |>
   arrange(porttype, order) |> 
   select(-c(parmdesc, bound))
 
-flipped  
+parm_flipped  
 
 ```
 
 
 ```{r}
-#| label: equity-parameter-risk
+#| label: table-highequity-parameter-risk
+#| eval: true
+#| output: true
+
+tab <- parm_flipped |> 
+  filter(porttype=="highequity") |> 
+  select(type, typef, mean, sd, vloss_a95t10, verc_a95t10)|> 
+  mutate(rn=row_number()) |> 
+  relocate(rn) |> 
+  gt() |> 
+  cols_hide(c(type)) |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Parameterizations of the Complex ESG, High Equity Portfolio"),
+    # subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
+  ) |>
+  cols_label(rn="Row number",
+             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+             mean = html("Mean annual<br>log return"),
+             sd = html("Standard deviation"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
+             ) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mean, sd),
+              decimals = 1)
+tab
+
+write_tab("parm_risk_measures_highequity")  
+```
+
+
+
+```{r}
+#| label: table-highfixed-parameter-risk
+#| eval: true
+#| output: true
+
+tab <- parm_flipped |> 
+  filter(porttype=="highfixed") |> 
+  select(type, typef, mean, sd, vloss_a95t10, verc_a95t10)|> 
+  mutate(rn=row_number()) |> 
+  relocate(rn) |> 
+  gt() |> 
+  cols_hide(c(type)) |> 
+  tab_header(
+    title = html("Selected Risk Measures for Alternative Parameterizations of the Complex ESG, High Fixed-Income Portfolio"),
+    # subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
+  ) |>
+  cols_label(rn="Row number",
+             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+             mean = html("Mean annual<br>log return"),
+             sd = html("Standard deviation"),
+             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
+             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
+             ) |> 
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
+             decimals = 1) |> 
+  fmt_percent(columns = c(mean, sd),
+              decimals = 1)
+tab
+
+write_tab("parm_risk_measures_highfixed")  
+```
+
+
+
+
+```{r}
+#| label: equity-parameter-risk-old
 
 tab <- flipped |> 
   filter(porttype=="highequity") |> 

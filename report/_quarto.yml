@@ -52,7 +52,7 @@ book:
     - part: "Appendix"
       chapters:
       # - appendix_model_returns.qmd  # looking for s_tau_m.05 folder
-      - appendix_gbm.qmd
+      # - appendix_gbm.qmd
     
 # bibliography: references.bib
 
