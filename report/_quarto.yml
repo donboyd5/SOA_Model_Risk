@@ -9,7 +9,7 @@ execute:
   eval: true
   echo: true
   output: true
-  freeze: false  # auto: during global project renders, re-render only when source changes
+  freeze: auto  # auto: during global project renders, re-render only when source changes
 
 editor_options:
   chunk_output_type: console
@@ -49,8 +49,8 @@ book:
       chapters:
       - risk_evaluation.qmd      
       
-    - part: "Appendix"
-      chapters:
+    # - part: "Appendix"
+    #   chapters:
       # - appendix_model_returns.qmd  # looking for s_tau_m.05 folder
       # - appendix_gbm.qmd
     
