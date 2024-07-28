@@ -16,6 +16,7 @@ editor_options:
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
 source(here::here("report", "function_penmod.R")) # for flatmat
+source(here::here("report", "function_runslv.R")) 
 
 library(quantmod)
 library(stats4)
@@ -33,20 +34,6 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 
 ```{r}
 #| label: functions-for-slv-models
-
-runslv <- function(data, start, end, modtype="leverage"){
-  # get the demeaned log return from a data subset and estimate an slv model
-  # data must have date and lr columns
-  
-  vec <- data |> 
-    filter(date >= as.Date(start), date <= as.Date(end)) |> 
-    filter(!is.na(lr)) |> 
-    mutate(lrc=lr - mean(lr)) |> 
-    pull(lrc)
-  
-  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
-  mod
-}
 
 
 ```
