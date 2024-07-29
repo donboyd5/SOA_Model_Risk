@@ -4,6 +4,9 @@ editor_options:
   chunk_output_type: console
 ---
 
+
+
+
 # Portfolios
 
 After ACLI results are saved as a long file with results by scenario and asset class, we need to create portfolios from the asset classes.
@@ -12,6 +15,9 @@ We create two portfolios, based on Gang's investigation: a "high equity" portfol
 
 ## Setup
 
+
+
+
 ```{r}
 #| label: setup
 #| output: false
@@ -19,6 +25,9 @@ We create two portfolios, based on Gang's investigation: a "high equity" portfol
 source(here::here("report", "_common.R"))
 
 ```
+
+
+
 
 ## Define portfolios to be created from ACLI asset-class results
 
@@ -33,6 +42,9 @@ The portfolios Gang constructed can be found [here](https://docs.google.com/spre
 ## Create weights for the highfixed and highequity portfolios
 
 Get the weights and ensure they sum to 1.
+
+
+
 
 ```{r}
 #| label: weights
@@ -74,9 +86,15 @@ weights |>
 
 ```
 
+
+
+
 ## Construct portfolios
 
 Get the previously created ACLI scenarios long dataframe and construct the two portfolios for each scenario.
+
+
+
 
 ```{r}
 #| label: construct-portfolios
@@ -108,7 +126,13 @@ saveRDS(portfolios, here::here("data", "acli_portfolios.rds"))
 
 ```
 
+
+
+
 ## Explore portfolios (if wanted)
+
+
+
 
 ```{r}
 #| label: explore
@@ -123,6 +147,10 @@ y30 |> arrange(desc(asset))
 
 ```
 
+
+
+
+
 ## Graph of means and standard deviations of scenarios and portfolios
 
 Note that:
@@ -132,6 +160,9 @@ Note that:
 -   tau variation is next greatest
 -   phi variation is minimal
 -   sigma_v has big impacts on both mean and standard deviation; other parameters have far greater impact on sd than on mean
+
+
+
 
 ```{r}
 #| label: get-plot-data
@@ -179,11 +210,19 @@ ggsave(here::here(rptdir, "results", "esg_meansd.png"),
 
 ```
 
+
+
+
+
 ## More readable plot
 
 Drop the rho scenarios as they do not vary from baseline.
 
 Plot just the high equity portfolio, for greater readability.
+
+
+
+
 
 ```{r}
 #| label: scenario-portfolio-panel-plots
@@ -207,3 +246,4 @@ df |>
 
 
 ```
+
