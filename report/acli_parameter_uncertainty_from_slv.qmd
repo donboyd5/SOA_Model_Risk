@@ -43,6 +43,7 @@ Also useful:
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
 source(here::here("report", "function_penmod.R")) # for flatmat
+source(here::here("report", "function_runslv.R")) 
 
 library(quantmod)
 library(stats4)
@@ -53,43 +54,6 @@ library(stochvol)
 options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
-
-
-# library(rstan)
-# library(V8)
-# options(mc.cores = parallel::detectCores())
-# rstan_options(auto_write = TRUE) # avoids recompiling
-
-```
-
-
-```{r}
-#| label: functions-for-slv-models
-
-get_subset <- function(vname, start, end, data=stack){
-  # get a time-period subset of the stacked data and demean the log returns
-  # only keep the portion of the time-period subset that has values for the
-  #   demeaned log returns
-  start <- as.Date(start)
-  end <- as.Date(end)
-  vname <- "us"
-  df <- data |> 
-    filter(vname==!!vname, date >= start, date <= end) |> 
-    filter(!is.na(lr)) |> 
-    mutate(lrc=lr - mean(lr))
-  df
-}
-# get_subset("us", "2020-01-31", "2020-05-02")
-
-runslv <- function(data, vname, start, end, modtype="leverage"){
-  # get the demeaned log return from a data subset and estimate an slv model
-  # data must have vname, date, and lr columns
-  vec <- get_subset(vname, start, end, data)$lrc
-  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
-  mod
-}
-# runslv(stack, "us", start="1950-01-01", end="2024-05-10")
-
 
 ```
 
@@ -345,6 +309,7 @@ res <- stack |>
   mutate(mod=purrr::map(data, \(x) runslv(x, start="1950-01-01", end="2024-05-10")))
 res
 
+
 # get the model parameters
 params <- res |> 
   mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
@@ -354,7 +319,6 @@ params <- res |>
 # params
 
 ```
-
 
 ## Show estimated parameters
 
@@ -372,7 +336,6 @@ params |>
 
 
 ```
-
 
 ## Compare estimated parameters to AIRG-ACLI parameters
 
@@ -457,15 +420,14 @@ The table below shows:
 -   Parameters and standard errors for similar assets, estimated by me as follows:
 
     -   the data are for assets that are highly-similar to the AIRG-ACLI asset classes, but they are not identical to the AIRG-ACLI classes
-    
-    -   the time periods are as long as possible with the available data, and thus are not the same as the time periods used by AIRG-ACLI
-    
-    -   I estimated the parameters and their standard errors using the R package stochvolTMB. I estimated them using a stochastic volatility model with leverage -- a variant that allows asset price volatility to be correlated with asset price, and thus, presumably, highly similar to the model used by AIRG-ACLI
-    
-    -   90% margins of error (`moe90`) for the stochvolTMB parameter estimates, calculated as stderr * critical z value (which is approximately 1.645)
-    
--   Estimated lower and upper bounds for the AIRG-ACLI parameters, **obtained by applying the stochvolTMB-estimated margins of errors to the AIRG-ACLI parameters**. I think this is a reasonable approach given what we have to work with, but of course it is worth discussing.
 
+    -   the time periods are as long as possible with the available data, and thus are not the same as the time periods used by AIRG-ACLI
+
+    -   I estimated the parameters and their standard errors using the R package stochvolTMB. I estimated them using a stochastic volatility model with leverage -- a variant that allows asset price volatility to be correlated with asset price, and thus, presumably, highly similar to the model used by AIRG-ACLI
+
+    -   90% margins of error (`moe90`) for the stochvolTMB parameter estimates, calculated as stderr \* critical z value (which is approximately 1.645)
+
+-   Estimated lower and upper bounds for the AIRG-ACLI parameters, **obtained by applying the stochvolTMB-estimated margins of errors to the AIRG-ACLI parameters**. I think this is a reasonable approach given what we have to work with, but of course it is worth discussing.
 
 ```{r}
 #| label: show-comparison
@@ -479,7 +441,6 @@ comp |>
 
 ```
 
-
 The next table shows scenarios in a way that will be easy to use to run ACLI variants.
 
 ```{r}
@@ -490,14 +451,13 @@ scenarios_ordered |>
 
 ```
 
-
 ## Next steps
 
 My plan is to replace the arbitrary scenarios I ran for our last POG meeting with the following "principled" scenarios based on the lower and upper bounds estimated above:
 
--   4 lower bound scenarios, one for each  parameter (tau, phi, sigma_v, rho): set the parameter to its lower bound for all asset classes
+-   4 lower bound scenarios, one for each parameter (tau, phi, sigma_v, rho): set the parameter to its lower bound for all asset classes
 
--   4 upper bound scenarios, one for each  parameter (tau, phi, sigma_v, rho): set the parameter to its upper bound for all asset classes
+-   4 upper bound scenarios, one for each parameter (tau, phi, sigma_v, rho): set the parameter to its upper bound for all asset classes
 
 -   That gives a total of 8 scenarios. However, you may recall that the AIRG-ACLI model is flawed in that it does not implement rho properly and never has any variation in results. Thus, as a practical matter, this gives only 6 scenarios - a lot fewer than we showed the POG, which is good.
 

@@ -16,6 +16,7 @@ editor_options:
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
 source(here::here("report", "function_penmod.R")) # for flatmat
+source(here::here("report", "function_runslv.R")) 
 
 library(quantmod)
 library(stats4)
@@ -30,26 +31,6 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 
 ```
 
-
-```{r}
-#| label: functions-for-slv-models
-
-runslv <- function(data, start, end, modtype="leverage"){
-  # get the demeaned log return from a data subset and estimate an slv model
-  # data must have date and lr columns
-  
-  vec <- data |> 
-    filter(date >= as.Date(start), date <= as.Date(end)) |> 
-    filter(!is.na(lr)) |> 
-    mutate(lrc=lr - mean(lr)) |> 
-    pull(lrc)
-  
-  mod <- estimate_parameters(vec, model = modtype, silent = TRUE)
-  mod
-}
-
-
-```
 
 
 ## SLV models for a 2-asset portfolio
@@ -80,7 +61,7 @@ combo2 <- merge(Ad(equity), Ad(fixed), all = FALSE) # adjusted close; drop missi
 highequity_weights <- c(equity=.7, fixed=.3)
 highfixed_weights <- c(equity=.3, fixed=.7) 
 
-# calculate log returns and cumulative assets for high-equity and high-fixed portfolios ----
+# calculate daily log returns and cumulative assets for high-equity and high-fixed portfolios ----
 aggrport2 <- combo2 |> 
   fortify() |> 
   tibble() |> 
@@ -206,37 +187,112 @@ summaries <- bind_rows(params2 |>
                          unnest(summary))
 
 # note the different names for parameters depending on whether transformed or fixed
-summaries |> arrange(vname, modtype, parameter, type) |> gt()
-
 saveRDS(list(res2=res2, params2=params2), here::here("data", "slv_model_results.rds"))
 
 ```
 
+
 ## Show some results
 
-Model fit:
+### Model fit
 
 -   Highfixed portfolio: Leverage model has lowest AIC, followed by skew model; difference is minimal
 -   Highequity: Skew model is  best, followed by leverage; difference is minimal
 
-Parameters:
-
--   Leverage: rho (correlation of volatility and returns) is -0.675 and -0.744 (fixed, equity)
--   high-equity t model cannot compute std_error for df
--   high-fixed t model looks suspicious
-
 
 ```{r}
-#| label: show-params
-#| output: true
+#| label: appendix-summary-table
 
-params2 |> select(vname, modtype, nobs, aic) |> arrange(vname, aic) |> gt()
-params2 |> unnest(params) |>  select(vname, modtype, nobs:type) |> arrange(vname, modtype, parameter) |> gt()
+
+morder <- c("gaussmod", "skewmod", "levmod")
+
+params2 |> 
+  filter(modtype !="tmod") |> 
+  select(portfolio=vname, modtype, aic) |> 
+  mutate(modtype=factor(modtype, levels=morder)) |> 
+  arrange(portfolio, modtype) |> 
+  gt() |>  
+  fmt_number(columns=c(aic),
+             scale=1,
+             decimals=1)
 
 
 ```
 
 
+### Parameters
+
+-   Leverage: rho (correlation of volatility and returns) is -0.675 and -0.744 (fixed, equity)
+<!-- -   high-equity t model cannot compute std_error for df -->
+<!-- -   high-fixed t model looks suspicious -->
+
+
+```{r}
+#| label: appendix-parameter-tables
+
+# create parameter tables for the appendix
+tabdata <- summaries |> 
+  select(portfolio=vname, modtype, paramtype=type, parameter, estimate, std_error, z_value, p_value) |> 
+  mutate(modtype=factor(modtype, levels=morder)) |> 
+  arrange(portfolio, modtype, desc(paramtype), parameter) |> 
+  filter(paramtype=="transformed" | parameter=="alpha")
+
+
+f <- function(port){
+  color_palette <- c("gaussmod" = "#E6F3FF", "levmod" = "#E6FFE6", "skewmod" = "#FFFFE6")
+  ptype <- case_when(port=="highequity" ~ "high equity",
+                     port=="highfixed" ~ "high fixed-income",
+                     .default = "ERROR")
+  tabdata |> 
+    filter(portfolio==port, modtype != "tmod") |> 
+    gt() |>  
+    tab_header(
+      title = html(paste0("Parameters for the ", ptype, " portfolio")),
+      subtitle = html("paramtype 'fixed' is as estimated, 'transformed' can be easier to interpret")
+    ) |>  
+    fmt_number(columns=c(estimate, std_error),
+               scale=1,
+               decimals=3) |> 
+      fmt_number(columns=c(z_value),
+               scale=1,
+               decimals=2) |> 
+      fmt_number(columns=c(p_value),
+               scale=1,
+               decimals=5) |> 
+    tab_style(
+      style = list(
+        cell_fill(color = color_palette["gaussmod"])
+      ),
+      locations = cells_body(
+        columns = everything(),
+        rows = modtype == "gaussmod"
+      )
+    ) |> 
+    tab_style(
+      style = list(
+        cell_fill(color = color_palette["levmod"])
+      ),
+      locations = cells_body(
+        columns = everything(),
+        rows = modtype == "levmod"
+      )
+    ) |> 
+    tab_style(
+      style = list(
+        cell_fill(color = color_palette["skewmod"])
+      ),
+      locations = cells_body(
+        columns = everything(),
+        rows = modtype == "skewmod"
+      )
+    )
+}
+
+  
+f("highequity")
+f("highfixed")  
+
+```
 
 
 ## Predict 10,000 simulations from each of the 8 models
