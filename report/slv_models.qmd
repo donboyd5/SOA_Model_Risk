@@ -28,6 +28,19 @@ options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
 
+lrport <- function(lrassets, weights){
+  # lrassets is a matrix of log returns of assets where columns are assets, rows are timepoints
+  # weights is a vector of weights that sum to 1
+  
+  # argument checking
+  if (abs(sum(weights) - 1) > .Machine$double.eps^0.5) {
+    stop("Error: The weights must sum to 1.")
+  }
+  
+  lrassets <- as.matrix(lrassets)
+  port_aret <- (exp(lrassets) -1) %*% weights # arithmetic return of portfolio
+  log(1 + port_aret) |> as.vector()  # log returns of the portfolio
+}
 
 ```
 
@@ -67,13 +80,53 @@ aggrport2 <- combo2 |>
   tibble() |> 
   setNames(c("date", "equity", "fixed")) |> 
   arrange(date) |> 
-  mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |> 
+  mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |> # log returns
   filter(date > min(date)) |> # drop first observation
   mutate(equity_portret= equity * highequity_weights["equity"] + fixed * highequity_weights["fixed"],
          equity_portassets=exp(cumsum(equity_portret)),
          fixed_portret= equity * highfixed_weights["equity"] + fixed * highfixed_weights["fixed"],
          fixed_portassets=exp(cumsum(fixed_portret))) # note that this is end of period assets
 ht(aggrport2)
+
+
+
+# wts <- c(.35, .25, .4)
+# wtsx <- c(.35, .25, .5)
+# lra <- matrix(c(.1, .05, .2,
+#                 .3, -.1, .1,
+#                 0, .2, -.1,
+#                 .15, -.05, .2),
+#               ncol=3, byrow = TRUE)
+# 
+# wts
+# lra  
+# (wrong <- lra %*% wts)
+# (port_aret <- (exp(lra) -1) %*% wts)
+# (port_lret <- log(1 + port_aret))
+# 
+# lrport(lra, wts)
+# 
+# # what if lra is a tibble? 
+# tlra <- as_tibble(lra, .name_repair = "universal")
+# tlra <- as_tibble(lra, .name_repair = "minimal")
+# tlra <- as_tibble(lra, .name_repair = make.names)
+# as.matrix(tlra)
+# 
+# lrport(tlra, wts)
+# lrport(tlra, wtsx)
+
+
+aggrport2 <- combo2 |> 
+  fortify() |> 
+  tibble() |> 
+  setNames(c("date", "equity", "fixed")) |> 
+  arrange(date) |> 
+  mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |> # log returns
+  filter(date > min(date)) |> # drop first observation
+  mutate(equity_portret = lrport(across(c(equity, fixed)), highequity_weights),
+         equity_portassets=exp(cumsum(equity_portret)),
+         fixed_portret = lrport(across(c(equity, fixed)), highfixed_weights),
+         fixed_portassets=exp(cumsum(fixed_portret))) # note that this is end of period assets
 
 saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 
