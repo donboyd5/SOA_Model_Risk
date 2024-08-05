@@ -57,6 +57,19 @@ fixed <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-2
 
 combo2 <- merge(Ad(equity), Ad(fixed), all = FALSE) # adjusted close; drop missing
 
+saveRDS(combo2, here::here("data", "aggr_assets_rawdaily.rds"))
+
+
+```
+
+
+```{r}
+#| label: construct-airg-aggressive-portfolio
+#| eval: true
+#| output: false
+
+combo2 <- readRDS(here::here("data", "aggr_assets_rawdaily.rds"))
+
 # establish portfolio weights ----
 highequity_weights <- c(equity=.7, fixed=.3)
 highfixed_weights <- c(equity=.3, fixed=.7) 
@@ -82,6 +95,9 @@ saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 # ht(tmp)
 
 ```
+
+
+
 
 ## Prepare data for model estimation
 
