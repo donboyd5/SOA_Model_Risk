@@ -195,6 +195,19 @@ EWH # 1996-03-18 forward
 # Ad(QQQ)
 
 combo <- merge(Ad(QQQ), Ad(EEM), Ad(EWH), all = FALSE) # adjusted close; drop missing
+saveRDS(combo, here::here("data", "aggr_assets_rawdaily.rds"))
+
+```
+
+
+```{r}
+#| label: construct-airg-aggressive-portfolio
+#| eval: true
+
+# keep eval true so that whatever version of portfolio construction is being used is done
+
+combo <- readRDS(here::here("data", "aggr_assets_rawdaily.rds"))
+
 weights <- c(qqq=0.125, eem=0.25, ewh=0.625) 
 
 aggrport <- combo |> 
@@ -211,6 +224,7 @@ saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
 
 
 ```
+
 
 ## Prepare data for estimation
 
