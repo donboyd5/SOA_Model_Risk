@@ -99,11 +99,16 @@ acli_means
 # enhance with a constant matrix and a random normal matrix
 # modorder <- c("acli, constant", "rnormal")
 
-mean_annual_logreturn_highequity <- .0625 # same as highequity acli portfolio
-mean_annual_logreturn_highfixed <- 0.0499 # same as highfixed acli portfolio
+# commented-out returns were from when I had calculated portfolio returns using weighted log returns rather than the
+# better (correct) approach of converting to arithmetic, getting weighted arithmetic portfolio return, then calc'ing port log return
+# mean_annual_logreturn_highequity <- .0625 # same as highequity acli portfolio
+# mean_annual_logreturn_highfixed <- 0.0499 # same as highfixed acli portfolio
+# 
+# c(mean_annual_logreturn_highequity, acli_means$lr[acli_means$porttype=="highequity"]) |> round(4)
+# c(mean_annual_logreturn_highfixed, acli_means$lr[acli_means$porttype=="highfixed"]) |> round(4)
 
-c(mean_annual_logreturn_highequity, acli_means$lr[acli_means$porttype=="highequity"]) |> round(4)
-c(mean_annual_logreturn_highfixed, acli_means$lr[acli_means$porttype=="highfixed"]) |> round(4)
+mean_annual_logreturn_highequity <- acli_means$lr[acli_means$porttype=="highequity"]
+mean_annual_logreturn_highfixed <-acli_means$lr[acli_means$porttype=="highfixed"]
 
   # mutate(slv=map(lrmat, \(x) x + mean_annual_logreturn_hiequity)) |>  # add target mean annual log return to innovations
 slv2 <- slv_sims |> 
