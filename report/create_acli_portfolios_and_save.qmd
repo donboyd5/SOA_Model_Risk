@@ -110,10 +110,10 @@ wtdslong <- slong |>
 
 portfolios <- wtdslong |> 
   # mutate(return_share=logreturn * weight) |> 
-  mutate(areturn=exp(logreturn) - 1,
+  mutate(areturn=exp(logreturn) - 1, # arithmetic return for the asset class
          areturn_share=areturn * weight) |> 
-  summarise(areturn=sum(areturn_share), .by=c(scenario, sim, year, porttype)) |> 
-  mutate(logreturn=log(1 + areturn),
+  summarise(areturn=sum(areturn_share), .by=c(scenario, sim, year, porttype)) |> # arithmetic returns for the portfolios
+  mutate(logreturn=log(1 + areturn),  # log returns for the portfolios
          logreturn=ifelse(year==0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
   arrange(scenario, porttype, sim, year) |> 
   # calc assets two ways - they are equivalent so we don't do the arithmetic approach
