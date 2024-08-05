@@ -9,13 +9,16 @@ report/slv_files/
 images/
 
 # ignore selected file types
+*.css
 *.csv
 *.doc*
 *.htm*
+*.js
 *.pdf
 *.png
 *.ppt*
 *.rds
 *.txt
+*.woff
 *.xl*
 *.zip
