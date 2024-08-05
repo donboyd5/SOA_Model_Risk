@@ -195,6 +195,19 @@ EWH # 1996-03-18 forward
 # Ad(QQQ)
 
 combo <- merge(Ad(QQQ), Ad(EEM), Ad(EWH), all = FALSE) # adjusted close; drop missing
+saveRDS(combo, here::here("data", "aggr_assets_rawdaily.rds"))
+
+```
+
+
+```{r}
+#| label: construct-airg-aggressive-portfolio
+#| eval: true
+
+# keep eval true so that whatever version of portfolio construction is being used is done
+
+combo <- readRDS(here::here("data", "aggr_assets_rawdaily.rds"))
+
 weights <- c(qqq=0.125, eem=0.25, ewh=0.625) 
 
 aggrport <- combo |> 
@@ -203,14 +216,15 @@ aggrport <- combo |>
   setNames(c("date", "qqq", "eem", "ewh")) |> 
   mutate(across(c(qqq, eem, ewh), \(x) log(x / lag(x)))) |> 
   filter(date > min(date)) |> 
-  mutate(portret=qqq * weights["qqq"] + eem * weights["eem"] + ewh * weights["ewh"],
+  mutate(portret=lrport(across(c(qqq, eem, ewh)), weights),
          portassets=exp(cumsum(portret))) # note that this is end of period assets
 ht(aggrport)
-  
+
 saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
 
-
 ```
+
+
 
 ## Prepare data for estimation
 

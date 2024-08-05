@@ -62,19 +62,18 @@ highequity_weights <- c(equity=.7, fixed=.3)
 highfixed_weights <- c(equity=.3, fixed=.7) 
 
 # calculate daily log returns and cumulative assets for high-equity and high-fixed portfolios ----
-aggrport2 <- combo2 |> 
-  fortify() |> 
-  tibble() |> 
-  setNames(c("date", "equity", "fixed")) |> 
-  arrange(date) |> 
-  mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |> # log returns
-  filter(date > min(date)) |> # drop first observation
-  mutate(equity_portret= equity * highequity_weights["equity"] + fixed * highequity_weights["fixed"],
-         equity_portassets=exp(cumsum(equity_portret)),
-         fixed_portret= equity * highfixed_weights["equity"] + fixed * highfixed_weights["fixed"],
-         fixed_portassets=exp(cumsum(fixed_portret))) # note that this is end of period assets
-ht(aggrport2)
-
+# aggrport2 <- combo2 |> 
+#   fortify() |> 
+#   tibble() |> 
+#   setNames(c("date", "equity", "fixed")) |> 
+#   arrange(date) |> 
+#   mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |> # log returns
+#   filter(date > min(date)) |> # drop first observation
+#   mutate(equity_portret= equity * highequity_weights["equity"] + fixed * highequity_weights["fixed"],
+#          equity_portassets=exp(cumsum(equity_portret)),
+#          fixed_portret= equity * highfixed_weights["equity"] + fixed * highfixed_weights["fixed"],
+#          fixed_portassets=exp(cumsum(fixed_portret))) # note that this is end of period assets
+# ht(aggrport2)
 
 
 # wts <- c(.35, .25, .4)
