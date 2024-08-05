@@ -225,7 +225,6 @@ saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
 ```
 
 
-
 ## Prepare data for estimation
 
 Create files with monthly prices and log returns.
