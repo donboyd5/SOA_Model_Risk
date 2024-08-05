@@ -64,7 +64,7 @@ saveRDS(combo2, here::here("data", "aggr_assets_rawdaily.rds"))
 
 
 ```{r}
-#| label: construct-airg-aggressive-portfolio
+#| label: construct-slv-portfolio
 #| eval: true
 #| output: false
 
