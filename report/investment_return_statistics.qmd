@@ -1,0 +1,162 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Investment return statistics
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(fs::path(rptdir, "function_penmod.R")) # for flatmat
+
+library(moments)
+library(fBasics)
+
+# Basic statistics
+# stats <- basicStats(returns_xts)
+# print(stats)
+# 
+# # Skewness and kurtosis
+# skew_kurt <- rSkewnessKurtosis(returns_xts)
+
+
+```
+
+
+## abc
+
+
+```{r}
+
+fpenmod <- function(
+    ir,
+    params=default_params){
+  
+  # define objects that vary by year and sim (and thus are matrices)
+  nsims <- nrow(ir)
+  nyears <- ncol(ir)
+  
+  mat <- matrix(nrow=nsims, ncol=nyears)
+  assets <- liability <- ufl <- amort <- ii <- contrib <- mat
+  
+  # objects that vary only by year (and thus are vectors)
+  payroll <-  params$payroll0 * (1 + params$salary_growth)^(0:(nyears - 1))
+  nc <- payroll * params$ncrate
+  benefits <- payroll * params$benpayrate
+  
+  # initialize
+  assets[, 1] <- params$assets0
+  liability[, 1] <- params$liability0
+  ufl[, 1] <- params$liability0 - params$assets0
+  amort[, 1] <- params$ufl0 / params$growth_annuity
+  contrib[, 1] <- nc[1] + amort[, 1]
+  ii[, 1] <- assets[, 1] * ir[, 1]
+  
+  for(y in 2:nyears){
+    # for each year, calc values for all sims at once
+    liability[, y] <- liability[, y-1] * (1 + params$discount_rate) +
+      nc[y] - benefits[y]
+    
+    # note that amortization can be positive or negative
+    amort[, y] <- (liability[, y-1] - assets[, y-1]) / params$growth_annuity
+    contrib[, y] <- nc[y] + amort[, y]
+    ii[, y] <- assets[, y-1] * ir[, y]
+    
+    assets[, y] <- assets[, y - 1] + 
+      contrib[, y] + 
+      ii[, y] -
+      benefits[y]
+  }
+  
+  # create a tibble
+  df <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+    mutate(assets=flatmat(assets),
+           liability=flatmat(liability),
+           benefits=rep(benefits, nsims),
+           payroll=rep(payroll, nsims),
+           nc=rep(nc, nsims),
+           contrib=flatmat(contrib),
+           ii=flatmat(ii),
+           ir=flatmat(ir),
+           fr=assets / liability)
+  df
+}
+
+
+getir <- function(ir){
+  
+  # define objects that vary by year and sim (and thus are matrices)
+  nsims <- nrow(ir)
+  nyears <- ncol(ir)
+  
+  # create a tibble
+  df <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+    mutate(ir=flatmat(ir))
+  df
+}
+
+
+
+
+```
+
+
+```{r}
+#| label: get-data
+#| output: false
+
+portfolios <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
+
+portfolios
+
+count(portfolios, framework)
+count(portfolios, scenario)
+count(portfolios, porttype)
+count(portfolios, modtype)
+
+
+df1 <- portfolios |> 
+  filter(modtype=="model") |> 
+  # filter(row_number() <= 2) |> 
+  select(-mean, -sd)
+df1
+
+
+
+df2 <- df1  |> 
+  # next stament "loops" (via map) through the rows and for each row it
+  # calls penmod using nsims, nyears, and the investment return matrix for the scenario in the row
+  mutate(irtibble = 
+           purrr::map(seq_along(lrmat),
+                      ~getir(ir = lrmat[[.x]])))
+df2
+
+df3 <- df2 |> 
+  select(-lrmat) |> 
+  unnest(cols=irtibble)
+
+df3
+
+
+```
+
+
+
+```{r}
+#| label: intro
+#| 
+
+# Assuming `returns` is your data frame and each column is a year of returns
+# skewness_values <- apply(returns, 2, skewness)
+# kurtosis_values <- apply(returns, 2, kurtosis)
+
+
+
+```
+

@@ -42,6 +42,7 @@ book:
       
     - part: "Run pension model on alternative ESG models and parameterizations"
       chapters:
+      - investment_return_statistics.qmd
       - add_comparison_returns.qmd
       - penmod.qmd
       
