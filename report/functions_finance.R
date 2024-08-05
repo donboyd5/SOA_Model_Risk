@@ -1,7 +1,7 @@
 
 
 lrport <- function(lrassets, weights){
-  # lrassets is a matrix of log returns of assets where columns are assets, rows are timepoints
+  # lrassets is a matrix of log returns of assets where columns are asset classes, rows are timepoints
   # weights is a vector of weights that sum to 1
   
   # argument checking

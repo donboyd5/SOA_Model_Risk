@@ -92,10 +92,29 @@ wtdslong <- slong |>
 
 # collapse by scenario, sim, year, and portfolio type
 
+# arithmetic portfolio returns are commented out
+# portfolios <- wtdslong |> 
+#   mutate(return_share=logreturn * weight) |> 
+#   summarise(logreturn=sum(return_share), .by=c(scenario, sim, year, porttype)) |> 
+#   mutate(logreturn=ifelse(year==0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
+#   arrange(scenario, porttype, sim, year) |> 
+#   # calc assets two ways - they are equivalent so we don't do the arithmetic approach
+#   # mutate(areturn=exp(logreturn) - 1,
+#   #        aasset=cumprod(1 + areturn), .by=c(scenario, sim, porttype)) |> # arithmetic asset
+#   mutate(asset=exp(cumsum(logreturn)),
+#          .by=c(scenario, sim, porttype)) |> 
+#   select(scenario, porttype, sim, year, logreturn, asset)
+
+  # port_aret <- (exp(lrassets) -1) %*% weights # arithmetic return of portfolio
+  # log(1 + port_aret) |> as.vector()  # log returns of the portfolio
+
 portfolios <- wtdslong |> 
-  mutate(return_share=logreturn * weight) |> 
-  summarise(logreturn=sum(return_share), .by=c(scenario, sim, year, porttype)) |> 
-  mutate(logreturn=ifelse(year==0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
+  # mutate(return_share=logreturn * weight) |> 
+  mutate(areturn=exp(logreturn) - 1,
+         areturn_share=areturn * weight) |> 
+  summarise(areturn=sum(areturn_share), .by=c(scenario, sim, year, porttype)) |> 
+  mutate(logreturn=log(1 + areturn),
+         logreturn=ifelse(year==0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
   arrange(scenario, porttype, sim, year) |> 
   # calc assets two ways - they are equivalent so we don't do the arithmetic approach
   # mutate(areturn=exp(logreturn) - 1,
