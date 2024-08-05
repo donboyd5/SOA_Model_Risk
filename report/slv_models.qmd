@@ -16,7 +16,7 @@ editor_options:
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
 source(here::here("report", "function_penmod.R")) # for flatmat
-source(here::here("report", "function_runslv.R")) 
+source(here::here("report", "functions_finance.R")) 
 
 library(quantmod)
 library(stats4)
@@ -28,19 +28,6 @@ options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
 
-lrport <- function(lrassets, weights){
-  # lrassets is a matrix of log returns of assets where columns are assets, rows are timepoints
-  # weights is a vector of weights that sum to 1
-  
-  # argument checking
-  if (abs(sum(weights) - 1) > .Machine$double.eps^0.5) {
-    stop("Error: The weights must sum to 1.")
-  }
-  
-  lrassets <- as.matrix(lrassets)
-  port_aret <- (exp(lrassets) -1) %*% weights # arithmetic return of portfolio
-  log(1 + port_aret) |> as.vector()  # log returns of the portfolio
-}
 
 ```
 

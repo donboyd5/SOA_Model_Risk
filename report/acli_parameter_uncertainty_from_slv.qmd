@@ -43,7 +43,7 @@ Also useful:
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
 source(here::here("report", "function_penmod.R")) # for flatmat
-source(here::here("report", "function_runslv.R")) 
+source(here::here("report", "functions_finance.R")) 
 
 library(quantmod)
 library(stats4)
