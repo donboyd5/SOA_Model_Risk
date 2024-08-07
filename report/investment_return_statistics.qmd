@@ -51,6 +51,13 @@ scen_names <- bind_rows(
                            scendesc))) |> 
   relocate(framework)
 
+scenorder <- c("gaussmod", "skewmod", "levmod",
+               "baseline",
+               "phi_lbound", "phi_ubound",
+               "tau_lbound", "tau_ubound",
+               "rho_lbound", "rho_ubound",
+               "sigma_v_lbound", "sigma_v_ubound")
+
 ```
 
 
@@ -248,18 +255,13 @@ archmeasures <- unnested |>
 
 
 
-## Tables
+## Analysis of log returns
 
 ```{r}
 #| label: table1-prep
 #| output: false
 
-scenorder <- c("gaussmod", "skewmod", "levmod",
-               "baseline",
-               "phi_lbound", "phi_ubound",
-               "tau_lbound", "tau_ubound",
-               "rho_lbound", "rho_ubound",
-               "sigma_v_lbound", "sigma_v_ubound")
+
 
 # add labels
 lmeasures <- totmeasures |> 
@@ -324,7 +326,7 @@ ftab <- function(porttype){
 ```
 
 
-## High equity portfolio 
+### High equity portfolio 
 
 ```{r}
 #| label: table1-high-equity
@@ -335,7 +337,7 @@ ftab("highequity")
 ```
 
 
-## High fixed income portfolio
+### High fixed income portfolio
 
 ```{r}
 #| label: table1-highfixed
@@ -344,6 +346,107 @@ ftab("highequity")
 ftab("highfixed")
 
 ```
+
+
+## Analysis of asset values
+
+```{r}
+#| label: asset-values
+#| output: false
+
+ 
+ # column: body-outset
+
+unnested
+
+# initial_value * exp(cumsum(log_returns))
+
+assets <- unnested |> 
+  filter(year > 0) |> 
+  # filter(modtype=="model", framework=="slv", porttype=="highequity", sim==1) |> 
+  arrange(framework, scenario, porttype, modtype, sim, year) |> 
+  mutate(assets=exp(cumsum(ir)),
+         .by=c(framework, scenario, porttype, modtype, sim))
+
+assetmeasures <- assets |> 
+  filter(year == 10) |>
+  summarise(assets_p05 = quantile(assets, .05),
+            assets_p50 = quantile(assets, .5),
+            assets_p95 = quantile(assets, .95),
+            .by=c(framework, scenario, porttype, modtype)) |> 
+  left_join(scen_names |> 
+              select(framework, scenario, scendesc),
+            by = join_by(framework, scenario)) |>
+  filter(!str_starts(scenario, "rho_")) |> 
+  mutate(scenario=factor(scenario, levels=scenorder))
+
+
+```
+
+
+```{r}
+#| label: asset-values-function
+#| output: false
+
+ftab2 <- function(porttype){
+  
+  if(porttype == "highequity") {
+    portlabel <- "High-equity portfolio"
+    } else if(porttype == "highfixed"){
+      portlabel <- "High fixed-income portfolio"
+    }
+  
+  assetmeasures |> 
+    filter(porttype == !!porttype) |> 
+    arrange(scenario) |> 
+    select(scendesc, assets_p05, assets_p50, assets_p95) |> 
+    gt() |> 
+    rows_add(.after=4, .n_empty = 1) |>
+    rows_add(.after=3, .n_empty = 1) |>
+    tab_header(title="Asset accumulation at the end of 10 years",
+               subtitle = portlabel) |>
+    tab_spanner(columns = c(assets_p05, assets_p50, assets_p95),
+                label="Quantile of asset accumulation") |>
+    cols_label(scendesc="Scenario",
+               assets_p05=html("5th percentile"),
+               assets_p50=html("median"),
+               assets_p95=html("95th percentile")
+               ) |>
+    fmt_number(columns=c(assets_p05, assets_p50, assets_p95), decimals=2) |>
+    sub_missing(columns = everything(), missing_text = "") |>
+    tab_options(table.font.size = 11) |>
+    cols_width(-c(scendesc) ~ px(50))
+}
+
+
+```
+
+
+### High-equity portfolio
+
+```{r}
+#| label: table2-highequity
+#| column: body-outset
+
+ftab2("highequity")
+
+```
+
+
+
+### High fixed income portfolio
+
+```{r}
+#| label: table2-highfixed
+#| column: body-outset
+
+ftab2("highfixed")
+
+```
+
+
+
+<!-- OLD BELOW HERE -->
 
 
 ```{r}
