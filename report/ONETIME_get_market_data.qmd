@@ -6,7 +6,14 @@ editor_options:
 
 # ONETIME: Get financial markets data
 
-CAUTION: ONLY run this when we want to update underlying data
+CAUTION: ONLY run this when we want to update underlying data.
+
+We need market data for two reasons:
+
+-   To estimate stochastic volatility models that allow us to explore impact of different model structures on pension funding risk. For this purpose we want the longest time period possible for which we can have the desired assets. This appears to be from about 2003 forward because the data we have for bonds are not available earlier. (Maybe use a different measure / index.)
+
+-   To estimate parameter uncertainty for the AIRG/ACLI model, to allow us . For this purpose we want to match, as well as we can, the data sources and time periods that AIRG used. Those dates generally were from 1955 or later, through 2003.
+
 
 ## Setup
 
@@ -19,6 +26,8 @@ source(here::here("report", "libraries_ts.R"))
 
 library(quantmod)
 
+source(here::here("report", "function_runslv.R")) 
+
 # options(pillar.sigfig = 3) # default
 options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
@@ -27,7 +36,38 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 ```
 
 
-## Get data
+## Data for SLV models
+
+Get assets needed to construct two equity-fixed portfolios: 70-30 and 30-70.
+
+```{r}
+#| label: get-slv-assets
+#| eval: false
+#| output: false
+
+# MSCI All Country World Index (ACWI): This index captures large and mid-cap
+# representation across 23 Developed Markets and 24 Emerging Markets countries,
+# covering approximately 85% of the global investable equity opportunity set.
+
+# FTSE Global All Cap Index: This index measures the performance of large, mid,
+# and small cap stocks globally, covering over 7,400 securities in 47 countries,
+# including both developed and emerging markets.
+
+# The iShares Core U.S. Aggregate Bond ETF seeks to track the investment results of an index composed of the total U.S. investment-grade bond market.
+
+equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-01-03 forward
+fixed <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
+
+combo2 <- merge(Ad(equity), Ad(fixed), all = FALSE) # adjusted close; drop missing
+
+saveRDS(combo2, here::here("data", "slv_assets_rawdaily.rds"))
+
+
+```
+
+
+
+## Data for AIRG / ACLI models, to estimate parameter uncertainty
 
 AIRG used the following data. ACLI used the same data as AIRG for equities.
 
@@ -121,29 +161,27 @@ saveRDS(combo, here::here("data", "aggr_assets_rawdaily.rds"))
 ```
 
 
-Get assets needed to construct two equity-fixed portfolios: 70-30 and 30-70.
-
 ```{r}
-#| label: get-assets
+#| label: construct-airg-aggressive-portfolio
 #| eval: false
-#| output: false
 
-# MSCI All Country World Index (ACWI): This index captures large and mid-cap
-# representation across 23 Developed Markets and 24 Emerging Markets countries,
-# covering approximately 85% of the global investable equity opportunity set.
+# keep eval true so that whatever version of portfolio construction is being used is done
 
-# FTSE Global All Cap Index: This index measures the performance of large, mid,
-# and small cap stocks globally, covering over 7,400 securities in 47 countries,
-# including both developed and emerging markets.
+combo <- readRDS(here::here("data", "aggr_assets_rawdaily.rds"))
 
-# The iShares Core U.S. Aggregate Bond ETF seeks to track the investment results of an index composed of the total U.S. investment-grade bond market.
+weights <- c(qqq=0.125, eem=0.25, ewh=0.625) 
 
-equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-01-03 forward
-fixed <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
-
-combo2 <- merge(Ad(equity), Ad(fixed), all = FALSE) # adjusted close; drop missing
-
-saveRDS(combo2, here::here("data", "slv_assets_rawdaily.rds"))
+aggrport <- combo |> 
+  fortify() |> 
+  tibble() |> 
+  setNames(c("date", "qqq", "eem", "ewh")) |> 
+  mutate(across(c(qqq, eem, ewh), \(x) log(x / lag(x)))) |> 
+  filter(date > min(date)) |> 
+  mutate(portret=qqq * weights["qqq"] + eem * weights["eem"] + ewh * weights["ewh"],
+         portassets=exp(cumsum(portret))) # note that this is end of period assets
+ht(aggrport)
+  
+saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
 
 
 ```
