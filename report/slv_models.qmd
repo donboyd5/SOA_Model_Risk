@@ -27,37 +27,10 @@ options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
 
-
 ```
+
 
 ## SLV models for a 2-asset portfolio
-
-Get assets needed to construct two equity-fixed portfolios: 70-30 and 30-70.
-
-```{r}
-#| label: get-assets
-#| eval: false
-#| output: false
-
-# MSCI All Country World Index (ACWI): This index captures large and mid-cap
-# representation across 23 Developed Markets and 24 Emerging Markets countries,
-# covering approximately 85% of the global investable equity opportunity set.
-
-# FTSE Global All Cap Index: This index measures the performance of large, mid,
-# and small cap stocks globally, covering over 7,400 securities in 47 countries,
-# including both developed and emerging markets.
-
-# The iShares Core U.S. Aggregate Bond ETF seeks to track the investment results of an index composed of the total U.S. investment-grade bond market.
-
-equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-01-03 forward
-fixed <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
-
-combo2 <- merge(Ad(equity), Ad(fixed), all = FALSE) # adjusted close; drop missing
-
-saveRDS(combo2, here::here("data", "slv_assets_rawdaily.rds"))
-
-
-```
 
 ```{r}
 #| label: construct-slv-portfolio
