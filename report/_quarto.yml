@@ -39,10 +39,13 @@ book:
       - acli_parameter_uncertainty_from_slv.qmd    
       - get_acli_scenarios.qmd
       - create_acli_portfolios_and_save.qmd
+
+    - part: "Investment return statistics"
+      chapters:
+      - investment_return_statistics.qmd
       
     - part: "Run pension model on alternative ESG models and parameterizations"
       chapters:
-      - investment_return_statistics.qmd
       - add_comparison_returns.qmd
       - penmod.qmd
       

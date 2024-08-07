@@ -6,7 +6,6 @@ editor_options:
 
 # Simple stochastic log volatility models
 
-
 ## Setup
 
 ```{r}
@@ -30,8 +29,6 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 
 
 ```
-
-
 
 ## SLV models for a 2-asset portfolio
 
@@ -61,7 +58,6 @@ saveRDS(combo2, here::here("data", "slv_assets_rawdaily.rds"))
 
 
 ```
-
 
 ```{r}
 #| label: construct-slv-portfolio
@@ -96,11 +92,7 @@ saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 
 ```
 
-
-
-
 ## Prepare data for model estimation
-
 
 ```{r}
 #| label: prepare-data
@@ -143,10 +135,7 @@ The four models are:
 -   Skew gaussian distribution -- skewness parameter alpha
 -   Leverage: Gaussian distribution with leverage -- volatility correlated with returns via rho
 
-
 See [stochvolTMB: Likelihood estimation of stochastic volatility](https://cran.r-project.org/web/packages/stochvolTMB/vignettes/stochvolTMB_vignette.html)
-
-
 
 ```{r}
 #| label: estimate-slv-simple
@@ -207,14 +196,12 @@ saveRDS(list(res2=res2, params2=params2), here::here("data", "slv_model_results.
 
 ```
 
-
 ## Show some results
 
 ### Model fit
 
 -   Highfixed portfolio: Leverage model has lowest AIC, followed by skew model; difference is minimal
--   Highequity: Skew model is  best, followed by leverage; difference is minimal
-
+-   Highequity: Skew model is best, followed by leverage; difference is minimal
 
 ```{r}
 #| label: appendix-summary-table
@@ -235,13 +222,9 @@ params2 |>
 
 ```
 
-
 ### Parameters
 
--   Leverage: rho (correlation of volatility and returns) is -0.675 and -0.744 (fixed, equity)
-<!-- -   high-equity t model cannot compute std_error for df -->
-<!-- -   high-fixed t model looks suspicious -->
-
+-   Leverage: rho (correlation of volatility and returns) is -0.675 and -0.744 (fixed, equity) <!-- -   high-equity t model cannot compute std_error for df --> <!-- -   high-fixed t model looks suspicious -->
 
 ```{r}
 #| label: appendix-parameter-tables
@@ -310,6 +293,15 @@ f("highfixed")
 
 ```
 
+In a stochastic volatility model with skew-normal innovations, the parameter α governs the skewness of the distribution of returns. Specifically, α controls the degree and direction of asymmetry in the distribution:
+
+-   If α=0, the distribution is symmetric and reduces to the standard normal distribution.
+
+-   If α>0, the distribution is skewed to the right, indicating a higher likelihood of observing large positive returns.
+
+-   If α<0, the distribution is skewed to the left, indicating a higher likelihood of observing large negative returns.
+
+In the context of investment returns, α provides insights into the likelihood of extreme returns in either direction. A positive α suggests that large positive surprises (returns) are more probable, whereas a negative α implies that large negative surprises are more likely. This skewness parameter is crucial for accurately modeling financial returns, as it captures the asymmetry often observed in real-world financial data, where returns are not perfectly symmetric around the mean.
 
 ## Predict 10,000 simulations from each of the models
 
@@ -360,9 +352,7 @@ saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
 
 ```
 
-
 ## Collapse to 30 years from 360 months
-
 
 ```{r}
 #| label: sims-reshape
@@ -397,7 +387,6 @@ f <- function(mat, period=3){
 
 ```
 
-
 ```{r}
 #| label: sims-save
 #| output: false
@@ -419,7 +408,6 @@ saveRDS(slv_sims |>
         here::here("data", "slvsims.rds"))
 
 ```
-
 
 <!-- OLD stuff after this  -->
 
@@ -509,5 +497,3 @@ summary(svtl)
 
 
 ```
-
-
