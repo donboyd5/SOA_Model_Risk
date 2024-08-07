@@ -26,7 +26,7 @@ source(here::here("report", "libraries_ts.R"))
 
 library(quantmod)
 
-source(here::here("report", "function_runslv.R")) 
+source(here::here("report", "functions_finance.R")) 
 
 # options(pillar.sigfig = 3) # default
 options(pillar.print_max = 20)
@@ -177,12 +177,11 @@ aggrport <- combo |>
   setNames(c("date", "qqq", "eem", "ewh")) |> 
   mutate(across(c(qqq, eem, ewh), \(x) log(x / lag(x)))) |> 
   filter(date > min(date)) |> 
-  mutate(portret=qqq * weights["qqq"] + eem * weights["eem"] + ewh * weights["ewh"],
+  mutate(portret=lrport(across(c(qqq, eem, ewh)), weights),
          portassets=exp(cumsum(portret))) # note that this is end of period assets
 ht(aggrport)
   
 saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
-
 
 ```
 
