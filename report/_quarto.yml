@@ -26,9 +26,7 @@ book:
   chapters:
     - index.qmd
     
-    - part: "Probability distributions"
-      chapters:
-      - probability.qmd # this is just exploratory - I'll add substance later
+    - ONETIME_get_market_data.qmd # set eval: true when getting new data
       
     - part: "Alternative models using simple SLV model"
       chapters:

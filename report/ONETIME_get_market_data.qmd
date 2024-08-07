@@ -1,0 +1,188 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# ONETIME: Get financial markets data
+
+CAUTION: ONLY run this when we want to update underlying data.
+
+We need market data for two reasons:
+
+-   To estimate stochastic volatility models that allow us to explore impact of different model structures on pension funding risk. For this purpose we want the longest time period possible for which we can have the desired assets. This appears to be from about 2003 forward because the data we have for bonds are not available earlier. (Maybe use a different measure / index.)
+
+-   To estimate parameter uncertainty for the AIRG/ACLI model, to allow us . For this purpose we want to match, as well as we can, the data sources and time periods that AIRG used. Those dates generally were from 1955 or later, through 2003.
+
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(here::here("report", "libraries_ts.R"))
+
+library(quantmod)
+
+source(here::here("report", "function_runslv.R")) 
+
+# options(pillar.sigfig = 3) # default
+options(pillar.print_max = 20)
+tprint <- 25  # default tibble print
+options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
+
+```
+
+
+## Data for SLV models
+
+Get assets needed to construct two equity-fixed portfolios: 70-30 and 30-70.
+
+```{r}
+#| label: get-slv-assets
+#| eval: false
+#| output: false
+
+# MSCI All Country World Index (ACWI): This index captures large and mid-cap
+# representation across 23 Developed Markets and 24 Emerging Markets countries,
+# covering approximately 85% of the global investable equity opportunity set.
+
+# FTSE Global All Cap Index: This index measures the performance of large, mid,
+# and small cap stocks globally, covering over 7,400 securities in 47 countries,
+# including both developed and emerging markets.
+
+# The iShares Core U.S. Aggregate Bond ETF seeks to track the investment results of an index composed of the total U.S. investment-grade bond market.
+
+equity <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01") # 1950-01-03 forward
+fixed <- getSymbols("AGG", auto.assign = FALSE, from = "1950-01-01") # 2003-09-29
+
+combo2 <- merge(Ad(equity), Ad(fixed), all = FALSE) # adjusted close; drop missing
+
+saveRDS(combo2, here::here("data", "slv_assets_rawdaily.rds"))
+
+
+```
+
+
+
+## Data for AIRG / ACLI models, to estimate parameter uncertainty
+
+AIRG used the following data. ACLI used the same data as AIRG for equities.
+
+![](images/clipboard-736643218.png)
+
+```{r}
+#| label: download-airg-assets
+#| eval: false
+
+# Here are the data sources for AIRG:
+
+# Asset Class, Market Proxies, Historic Period
+# Money Market, 3 Month Treasury returns, 1955.12 – 2003.12
+# U.S. ITGVT, U.S. Intermediate Term Government Bonds, 1955.12 – 2003.12
+# U.S. LTCORP, U.S. Long Term Corporate Bonds, 1955.12 – 2003.12
+# Fixed Income, 65% ITGVT + 35% LTCORP, n/a
+# Balanced Allocation, 60% Diversified Equity + 40% Fixed Income, n/a
+# Diversified Large Cap U.S. Equity, S&P500 Total Return Index, 1955.12 – 2003.12
+# Diversified International Equity, MSCI-EAFE $USD Total Return Index, 1969.12 – 2003.12
+# Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12
+# Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng, 1984.12 – 2003.12
+
+# re-download if needed -- src = "yahoo" by default
+# Yahoo symbol lookup:
+# https://finance.yahoo.com/lookup
+
+## Diversified Large Cap U.S. Equity ----
+# Dec 1955-Dec 2003 monthly was period used in AIRG for sp500
+# Download adjusted close prices for the S&P 500 index
+# monthly data do not go back far enough so get daily and convert
+spdaily <- getSymbols("^GSPC", auto.assign = FALSE, from = "1950-01-01")
+saveRDS(spdaily, here::here("data", "sp500_index_rawdaily.rds"))
+
+
+## Diversified International Equity ----
+# MSCI-EAFE $USD Total Return Index, 1969.12 – 2003.12
+# MSCI EAFE (Europe, Australasia and Far East) Index - This is a broad index that represents the performance of large and mid-cap stocks across 21 developed markets, excluding the U.S. and Canada. It covers approximately 85% of the free float-adjusted market capitalization in each country.
+# The MSCI EAFE Index itself does not have a ticker symbol, as it is not an investable security but rather a benchmark index. However, there are several exchange-traded funds (ETFs) and mutual funds that track the performance of the MSCI EAFE Index.
+# https://www.msci.com/documents/10199/822e3d18-16fb-4d23-9295-11bc9e07b8ba
+# The most popular and widely traded ETF that tracks the MSCI EAFE Index is the iShares MSCI EAFE ETF, which has the ticker symbol "EFA". It's only available since 2001.
+
+mscidaily <- getSymbols("EFA", auto.assign = FALSE, from = "1950-01-01") # 2001+
+saveRDS(mscidaily, here::here("data", "msci_eafe_eaf_rawdaily.rds"))
+
+## Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12 ----
+# U.S. Small Capitalization Index
+
+# The Russell 2000 is perhaps the most well-known and widely referenced small-cap index in the U.S. It measures the performance of the smallest 2,000 companies included in the Russell 3000 Index, which represents approximately 10% of the total market capitalization of the Russell 3000.
+# ^RUT only available from 1987-09-10 forward
+
+# The S&P SmallCap 600 is another prominent index that measures the small-cap
+# segment of the U.S. equity market. Managed by Standard & Poor's, it includes
+# 600 small companies that meet specific inclusion criteria, such as market
+# capitalization, liquidity, and financial viability.
+
+r2000daily <- getSymbols("^RUT", auto.assign = FALSE, from = "1950-01-01") # 1987-09-10 forward
+# getSymbols("^SP600", auto.assign = FALSE, from = "1950-01-01") # 1989-01-03
+saveRDS(r2000daily, here::here("data", "russell2000_rawdaily.rds"))
+
+## Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng, 1984.12 – 2003.12 ----
+
+# The hypothetical “Aggressive/Exotic Equity” index was constructed by blending
+# returns for the NASDAQ, Emerging Markets and Hang Seng indices (weights are
+# approximately 12.5%, 25% and 62.5% respectively). This proxy has an
+# unconditional annualized volatility of approximately 25%. This market mix is
+# not meant to suggest a representative asset profile for this class, but used
+# merely to build an historic index with high volatility and sufficient history.
+
+# NASDAQ:
+# For the NASDAQ-100 Index, the ticker is QQQ:
+# Invesco QQQ Trust is an ETF that tracks the NASDAQ-100 Index, which includes 100 of the largest non-financial companies listed on the NASDAQ stock exchange.
+# For the broader NASDAQ Composite Index, there isn't a direct ETF because it includes over 3,000 stocks. However, the NASDAQ-100 (QQQ) is often used as a proxy due to its heavy technology and growth-oriented composition.
+
+# MSCI Emerging Markets Index:
+# ETF Ticker: EEM
+# iShares MSCI Emerging Markets ETF is one of the most popular ETFs tracking the performance of the MSCI Emerging Markets Index. It includes large and mid-sized companies across emerging markets.
+
+# Hang Seng Index:
+# ETF Ticker: EWH
+# iShares MSCI Hong Kong ETF tracks the investment results of an index composed of Hong Kong equities and is often used by investors to gain exposure to the Hong Kong market, broadly reflective of the Hang Seng Index dynamics.
+
+getSymbols(c("QQQ", "EEM", "EWH"), auto.assign = TRUE, from = "1950-01-01") 
+QQQ # 1999-03-10 forward
+EEM # 2003-04-14 forward
+EWH # 1996-03-18 forward
+# Ad(QQQ)
+
+combo <- merge(Ad(QQQ), Ad(EEM), Ad(EWH), all = FALSE) # adjusted close; drop missing
+saveRDS(combo, here::here("data", "aggr_assets_rawdaily.rds"))
+
+```
+
+
+```{r}
+#| label: construct-airg-aggressive-portfolio
+#| eval: false
+
+# keep eval true so that whatever version of portfolio construction is being used is done
+
+combo <- readRDS(here::here("data", "aggr_assets_rawdaily.rds"))
+
+weights <- c(qqq=0.125, eem=0.25, ewh=0.625) 
+
+aggrport <- combo |> 
+  fortify() |> 
+  tibble() |> 
+  setNames(c("date", "qqq", "eem", "ewh")) |> 
+  mutate(across(c(qqq, eem, ewh), \(x) log(x / lag(x)))) |> 
+  filter(date > min(date)) |> 
+  mutate(portret=qqq * weights["qqq"] + eem * weights["eem"] + ewh * weights["ewh"],
+         portassets=exp(cumsum(portret))) # note that this is end of period assets
+ht(aggrport)
+  
+saveRDS(aggrport, here::here("data", "aggressive_rawdaily.rds"))
+
+
+```
+
