@@ -336,9 +336,9 @@ In a stochastic volatility model with skew-normal innovations, the parameter α 
 
 -   If α=0, the distribution is symmetric and reduces to the standard normal distribution.
 
--   If α>0, the distribution is skewed to the right, indicating a higher likelihood of observing large positive returns.
+-   If α\>0, the distribution is skewed to the right, indicating a higher likelihood of observing large positive returns.
 
--   If α<0, the distribution is skewed to the left, indicating a higher likelihood of observing large negative returns.
+-   If α\<0, the distribution is skewed to the left, indicating a higher likelihood of observing large negative returns.
 
 In the context of investment returns, α provides insights into the likelihood of extreme returns in either direction. A positive α suggests that large positive surprises (returns) are more probable, whereas a negative α implies that large negative surprises are more likely. This skewness parameter is crucial for accurately modeling financial returns, as it captures the asymmetry often observed in real-world financial data, where returns are not perfectly symmetric around the mean.
 
