@@ -1,0 +1,531 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Investment return statistics
+
+## Setup
+
+```{r}
+#| label: setup
+#| output: false
+
+source(here::here("report", "_common.R"))
+source(fs::path(rptdir, "function_penmod.R")) # for flatmat
+
+# library(moments)
+# library(fBasics)
+
+# Basic statistics
+# stats <- basicStats(returns_xts)
+# print(stats)
+# 
+# # Skewness and kurtosis
+# skew_kurt <- rSkewnessKurtosis(returns_xts)
+
+
+```
+
+```{r}
+#| label: labels
+#| output: false
+
+slv_scen_names <- read_csv(
+"scenario,parm,parmdesc,scendesc
+gaussmod, none, none, Stochastic volatility model with gaussian errors
+tmod, df, degrees of freedom, Stochastic volatility model with heavy tails
+skewmod, alpha, skewness parameter, Stochastic volatility model with skewed returns
+levmod, rho, correlation parameter, Stochastic volatility model, volatility correlated with returns (leverage)") |> 
+  mutate(framework="slv")
+slv_scen_names
+
+acli_scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+
+scen_names <- bind_rows(
+  slv_scen_names,
+  acli_scen_names |> 
+    mutate(scendesc=ifelse(scenario=="baseline",
+                           "Complex ESG baseline",
+                           scendesc))) |> 
+  relocate(framework)
+
+```
+
+
+```{r}
+#| label: functions
+#| output: false
+
+getir <- function(ir){
+  # ir: matrix of investment returns; rows are sims, columns are years
+  nsims <- nrow(ir)
+  nyears <- ncol(ir)
+  
+  # create a tibble
+  df <- expand_grid(sim=1:nsims, year=1:nyears) |> 
+    mutate(ir=flatmat(ir))
+  df
+}
+
+
+fmeasures <- function(ir, nyears=30){
+  # ir is a vector of returns for a given time period (or, if historical, all observations)
+  n <- length(ir)
+  npy <- n / nyears
+
+  mean <- base::mean(ir)
+  sd <- stats::sd(ir) # per stats::sd documentation, "Like var this uses denominator n - 1"
+  
+  min <- base::min(ir)
+  max <- base::max(ir)
+  p05 <- stats::quantile(ir, 0.05)
+  p95 <- stats::quantile(ir, 0.95)
+  
+  skew1 <- e1071::skewness(ir, type=1) # typical older textbook measure
+  # skew2 <- e1071::skewness(ir, type=2) # SAS and SPSS measure, unbiased under normality; subtracts3
+  # skew3 <- e1071::skewness(ir, type=3) # default; minitab and bmdp formula
+  # all 3 skewness measures are unbiased under normality; they don't seem to be much different
+  
+  # xkurt0 <- moments::kurtosis(ir) - 3 # the estimator of Pearson's measure of kurtosis, adjusted by me with -3
+  # CAUTION: the e1071 measures already subtract 3, so don't do it again!
+  xkurt1 <- e1071::kurtosis(ir, type=1) # typical older textbook, subtracts 3, appears to be same as kurt0
+  # xkurt2 <- e1071::kurtosis(ir, type=2) # SAS and SPSS measure, unbiased under normality; subtracts3
+  # xkurt3 <- e1071::kurtosis(ir, type=3) # default; minitab and bmdp formula
+  
+  tibble(n, npy, mean, sd, min, max, p05, p95, skew=skew1, xkurt=xkurt1)
+  # x <- rnorm(100)
+  # uvmeasures(x)
+}
+
+
+
+```
+
+
+```{r}
+#| label: excess-kurtosis-interpretation
+#| eval: false
+#| output: false
+
+# here's how chatGPT and Copilot interpret excess kurtosis
+
+# Slightly Fat-Tailed: Excess kurtosis between 0 and 1. These distributions have tails that are slightly heavier than the normal distribution.
+
+# Moderately Fat-Tailed: Excess kurtosis between 1 and 2. These distributions indicate a moderate likelihood of extreme returns.
+
+# Highly Fat-Tailed: Excess kurtosis greater than 2. These distributions suggest a significant probability of extreme returns.
+
+# Leptokurtic: Excess kurtosis greater than 0. These distributions have fatter tails and a higher peak than the normal distribution.
+
+```
+
+
+```{r}
+#| label: skewness-interpretation
+#| eval: false
+#| output: false
+
+
+# Skewness < 0: The distribution is negatively skewed (left-skewed).
+
+# Slight Negative Skew: Skewness between -0.5 and 0. The left tail is slightly longer or fatter, indicating a higher probability of extreme negative returns.
+ 
+# Moderate Negative Skew: Skewness between -1.0 and -0.5. The left tail is more noticeably longer, indicating a significant probability of extreme negative returns.
+ 
+# High Negative Skew: Skewness less than -1.0. The distribution has a long left tail, suggesting a substantial likelihood of extreme negative returns.
+
+```
+
+
+## Get portfolio data and construct measures
+
+```{r}
+#| label: get-portfolios
+#| output: false
+
+portfolios <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
+
+# portfolios
+
+# count(portfolios, framework)
+# count(portfolios, scenario)
+# count(portfolios, porttype)
+# count(portfolios, modtype)
+
+```
+
+
+```{r}
+#| label: unnest-returns
+#| output: false
+
+nested <- portfolios |> 
+  filter(modtype=="model") |> 
+  # filter(row_number() <= 2) |> 
+  select(-mean, -sd) |> 
+  # next statement "loops" (via map) through the rows and for each row it
+  # calls getir using nsims, nyears, and the investment return matrix for the scenario in the row
+  mutate(irtibble = 
+           purrr::map(seq_along(lrmat),
+                      ~getir(ir = lrmat[[.x]]))) |> 
+  select(-lrmat)
+nested
+
+unnested <- nested |>
+  unnest(cols=irtibble)
+
+unnested
+
+```
+
+
+```{r}
+#| label: get-stats-for-total-distribution
+#| output: false
+
+totmeasures <- unnested |> 
+  filter(year > 0) |> 
+  summarise(fmeasures(ir), 
+            .by=c(framework, scenario, porttype, modtype))
+
+totmeasures
+
+```
+
+
+```{r}
+#| label: get-time-series-stats
+#| output: false
+
+# acf_result <- stats::acf(log_returns, lag.max = 1)
+# str(acf_result)
+# acf_result$acf[2]  # the correlation
+
+facf <- function(ir) {
+  stats::acf(ir, lag.max = 1, demean=FALSE, type="correlation", plot=FALSE)$acf[2]
+}
+
+acfmeasures <- unnested |> 
+  filter(year > 0) |> 
+  arrange(framework, scenario, porttype, modtype, sim, year) |> 
+  # first, summarise by sim
+  summarise(ircorr = facf(ir), 
+            .by=c(framework, scenario, porttype, modtype, sim)) |> 
+  # now summarise by scenario
+  summarise(ircorr_p25 = quantile(ircorr, .25), 
+            ircorr_p50 = quantile(ircorr, .5),
+            ircorr_p75 = quantile(ircorr, .75),
+            .by=c(framework, scenario, porttype, modtype))
+
+# acfmeasures
+
+# arch measures
+farch <- function(ir, lags=3) {
+  # Autoregressive Conditional Heteroskedasticity (ARCH) test
+  #    examines whether the variance of the current error term is related to the past squared errors
+  # ARCH Test p-value: A low p-value indicates significant time-varying volatility.
+  FinTS::ArchTest(ir, lags=lags, demean=FALSE)$p.value
+}
+
+archmeasures <- unnested |> 
+  filter(year > 0) |> 
+  arrange(framework, scenario, porttype, modtype, sim, year) |> 
+  # first, summarise by sim
+  summarise(irarchp = farch(ir, lags=1), 
+            .by=c(framework, scenario, porttype, modtype, sim)) |> 
+  # now summarise by scenario
+  summarise(irarchp_p25 = quantile(irarchp, .25),
+            irarchp_p50 = quantile(irarchp, .5),
+            irarchp_p75 = quantile(irarchp, .75),
+            .by=c(framework, scenario, porttype, modtype))
+
+# archmeasures
+
+
+```
+
+
+
+## Tables
+
+```{r}
+#| label: table1-prep
+#| output: false
+
+scenorder <- c("gaussmod", "skewmod", "levmod",
+               "baseline",
+               "phi_lbound", "phi_ubound",
+               "tau_lbound", "tau_ubound",
+               "rho_lbound", "rho_ubound",
+               "sigma_v_lbound", "sigma_v_ubound")
+
+# add labels
+lmeasures <- totmeasures |> 
+  left_join(acfmeasures,
+            by = join_by(framework, scenario, porttype, modtype)) |> 
+  left_join(archmeasures,
+            by = join_by(framework, scenario, porttype, modtype)) |> 
+  left_join(scen_names |> 
+              select(framework, scenario, scendesc),
+            by = join_by(framework, scenario)) |>
+  filter(!str_starts(scenario, "rho_")) |> 
+  mutate(scenario=factor(scenario, levels=scenorder))
+
+count(lmeasures, scenario)
+
+
+ftab <- function(porttype){
+  
+  if(porttype == "highequity") {
+    portlabel <- "High-equity portfolio"
+    } else if(porttype == "highfixed"){
+      portlabel <- "High fixed-income portfolio"
+    }
+  
+  lmeasures |> 
+    filter(porttype == !!porttype) |> 
+    arrange(scenario) |> 
+    select(scendesc, npy, mean, sd, p05, p95, skew, xkurt, ircorr_p50, irarchp_p50) |> 
+    gt() |> 
+    rows_add(.after=4, .n_empty = 1) |> 
+    rows_add(.after=3, .n_empty = 1) |> 
+    tab_header(title="Summary statistics for log investment returns, 30 years of data",
+               subtitle = portlabel) |>
+    tab_spanner(columns = c(mean, sd, p05, p95),
+                label="Log investment returns") |>
+    tab_spanner(columns = c(skew, xkurt),
+                label="Measures of distribution") |>
+    tab_spanner(columns = c(ircorr_p50, irarchp_p50),
+                label="Measures of relationships over time -- median across simulations") |>
+    cols_label(scendesc="Scenario", 
+               npy="# sims per year",
+               # porttype="Portfolio type",
+               skew=html("Skewness<br>(<0: extreme negative<br>returns more likely)"),
+               xkurt=html("Excess kurtosis<br>(>0: fatter tails)"),
+               ircorr_p50=html("Correlation with<br>return in previous year"),
+               irarchp_p50=html("ARCH test p-value<br>(near 0: significant<br>time-varying volatility)")
+               ) |>
+    fmt_number(columns=c(npy), decimals=0) |> 
+    fmt_number(columns=c(skew, xkurt, ircorr_p50, irarchp_p50), decimals=2) |> 
+    fmt_percent(columns=c(mean, sd, p05, p95), decimals=1) |>
+    sub_missing(columns = everything(), missing_text = "") |>
+    tab_options(table.font.size = 11) |> 
+    cols_width(-c(scendesc) ~ px(50))
+}
+
+# options for the #| column : chunk option
+# body -- good and fits but text too big
+# body-outset -- wider, looks better
+# page-inset-right -- wider still, good
+# page-inset-left -- also good
+
+```
+
+
+## High equity portfolio 
+
+```{r}
+#| label: table1-high-equity
+#| column: body-outset
+
+ftab("highequity")
+
+```
+
+
+## High fixed income portfolio
+
+```{r}
+#| label: table1-highfixed
+#| column: body-outset
+
+ftab("highfixed")
+
+```
+
+
+```{r}
+#| label: measures-over-time
+#| eval: false
+#| output: false
+
+# Load necessary libraries
+library(rugarch)
+library(fGarch)
+library(ggplot2)
+library(stochvol)
+library(stochvolTMB)
+
+# Load necessary library
+library(strucchange)
+
+# Example time series data
+set.seed(123)
+
+# Assuming `returns` is your data frame and each column is a year of returns
+# skewness_values <- apply(returns, 2, skewness)
+# kurtosis_values <- apply(returns, 2, kurtosis)
+
+#  Measure of the Extent to which Volatility Varies Over Time
+# Autoregressive Conditional Heteroskedasticity (ARCH) Test
+# The ARCH test can be used to test for time-varying volatility (heteroskedasticity) in the time series.
+# 
+# Calculation: Use the ArchTest function from the FinTS package in R.
+
+
+# arch_test_result <- ArchTest(series)$p.value
+#   garch_model <- garchFit(~ garch(1, 1), data = series, trace = FALSE)
+#   garch_alpha <- coef(garch_model)["alpha1"]
+#   garch_beta <- coef(garch_model)["beta1"]
+
+data <- rnorm(30)  # Replace with your annual returns data
+
+# mu <- -10  # Mean of the log volatility
+# phi <- 0.98  # Persistence parameter
+# sigma <- 0.2  # Volatility of volatility
+
+# tmp <- svsim(len = 30, mu = 0, phi = .98, sigma = .4)
+(data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .6)$y)
+(data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .01)$y)
+plot(data1, type="l")
+
+(data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .01)$y)
+
+
+(data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .6)$y); fit <- stochvolTMB::estimate_parameters(data1, model = "leverage", silent=TRUE); summary(fit, report = "transformed")
+
+
+a <- fit
+str(a)
+a$estimate
+a$fit$par
+
+(kp <- tseries::kpss.test(data1))
+str(kp)
+
+(mlt <- TSA::McLeod.Li.test(y=data1))
+# (mlt <- TSA::McLeod.Li.test(y=data1))
+str(mlt)
+# low Ljung-Box pvalues indicates autocorrelation
+
+library(TSA)
+data(CREF)
+r.cref=diff(log(CREF))*100
+McLeod.Li.test(y=r.cref)
+
+# Perform CUSUM test
+cusum_test <- efp(data ~ 1, type="Rec-CUSUM")
+plot(cusum_test)
+summary(cusum_test)
+
+library(lmtest)
+library(skedastic)
+mod <- lm(data1 ~ 1)
+mod
+
+# Perform White Test
+(wtest <- skedastic::white(mod))
+str(wtest)
+wtest$p.value
+
+# Perform Breusch-Pagan Test
+bptest(mod)
+
+
+
+
+# Extract the simulated series
+#returns <- sim_data$y
+#volatilities <- exp(sim_data$h / 2)
+
+
+
+
+
+set.seed(123)
+lr1 <- rnorm(30)
+lr2 <- rnorm(30)
+
+# Load and prepare your data
+# returns <- read.csv('returns.csv', header = TRUE)
+
+# Fit GARCH(1,1) models
+spec1 <- ugarchspec(variance.model = list(garchOrder = c(1,1)), mean.model = list(armaOrder = c(0,0)), distribution.model = "norm")
+fit1 <- ugarchfit(spec1, lr1)
+
+spec2 <- ugarchspec(variance.model = list(garchOrder = c(1,1)), mean.model = list(armaOrder = c(0,0)), distribution.model = "norm")
+fit2 <- ugarchfit(spec2, lr2)
+
+# Fit Stochastic Volatility (SV) models using estimate_parameters
+# fit_sv1 <- estimate_parameters(lr1, model = "sv", prior = list(phi = 0.95, sigma = 0.1, tau = 1))
+# fit_sv2 <- estimate_parameters(lr2, model = "sv", prior = list(phi = 0.95, sigma = 0.1, tau = 1))
+
+fit_sv1 <- estimate_parameters(lr1, model = "gaussian", silent=TRUE)
+fit_sv2 <- estimate_parameters(lr2, model = "gaussian", silent=TRUE)
+
+str(fit_sv1)
+fit_sv1$rep$value
+fitted(fit_sv1)
+predict(fit_sv1)
+sim(fit_sv1)
+
+# Calculate the Mean Squared Error (MSE) for the GARCH models
+mse_garch1 <- mean((lr1 - fit1@fit$fitted.values)^2)
+mse_garch2 <- mean((lr2 - fit2@fit$fitted.values)^2)
+
+# Print the MSE values for GARCH models
+cat("MSE for Series1 GARCH model:", mse_garch1, "\n")
+cat("MSE for Series2 GARCH model:", mse_garch2, "\n")
+
+# Calculate the MSE for the SV models
+est1 <- summary(fit_sv1)$estimate[-c(1:6)]
+
+mse_sv1 <- mean((lr1 - mean(est1))^2)
+mse_sv2 <- mean((lr2 - fit_sv2$mean)^2)
+
+# mse_sv1 <- mean((lr1 - fit_sv1$mean)^2)
+# mse_sv2 <- mean((lr2 - fit_sv2$mean)^2)
+
+# Print the MSE values for SV models
+cat("MSE for Series1 SV model:", mse_sv1, "\n")
+cat("MSE for Series2 SV model:", mse_sv2, "\n")
+
+
+# Load necessary libraries
+library(FinTS)
+library(fGarch)
+
+# Generate a sample log_returns series
+set.seed(123)
+log_returns <- rnorm(30)
+
+# Calculate ACF
+acf_result <- stats::acf(log_returns, lag.max = 1)
+str(acf_result)
+acf_result$acf[2]  # the correlation
+
+# Perform ARCH test
+arch_test_result <- FinTS::ArchTest(log_returns)
+arch_test_result <- FinTS::ArchTest(log_returns, lags=1, demean = FALSE)
+
+# Fit GARCH model
+garch_model <- fGarch::garchFit(~ garch(1, 1), data = log_returns)
+summary(garch_model)
+
+library(stochvolTMB)
+sv_fit <- estimate_parameters(log_returns)
+estimated_volatility <- sv_fit$sd_logvol
+params <- sv_fit$fit$par
+phi <- params["phi"]
+sigma <- params["sigma"]
+mu <- params["mu"]
+
+# Extract the latent volatility states
+log_vol <- sv_fit$latent_states
+
+
+```
+
+
