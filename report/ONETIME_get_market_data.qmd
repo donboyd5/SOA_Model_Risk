@@ -26,8 +26,6 @@ source(here::here("report", "libraries_ts.R"))
 
 library(quantmod)
 
-source(here::here("report", "function_runslv.R")) 
-
 # options(pillar.sigfig = 3) # default
 options(pillar.print_max = 20)
 tprint <- 25  # default tibble print
