@@ -67,12 +67,13 @@ write_tab <- function(tabname, tab=NULL, tabdir=NULL) {
 ```
 
 
-## Functions to implement Gang's risk measures
+## Functions to implement risk measures
 
 Put the functions here for now. Later put them in a separate file.
 
--   **VaR_loss**: Worst (alpha percentile) asset loss at the end of year t (e.g., 5)
+-   **VaR_loss**: Worst (alpha percentile) asset loss at the end of year t (e.g., 10). Here, typically alpha would be low, such as 0.05, to capture risk of large asset losses.
 
+-   **VaR_erc**: Worst (alpha percentile) contribution increase at the end of year t (e.g., 10). Here, typically, alpha would be high, such as 0.95, to capture risk of large contribution increases.
 
 ```{r}
 #| label: risk-functions
@@ -285,7 +286,7 @@ Takeaways:
 -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
 -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
 -   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
--   Risk measures are slightly worse for the skewed and leverage models than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
+-   Risk measures sometimes are slightly worse for the skewed and leverage models than for the Gaussian model, and can even be slightly better -- but again not by a lot compared with the difference between random normal and constant returns
 -   The leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
 
 ```{r}
@@ -369,8 +370,6 @@ Takeaways:
 -   Asset risk, contribution risk, and funded ratio all are worse once we introduce volatility, compared to a constant-returns scenario
 -   (Note that when assets fall, contributions may rise, keeping funded ratio relatively stable and also potentially stabilizing assets)
 -   Risk measures are slightly worse for the Gaussian modeled returns than for random normal returns, but the difference is small compared to the difference between random normal and constant.
--   Risk measures for the skewed model are slightly better than for the Gaussian model, but again not by a lot compared with the difference between random normal and constant returns
--   Risk measures for the leverage model are moderately worse for the leverage model than for the Gaussian model.
 -   As with the high-equity portfolio, the leverage model appears to have the highest risk of the three models shown. It also fit the data best (as measured by AIC).
 
 ```{r}
