@@ -128,7 +128,7 @@ dirget <- function(dirname, fnames){
 
 ## Get and save ACLI scenarios
 
-Gang, running this next chunk gets all of the ACLI scenarios I created using their spreadsheet model.
+Running this next chunk gets all of the ACLI scenarios we created using their spreadsheet model.
 
 ```{r}
 #| label: get-data
@@ -175,7 +175,7 @@ slong |>
 
 ```
 
-## Explore the results (if you want)
+## Explore the results
 
 ```{r}
 #| label: explore

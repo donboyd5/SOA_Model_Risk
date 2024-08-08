@@ -8,7 +8,7 @@ editor_options:
 
 After ACLI results are saved as a long file with results by scenario and asset class, we need to create portfolios from the asset classes.
 
-We create two portfolios, based on Gang's investigation: a "high equity" portfolio reasonable consistent with public pension plans in the United States, and a "high fixed" portfolio reasonably consistent with private pension plans in the United States.
+We create two portfolios, based on Gang's investigation: a "high equity" portfolio reasonably consistent with public pension plans in the United States, and a "high fixed" portfolio reasonably consistent with private pension plans in the United States.
 
 ## Setup
 

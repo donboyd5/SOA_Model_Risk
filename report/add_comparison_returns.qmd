@@ -6,9 +6,7 @@ editor_options:
 
 # Prepare for apples-to-apples comparisons
 
-For every slv model scenario and portfolio, create a corresponding random-normal scenario with the same mean and standard deviation over the simulated number of years and simulations.
-
-Repeat for every ACLI scenario and portfolio.
+For every model scenario and portfolio, create a corresponding deterministic constant-returns scenario with annual returns equal to the model mean return, and a random-normal scenario with the same mean and standard deviation as the model (calculated over the simulated number of years and simulations).
 
 
 This will allow head-to-head comparison for each scenario-portfolio combination.
@@ -245,10 +243,16 @@ Note that:
 -   sd should equal sd_model for the rnormal (random normal) matrix, and be 0 for the constant matrix
 
 ```{r}
+#| label: show-all-scenarios
+
 
 all_scen <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
 
-all_scen
+all_scen |> 
+  select(framework, scenario, porttype, modtype, nsims, nyears, mean, sd) |> 
+  gt() |> 
+  fmt_number(c(nsims, nyears), decimals=0) |>
+  fmt_percent(c(mean, sd), decimals=2)
 
 
 ```

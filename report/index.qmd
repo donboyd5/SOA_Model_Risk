@@ -4,13 +4,46 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Introduction and information for Gang
+# Introduction
 
-Gang, this document is just for you and me.
 
-It will produce some tables and graphs that we can copy into the report for SOA. (I will try to save them as .png files, also, or other formats as needed.)
+This project documents data and information developed for the final SOA model management report. It produces some tables and graphs that we can copy into the report for SOA, the most important of which are saved as .png files.
 
-The current version of this repo focuses on producing results that will go into the report, and all of the relevant code is under the /report subfolder in the main project folder.
+The current version of the [GitHub repo](https://github.com/donboyd5/SOA_Model_Risk) focuses on producing results for the report. Relevant code is under the /report subfolder in the main project folder.
+
+An earlier version of this web page with information used in the July 28, 2024 draft report submitted to the SOA is available [here](https://soa-2024-07-28.netlify.app/).
+
+## Changes since July 28, 2024
+
+-   When I simulated returns from stochastic volatility models for the July 28 draft, I made a beginner mistake: I forgot to set the random number seed. Unfortunately, I don't know what seed the system used and I have not been able to reproduce those results exactly. This version sets the seed to 44 and produces results that are very close to those in the July 28 draft, but not identical. We'll set the seed for the final report, so results will be reproducible.
+
+-   I have not made any other substantive changes that would change numbers. 
+
+-   I have added a section that summarizes and compares investment returns for different scenarios.
+
+-   I have cleaned up some text and added more comments to code.
+
+
+## Changes to make as we move from draft to final report
+
+-   In the July 28 version, all portfolio log returns were constructed by weighting the log returns for the individual assets. (For example, the log return for a 70-30 equity-fixed portfolio was calculated as 70% of the equity log return plus 30% of the fixed income log return.) This is not the way we should do it, but it is an approximation that is often used. The exact way to do it is to calculate the log return for the portfolio as the log of the weighted arithmetic returns for the individual assets. I will make this change in the final report, and have a branch in the repo that does this. This results in higher portfolio log returns than simply weighting the log returns of individual assets and also should generally result in higher volatility. The substantive conclusions about the impact of different model structures and parameterizations do not change, but portfolio results and returns will be higher than in the July 28 draft.
+
+-   We'll create 10,000 simulations for each ACLI scenario rather than the 1,000 simulations we have now. This should give us more robust results for estimates that are based on the tails of the distributions (e.g., VaR measures).
+
+-   Clean up the text of this web page so that it is useful as an adjunct to the report. Generally remove references to AIRG and ACLI.
+
+-   Clean up the code so that it is easier to follow.
+
+-   Add diagrams similar to those in the technical notes submitted with the draft.
+
+-   Create a repo that is a full reproducibility package so that anyone can reproduce results of the project.
+
+-   Possibly add scenarios that vary ACLI interest rate parameters.
+
+-   Respond to comments from the POG meeting, as appropriate.
+
+
+## How to create this webpage
 
 To create this webpage you will need to be able to access the ACLI output files from running the ACLI spreadsheet model. There are in a [Google drive folder I have shared with you called "acli"](https://drive.google.com/drive/folders/17BN0wx2DUSyHKpqjAMdl0NqpSjyZqEAc?usp=drive_link). It is about 2.75 gb so you will want to download it to your computer.
 

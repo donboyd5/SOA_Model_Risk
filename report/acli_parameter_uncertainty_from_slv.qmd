@@ -348,27 +348,4 @@ scenarios_ordered |>
 
 ```
 
-## Next steps
 
-My plan is to replace the arbitrary scenarios I ran for our last POG meeting with the following "principled" scenarios based on the lower and upper bounds estimated above:
-
--   4 lower bound scenarios, one for each parameter (tau, phi, sigma_v, rho): set the parameter to its lower bound for all asset classes
-
--   4 upper bound scenarios, one for each parameter (tau, phi, sigma_v, rho): set the parameter to its upper bound for all asset classes
-
--   That gives a total of 8 scenarios. However, you may recall that the AIRG-ACLI model is flawed in that it does not implement rho properly and never has any variation in results. Thus, as a practical matter, this gives only 6 scenarios - a lot fewer than we showed the POG, which is good.
-
-I will then update our recent work by:
-
--   Running the scenarios through the ACLI model (by manually varying the parameters in the spreadsheet, doing 6 separate runs with the spreadsheet)
--   Getting the results (in R) and constructing 2 portfolios from the asset-class results -- high equity, and high fixed.
--   Running the weighted returns from those 2 portfolios for the 6 scenarios through our pension model, and
--   Applying our 4 risk measures
--   Producing your Tables 1 and 2
-
-I should be able to get this done on Monday.
-
-These leaves two issues (I think):
-
--   It does not deal with interest rate parameters. I have ideas but don't know if we have time.
--   It does not deal with rho in the equity models, which could be important, but I don't konw. I have ideas but don't know if we have time.

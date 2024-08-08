@@ -23,7 +23,7 @@ editor_options:
 -   Modeling: Create a result tibble that has the data and the results of running a simple pension model, called penmod, on each row of the tibble, creating a new list-column called penmod. The list-column  penmod has a nested tibble with pension results (e.g., assets, liability, payroll, funded ratio, etc.) for each sim and year within the given scenario. Thus, our result tibble has one row per scenario, with the same columns as before (scenario, nsims, nyears, a list-column called ir_matrix with a matrix of investment returns, and a list-column called penmod with a tibble of results.
 
 
-The following code does this, using Gang's simple pension model, for some made-up data. Soon we'll replace the made-up data with results of ESG models and probability distributions.
+The following code runs all portfolios through the pension model Gang developed.
 
 
 ## Setup
@@ -40,16 +40,11 @@ source(here::here("report", "function_penmod.R"))
 ```
 
 
-## All portfolios and corresponding random normal
+## Run all model portfolios and comparison returns through pension model, and save results
 
 ```{r}
 
-# acliport <- readRDS(here::here("data", "acli_portfolios.rds"))
-
-# portfolios <- readRDS(here::here("data", "acli_and_comparison_portfolios.rds"))
-
 portfolios <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
-
 
 ```
 
@@ -63,7 +58,7 @@ result <- portfolios  |>
            purrr::map(seq_along(lrmat),
                       ~penmod(
                         ir = lrmat[[.x]])))
-result
+# result
 
 saveRDS(result, here::here("data", "allscen_and_comparison_penmod.rds"))
 
