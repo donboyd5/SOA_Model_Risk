@@ -97,8 +97,8 @@ acli_means
 # enhance with a constant matrix and a random normal matrix
 # modorder <- c("acli, constant", "rnormal")
 
-mean_annual_logreturn_highequity <- .0625 # same as highequity acli portfolio
-mean_annual_logreturn_highfixed <- 0.0499 # same as highfixed acli portfolio
+mean_annual_logreturn_highequity <- .0615 # same as highequity acli portfolio updated for 70/30 portfolio, from 0.625 at ~72/28
+mean_annual_logreturn_highfixed <- 0.0418 # same as highfixed acli portfolio updated for 30/70 portfolio, from 0.0499 at ~ 46/54
 
 c(mean_annual_logreturn_highequity, acli_means$lr[acli_means$porttype=="highequity"]) |> round(4)
 c(mean_annual_logreturn_highfixed, acli_means$lr[acli_means$porttype=="highfixed"]) |> round(4)

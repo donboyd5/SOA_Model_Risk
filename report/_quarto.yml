@@ -9,7 +9,7 @@ execute:
   eval: true
   echo: true
   output: true
-  freeze: false  # auto: during global project renders, re-render only when source changes; false
+  freeze: auto  # auto: during global project renders, re-render only when source changes; false
 
 editor_options:
   chunk_output_type: console

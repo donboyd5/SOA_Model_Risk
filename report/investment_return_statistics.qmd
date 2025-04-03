@@ -205,6 +205,7 @@ totmeasures
 ```{r}
 #| label: get-time-series-stats
 #| output: false
+#| eval: true
 
 # acf_result <- stats::acf(log_returns, lag.max = 1)
 # str(acf_result)
@@ -260,7 +261,7 @@ archmeasures <- unnested |>
 ```{r}
 #| label: table1-prep
 #| output: false
-
+#| eval: true
 
 
 # add labels

@@ -32,13 +32,19 @@ The portfolios Gang constructed can be found [here](https://docs.google.com/spre
 
 ## Create weights for the highfixed and highequity portfolios
 
-Get the weights and ensure they sum to 1.
+The weights from Gang's analysis of actual funds give us, approximately, a high-fixed portfolio with 46% equity and a high-equity portfolio with 70% equity.
+
+The POG commented on this in comments on the July 2024 draft (discussed in the Sept 2024 POG meeting) and recommended, quite appropriately, that we construct portfolios based on the ACLI runs that are 30% and 70% equity respectively, to be consistent with what we did for the SLV models.
+
+Thus, we have revised the calculations to scale the weights to achieve this.
+
+### Get the weights from Gang and ensure they sum to 1.
 
 ```{r}
-#| label: weights
+#| label: weights-initial
 #| output: false
 
-weights1 <- read_delim(
+weights_gang <- read_delim(
 "fnbase;label;highfixed;highequity
 aggr;Emerging Markets, NASDAQ, Hang Seng;15.0;30.1
 balanced;60% Diversified Equity + 40% Fixed Income;22.9;21.3
@@ -51,28 +57,112 @@ small;US Small Cap;5.9;9.7
 us;US Big Cap;5.9;9.7
 ", delim=";")
 
-weights1 |> 
+weights_gang |> 
   summarise(across(c(highfixed, highequity), sum))
 
-weights <- weights1 |>
-  pivot_longer(-c(fnbase, label), names_to = "porttype", values_to = "weight") |> 
-  mutate(weight=weight / sum(weight), .by=porttype)
+weights1 <- weights_gang |>
+  mutate(equity_portion = case_when(
+    fnbase %in% c("aggr", "int", "small", "us") ~ 1,
+    fnbase == "balanced" ~ .60,
+    .default = 0)) |> 
+  pivot_longer(c(highfixed, highequity), names_to = "porttype", values_to = "weight") |> 
+  mutate(weight = weight / sum(weight), .by=porttype)
 
 # ensure that weights sum to 1 for each portfolio
-weights |> 
-  summarise(weight=sum(weight), .by=porttype)
-
-# get equity share of each portfolio
-weights |> 
-  mutate(equity=case_when(
-    fnbase %in% c("aggr", "int", "small", "us") ~ weight,
-    fnbase == "balanced" ~ weight * .60,
-    .default = 0)) |> 
-  summarise(equity=sum(equity), .by=porttype)
-
+weights1 |> summarise(weight=sum(weight), .by=porttype)
 
 
 ```
+
+
+### Construct revised weights that give us 30/70 and 70/30 high-fixed and high-equity portfolios
+
+Adjust the weights to achieve these shares.
+
+```{r}
+#| label: optim-function
+#| output: false
+
+# optimization:
+#   choose ratio of new weights to old weights such that
+#     equity % targets are hit
+#     sum of weights = 1
+#     ratio of new weights to old weights moves as little as possible
+
+library(nloptr)
+
+# tmp <- weights1 |> 
+#   filter(porttype == "highfixed") |> 
+#   rename(weight_gang = weight)
+# w <- tmp$weight_gang; ep = tmp$equity_portion; target = .3
+
+get_weights <- function(w, ep, target){
+  
+  n <- length(w)
+  ratio0 <- rep(1, n)
+  
+  obj <- function(ratio, ep, target, w){
+    sum((ratio - 1)^2)
+    }
+
+  constraints <- function(ratio, ep, target, w) {
+    w2 <- w * ratio
+    c(sum(w2) - 1,  # new weights sum to 1
+      sum(w2 * ep) - target) # equity is equal to target
+  }
+
+  res <- nloptr::nloptr(
+    x0 = ratio0,
+    eval_f = obj,
+    lb = rep(0, n),
+    ub = rep(2, n),
+    eval_g_eq = constraints,
+    opts = list(
+      "algorithm" = "NLOPT_LN_COBYLA",
+      "xtol_rel" = 1.0e-8,
+      "maxeval" = 1000,
+      "print_level" = 1),
+    ep = ep,
+    target = target,
+    w = w)
+  
+  ratio <- res$solution
+  w2 <- w * ratio
+  return(w2)
+}
+
+```
+
+
+
+```{r}
+#| label: adjust-weights-to-get-70-30-portfolios
+#| output: false
+
+weights2 <- weights1 |> 
+  rename(weight_gang = weight) |> 
+  mutate(weight = get_weights(w = weight_gang, 
+                    ep = equity_portion,
+                    target = case_when(
+                      porttype[1] == "highfixed" ~ 0.3,
+                      porttype[1] == "highequity" ~ 0.7,
+                      .default = 0)),
+         .by = porttype)
+
+# check that new weights do what they should
+weights2 |> 
+  summarise(
+    weightsum = sum(weight),
+    equity = sum(weight * equity_portion),
+    ssd = sum((weight / weight_gang - 1)^2),
+    .by=porttype)
+
+weights <- weights2 |> 
+  select(fnbase, label, porttype, weight)
+
+```
+
+
 
 ## Construct portfolios
 
