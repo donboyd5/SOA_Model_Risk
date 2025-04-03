@@ -250,7 +250,7 @@ NOTE: maybe add pure asset measure w/o contribs or payouts
 #| output: false
 
 mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod", "acli")
-mod_labs <- c("Deterministic", "Random\nnormal", "Gaussian SV", "Skewed SV", "Leverage SV", "Complex ESG")
+mod_labs <- c("Deterministic", "Random\nnormal", "Gaussian SV", "Skewed SV", "Leverage SV", "Detailed ESG")
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
@@ -317,7 +317,7 @@ tab <- structure_flipped |>
   fmt_percent(columns = c(mean, sd),
               decimals = 1) |> 
   tab_footnote(
-    footnote = "Complex model differs from other models in multiple ways",
+    footnote = "Detailed model differs from other models in multiple ways",
     locations = cells_body(
       columns = c(typef),
       rows = type == "acli"))
@@ -400,7 +400,7 @@ tab <- structure_flipped |>
   fmt_percent(columns = c(mean, sd),
               decimals = 1) |> 
   tab_footnote(
-    footnote = "Complex model differs from other models in multiple ways",
+    footnote = "Detailed model differs from other models in multiple ways",
     locations = cells_body(
       columns = c(typef),
       rows = type == "acli"))
@@ -469,7 +469,7 @@ figure_Vloss_model <- structure_flipped |>
   labs(x=NULL) +
   theme_bw() +
   ggtitle("Asset % change year 10 vs. year 1, 5th percentile",
-          subtitle = "Alternative models, mean log return ~6.25%") +
+          subtitle = "Alternative models, mean log return ~6.15%") +
   facet_wrap(~porttype, ncol = 1, scales = "fixed") +
   scale_fill_identity() +
   scale_color_identity()
