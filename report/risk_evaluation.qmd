@@ -501,7 +501,7 @@ figure_VERC_model <- structure_flipped |>
   labs(x=NULL) +
   theme_bw() +
   ggtitle("Contribution % change year 10 vs. year 1, 95th percentile",
-          subtitle = "Alternative models, mean log return ~6.25%") +
+          subtitle = "Alternative models, mean log return ~6.15%") +
   facet_wrap(~porttype, ncol = 1, scales = "fixed") +
   scale_fill_identity() +
   scale_color_identity()
