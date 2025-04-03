@@ -60,6 +60,16 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 
 ## Get, save, and show main ACLI parameters
 
+
+```{r}
+#| label: define-folder
+
+# ddir_nsims <- fs::path(ddir, "1k_sims") # previous
+ddir_nsims <- fs::path(ddir, "10k_sims")
+
+```
+
+
 ```{r}
 #| label: get-save-params
 
@@ -67,7 +77,7 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 # base_dir <- "s_baseline"
 # base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
 
-fpath <- fs::path(ddir, base_dir, base_fn)
+fpath <- fs::path(ddir_nsims, base_dir, base_fn)
 
 ## equity parameters ----
 

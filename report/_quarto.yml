@@ -1,6 +1,6 @@
 project:
   type: book
-  output-dir: _report2024
+  output-dir: _report2025
   
 # CAUTION: all .R and other files are in the report folder, not the upper
 # level folder R
@@ -35,8 +35,9 @@ book:
     - part: "Alternative model parameterizations using ACLI/AIRG model"
       chapters:
       - acli_parameter_uncertainty_from_slv.qmd    
-      - get_acli_scenarios.qmd
+      - get_acli_scenarios_10k.qmd
       - create_acli_portfolios_and_save.qmd
+      - add_comparison_returns.qmd # djb 3/19/2025 I think this should be run BEFORE investment return statistics
 
     - part: "Investment return statistics"
       chapters:
@@ -44,7 +45,6 @@ book:
       
     - part: "Run pension model on alternative ESG models and parameterizations"
       chapters:
-      - add_comparison_returns.qmd
       - penmod.qmd
       
     - part: "Risk evaluation of results from pension model"
