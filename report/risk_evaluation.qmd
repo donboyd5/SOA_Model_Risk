@@ -575,7 +575,7 @@ tab <- parm_flipped |>
   gt() |> 
   cols_hide(c(type)) |> 
   tab_header(
-    title = html("Selected Risk Measures for Alternative Parameterizations of the Complex ESG, High Equity Portfolio"),
+    title = html("Selected Risk Measures for Alternative Parameter Assumptions for the Detailed ESG, High Equity Portfolio"),
     # subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
   cols_label(rn="Row number",
