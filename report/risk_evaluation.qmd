@@ -772,7 +772,7 @@ p <- range_data |>
   ylab(NULL) +
   theme_bw() +
   facet_wrap(~ porttype, scales = "fixed",  ncol = 1) +
-  ggtitle("VaR of Employer Contribution Increase Under Alternative ESG Model Parameterizations",
+  ggtitle("VaR of Employer Contribution Increase Under Alternative ESG Model Parameter Assumptions",
           subtitle = "Based on upper-bound and lower-bound values of important model parameters")
 p
 ggsave(filename=here::here("report", "results", "FigureVaRERC.png"), plot=p, width=10, height=6, scale=1.5)
