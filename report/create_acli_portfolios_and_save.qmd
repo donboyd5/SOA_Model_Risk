@@ -258,7 +258,7 @@ p <- df |>
   scale_y_continuous(name="standard deviation", 
                      breaks = seq(0, 1, .01),
                      labels = scales::percent_format(accuracy = .1)) +
-  ggtitle(label = "Mean and standard deviation of returns for the complex ESG",
+  ggtitle(label = "Mean and standard deviation of returns for the detailed ESG",
           subtitle = "Under alternative scenarios and portfolios") +
   guides(col= guide_legend(title= "Portfolio\ntype")) +
   theme_bw()
