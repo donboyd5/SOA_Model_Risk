@@ -609,7 +609,7 @@ tab <- parm_flipped |>
   gt() |> 
   cols_hide(c(type)) |> 
   tab_header(
-    title = html("Selected Risk Measures for Alternative Parameterizations of the Complex ESG, High Fixed-Income Portfolio"),
+    title = html("Selected Risk Measures for Alternative Parameter Assumptions for the Detailed ESG, High Fixed-Income Portfolio"),
     # subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
   cols_label(rn="Row number",
@@ -750,7 +750,7 @@ p <- range_data |>
   ylab(NULL) +
   theme_bw() +
   facet_wrap(~ porttype, scales = "fixed",  ncol = 1) +
-  ggtitle("VaR of Asset Loss Under Alternative ESG Model Parameterizations",
+  ggtitle("VaR of Asset Loss Under Alternative ESG Model Parameter Assumptions",
           subtitle = "Based on upper-bound and lower-bound values of important model parameters")
 p
 ggsave(filename=here::here("report", "results", "FigureVaRLoss.png"), plot=p, width=10, height=6, scale=1.5)
