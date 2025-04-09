@@ -315,13 +315,15 @@ tab <- structure_flipped |>
   fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 1) |> 
   fmt_percent(columns = c(mean, sd),
-              decimals = 1) |> 
-  tab_footnote(
-    footnote = "Detailed model differs from other models in multiple ways",
-    locations = cells_body(
-      columns = c(typef),
-      rows = type == "acli"))
+              decimals = 1) # |> 
+  # tab_footnote(
+  #   footnote = "Detailed model differs from other models in multiple ways",
+  #   locations = cells_body(
+  #     columns = c(typef),
+  #     rows = type == "acli"))
 tab
+
+gtsave(tab, "risk_measures_highequity_table.png", path = here::here("report", "results"))
 
 write_tab("risk_measures_highequity")  
 
@@ -398,14 +400,16 @@ tab <- structure_flipped |>
   fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
              decimals = 1) |> 
   fmt_percent(columns = c(mean, sd),
-              decimals = 1) |> 
-  tab_footnote(
-    footnote = "Detailed model differs from other models in multiple ways",
-    locations = cells_body(
-      columns = c(typef),
-      rows = type == "acli"))
+              decimals = 1) # |> 
+  # tab_footnote(
+  #   footnote = "Detailed model differs from other models in multiple ways",
+  #   locations = cells_body(
+  #     columns = c(typef),
+  #     rows = type == "acli"))
 
 tab
+
+gtsave(tab, "risk_measures_highfixed_table.png", path = here::here("report", "results"))
 
 write_tab("risk_measures_highfixed")  
 
@@ -591,6 +595,14 @@ tab <- parm_flipped |>
               decimals = 1)
 tab
 
+vwidth <- 1340 # 992
+vheight <- 744 # 744
+zoom <- 1
+gtsave(tab, "parm_risk_measures_highequity_table.png", path = here::here("report", "results"),
+       vwidth = vwidth,
+       vheight = vheight,
+       zoom = zoom)
+
 write_tab("parm_risk_measures_highequity")  
 ```
 
@@ -625,7 +637,15 @@ tab <- parm_flipped |>
               decimals = 1)
 tab
 
+# gtsave(tab, "parm_risk_measures_highfixed_table.png", path = here::here("report", "results"))
+
+gtsave(tab, "parm_risk_measures_highfixed_table.png", path = here::here("report", "results"),
+       vwidth = vwidth,
+       vheight = vheight,
+       zoom = zoom)
+
 write_tab("parm_risk_measures_highfixed")  
+
 ```
 
 
