@@ -301,7 +301,7 @@ p <- df |>
 p
 
 ggsave(
-  fs::path(GROOT, rptdir, "results", "esg_meansd.png"),
+  fs::path(GROOT, "report", "results", "esg_meansd.png"),
   scale = 1.1,
   width = 9,
   height = 9
