@@ -15,7 +15,7 @@ editor_options:
 source(here::here("report", "_common.R"))
 source(here::here("report", "libraries_ts.R"))
 source(here::here("report", "function_penmod.R")) # for flatmat
-source(here::here("report", "function_runslv.R")) 
+source(here::here("report", "function_runslv.R"))
 
 library(quantmod)
 library(stats4)
@@ -24,7 +24,7 @@ library(stochvol)
 
 # options(pillar.sigfig = 3) # default
 options(pillar.print_max = 20)
-tprint <- 25  # default tibble print
+tprint <- 25 # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
 
 ```
@@ -40,21 +40,27 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 combo2 <- readRDS(here::here("data", "slv_assets_rawdaily.rds"))
 
 # establish portfolio weights ----
-highequity_weights <- c(equity=.7, fixed=.3)
-highfixed_weights <- c(equity=.3, fixed=.7) 
+highequity_weights <- c(equity = .7, fixed = .3)
+highfixed_weights <- c(equity = .3, fixed = .7)
 
 # calculate daily log returns and cumulative assets for high-equity and high-fixed portfolios ----
-aggrport2 <- combo2 |> 
-  fortify() |> 
-  tibble() |> 
-  setNames(c("date", "equity", "fixed")) |> 
-  arrange(date) |> 
-  mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |> 
+aggrport2 <- combo2 |>
+  fortify() |>
+  tibble() |>
+  setNames(c("date", "equity", "fixed")) |>
+  arrange(date) |>
+  mutate(across(c(equity, fixed), \(x) log(x / lag(x)))) |>
   filter(date > min(date)) |> # drop first observation
-  mutate(equity_portret= equity * highequity_weights["equity"] + fixed * highequity_weights["fixed"],
-         equity_portassets=exp(cumsum(equity_portret)),
-         fixed_portret= equity * highfixed_weights["equity"] + fixed * highfixed_weights["fixed"],
-         fixed_portassets=exp(cumsum(fixed_portret))) # note that this is end of period assets
+  mutate(
+    equity_portret = equity *
+      highequity_weights["equity"] +
+      fixed * highequity_weights["fixed"],
+    equity_portassets = exp(cumsum(equity_portret)),
+    fixed_portret = equity *
+      highfixed_weights["equity"] +
+      fixed * highfixed_weights["fixed"],
+    fixed_portassets = exp(cumsum(fixed_portret))
+  ) # note that this is end of period assets
 ht(aggrport2)
 
 saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
@@ -74,22 +80,32 @@ saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 # get previously saved assets and construct log returns ----
 port_monthly1 <- readRDS(here::here("data", "simportfolios_rawdaily.rds"))
 
-port_monthly <- port_monthly1 |> 
-  mutate(ldom=ldom(date)) |> 
-  group_by(ldom) |> 
-  filter(date==max(date)) |> 
-  select(date=ldom, eqprice=equity_portassets, fixedprice=fixed_portassets) |> 
-  ungroup() |>  
-  mutate(vname="simport", 
-         src="portfolio",
-         highequity=log(eqprice / lag(eqprice)),
-         highfixed=log(fixedprice / lag(fixedprice)))
+port_monthly <- port_monthly1 |>
+  mutate(ldom = ldom(date)) |>
+  group_by(ldom) |>
+  filter(date == max(date)) |>
+  select(
+    date = ldom,
+    eqprice = equity_portassets,
+    fixedprice = fixed_portassets
+  ) |>
+  ungroup() |>
+  mutate(
+    vname = "simport",
+    src = "portfolio",
+    highequity = log(eqprice / lag(eqprice)),
+    highfixed = log(fixedprice / lag(fixedprice))
+  )
 
 port_monthly
 
-data <- port_monthly |> 
-  select(date, highequity, highfixed) |> 
-  pivot_longer(cols=c(highequity, highfixed), names_to = "vname", values_to = "lr") |> 
+data <- port_monthly |>
+  select(date, highequity, highfixed) |>
+  pivot_longer(
+    cols = c(highequity, highfixed),
+    names_to = "vname",
+    values_to = "lr"
+  ) |>
   arrange(vname, date)
 data
 summary(data)
@@ -123,17 +139,22 @@ See [stochvolTMB: Likelihood estimation of stochastic volatility](https://cran.r
 startdate <- "2003-10-31"
 enddate <- "2024-06-30"
 
-res2 <- data |> 
-  nest(.by=vname) |> 
+res2 <- data |>
+  nest(.by = vname) |>
   mutate(
-    gaussmod=purrr::map(data,
-                         \(data) runslv(data, start=startdate, end=enddate, modtype="gaussian")),
-    tmod=purrr::map(data, 
-                         \(data) runslv(data, start=startdate, end=enddate, modtype="t")),
-    levmod=purrr::map(data,
-                         \(data) runslv(data, start=startdate, end=enddate, modtype="leverage")),
-    skewmod=purrr::map(data,
-                         \(data) runslv(data, start=startdate, end=enddate, modtype="skew_gaussian")))
+    gaussmod = purrr::map(data, \(data) {
+      runslv(data, start = startdate, end = enddate, modtype = "gaussian")
+    }),
+    tmod = purrr::map(data, \(data) {
+      runslv(data, start = startdate, end = enddate, modtype = "t")
+    }),
+    levmod = purrr::map(data, \(data) {
+      runslv(data, start = startdate, end = enddate, modtype = "leverage")
+    }),
+    skewmod = purrr::map(data, \(data) {
+      runslv(data, start = startdate, end = enddate, modtype = "skew_gaussian")
+    })
+  )
 res2
 
 # CAUTION: high equity t model generating nans for df std_error, z_value, p_value transformed
@@ -141,31 +162,44 @@ res2
 # stochvol_gauss <- svsample(spy$log_return, quiet = T)
 
 # get the model parameters ----
-params2 <- res2 |> 
-  pivot_longer(cols=contains("mod"), names_to = "modtype", values_to = "mod") |> 
-  mutate(summ_trans=map(mod, \(x) summary(x, report="transformed") |> list()),
-         summ_fix=map(mod, \(x) summary(x, report="fixed") |> list()),
-         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
-         aic=map(mod, \(x) AIC(x)) |> unlist(),
-         params=map(summ_trans, \(x) pluck(x, 1)))
+params2 <- res2 |>
+  pivot_longer(
+    cols = contains("mod"),
+    names_to = "modtype",
+    values_to = "mod"
+  ) |>
+  mutate(
+    summ_trans = map(mod, \(x) summary(x, report = "transformed") |> list()),
+    summ_fix = map(mod, \(x) summary(x, report = "fixed") |> list()),
+    nobs = map(mod, \(x) pluck(x, "nobs")) |> unlist(),
+    aic = map(mod, \(x) AIC(x)) |> unlist(),
+    params = map(summ_trans, \(x) pluck(x, 1))
+  )
 
 # params2
 params2 |> arrange(vname, aic)
-params2 |> unnest(params) |> arrange(vname, modtype, parameter) |> mutate(bad=is.na(std_error))
+params2 |>
+  unnest(params) |>
+  arrange(vname, modtype, parameter) |>
+  mutate(bad = is.na(std_error))
 # params2 |> unnest(params) |> arrange(vname, parameter, modtype)
 
-
-summaries <- bind_rows(params2 |> 
-                         select(vname, modtype, summary=summ_trans) |> 
-                         unnest(summary) |> 
-                         unnest(summary),
-                       params2 |> 
-                         select(vname, modtype, summary=summ_fix) |> 
-                         unnest(summary) |> 
-                         unnest(summary))
+summaries <- bind_rows(
+  params2 |>
+    select(vname, modtype, summary = summ_trans) |>
+    unnest(summary) |>
+    unnest(summary),
+  params2 |>
+    select(vname, modtype, summary = summ_fix) |>
+    unnest(summary) |>
+    unnest(summary)
+)
 
 # note the different names for parameters depending on whether transformed or fixed
-saveRDS(list(res2=res2, params2=params2), here::here("data", "slv_model_results.rds"))
+saveRDS(
+  list(res2 = res2, params2 = params2),
+  here::here("data", "slv_model_results.rds")
+)
 
 ```
 
@@ -179,18 +213,15 @@ saveRDS(list(res2=res2, params2=params2), here::here("data", "slv_model_results.
 ```{r}
 #| label: appendix-summary-table
 
-
 morder <- c("gaussmod", "skewmod", "levmod")
 
-params2 |> 
-  filter(modtype !="tmod") |> 
-  select(portfolio=vname, modtype, aic) |> 
-  mutate(modtype=factor(modtype, levels=morder)) |> 
-  arrange(portfolio, modtype) |> 
-  gt() |>  
-  fmt_number(columns=c(aic),
-             scale=1,
-             decimals=1)
+params2 |>
+  filter(modtype != "tmod") |>
+  select(portfolio = vname, modtype, aic) |>
+  mutate(modtype = factor(modtype, levels = morder)) |>
+  arrange(portfolio, modtype) |>
+  gt() |>
+  fmt_number(columns = c(aic), scale = 1, decimals = 1)
 
 
 ```
@@ -203,34 +234,45 @@ params2 |>
 #| label: appendix-parameter-tables
 
 # create parameter tables for the appendix
-tabdata <- summaries |> 
-  select(portfolio=vname, modtype, paramtype=type, parameter, estimate, std_error, z_value, p_value) |> 
-  mutate(modtype=factor(modtype, levels=morder)) |> 
-  arrange(portfolio, modtype, desc(paramtype), parameter) |> 
-  filter(paramtype=="transformed" | parameter=="alpha")
+tabdata <- summaries |>
+  select(
+    portfolio = vname,
+    modtype,
+    paramtype = type,
+    parameter,
+    estimate,
+    std_error,
+    z_value,
+    p_value
+  ) |>
+  mutate(modtype = factor(modtype, levels = morder)) |>
+  arrange(portfolio, modtype, desc(paramtype), parameter) |>
+  filter(paramtype == "transformed" | parameter == "alpha")
 
 
-f <- function(port){
-  color_palette <- c("gaussmod" = "#E6F3FF", "levmod" = "#E6FFE6", "skewmod" = "#FFFFE6")
-  ptype <- case_when(port=="highequity" ~ "high equity",
-                     port=="highfixed" ~ "high fixed-income",
-                     .default = "ERROR")
-  tabdata |> 
-    filter(portfolio==port, modtype != "tmod") |> 
-    gt() |>  
+f <- function(port) {
+  color_palette <- c(
+    "gaussmod" = "#E6F3FF",
+    "levmod" = "#E6FFE6",
+    "skewmod" = "#FFFFE6"
+  )
+  ptype <- case_when(
+    port == "highequity" ~ "high equity",
+    port == "highfixed" ~ "high fixed-income",
+    .default = "ERROR"
+  )
+  tabdata |>
+    filter(portfolio == port, modtype != "tmod") |>
+    gt() |>
     tab_header(
       title = html(paste0("Parameters for the ", ptype, " portfolio")),
-      subtitle = html("paramtype 'fixed' is as estimated, 'transformed' can be easier to interpret")
-    ) |>  
-    fmt_number(columns=c(estimate, std_error),
-               scale=1,
-               decimals=3) |> 
-      fmt_number(columns=c(z_value),
-               scale=1,
-               decimals=2) |> 
-      fmt_number(columns=c(p_value),
-               scale=1,
-               decimals=5) |> 
+      subtitle = html(
+        "paramtype 'fixed' is as estimated, 'transformed' can be easier to interpret"
+      )
+    ) |>
+    fmt_number(columns = c(estimate, std_error), scale = 1, decimals = 3) |>
+    fmt_number(columns = c(z_value), scale = 1, decimals = 2) |>
+    fmt_number(columns = c(p_value), scale = 1, decimals = 5) |>
     tab_style(
       style = list(
         cell_fill(color = color_palette["gaussmod"])
@@ -239,7 +281,7 @@ f <- function(port){
         columns = everything(),
         rows = modtype == "gaussmod"
       )
-    ) |> 
+    ) |>
     tab_style(
       style = list(
         cell_fill(color = color_palette["levmod"])
@@ -248,7 +290,7 @@ f <- function(port){
         columns = everything(),
         rows = modtype == "levmod"
       )
-    ) |> 
+    ) |>
     tab_style(
       style = list(
         cell_fill(color = color_palette["skewmod"])
@@ -260,9 +302,9 @@ f <- function(port){
     )
 }
 
-  
+
 f("highequity")
-f("highfixed")  
+f("highfixed")
 
 ```
 
@@ -283,13 +325,12 @@ In the context of investment returns, α provides insights into the likelihood o
 
 # predict and convert to annual, for input to pension model
 
-
 # m1 <- res2 |> filter(vname=="highfixed") |> pull(gaussmod)
 # m2 <- res2 |> filter(vname=="highfixed") |> pull(tmod)
 # m3 <- res2 |> filter(vname=="highfixed") |> pull(levmod)
 # m4 <- res2 |> filter(vname=="highfixed") |> pull(skewmod)
-# 
-# 
+#
+#
 # pred2 <- predict(m1[[1]], steps = 360, nsim = 10000, include_parameters = TRUE)
 # class(pred2)
 # names(pred2)
@@ -300,24 +341,26 @@ modlist <- readRDS(here::here("data", "slv_model_results.rds")) # 8 models
 res2 <- modlist$res2
 params2 <- modlist$params2
 
-nmonths <- 360; nsims <- 10000
+nmonths <- 360
+nsims <- 10000
 
 # nmonths <- 36; nsims <- 100
-
 
 # exclude tmod highfixed and view other tmod suspiciously
 # set.seed(constants$seed)
 set.seed(44) # trying to find a seed that approximately reproduces the July 29, 2024 results
-# best: 44 8 40 2 7 18 30 32 37; not 12, 123, 1234, 
+# best: 44 8 40 2 7 18 30 32 37; not 12, 123, 1234,
 sims <- params2 |>
   # filter(!(modtype=="tmod" & vname=="highfixed")) |> # when using data through Apr 2024 error 'Sigma' is not positive definite
   # tmod has not worked out and Sigma is not positive definite
-  filter(!(modtype=="tmod")) |> 
-  select(vname, modtype, mod) |> 
-  mutate(pred=purrr::map(mod,
-                         \(x) predict(x, steps=nmonths, nsim = nsims,
-                                      include_parameters = TRUE)),
-         y=purrr::map(pred, \(x) pluck(x, "y") |> t()))
+  filter(!(modtype == "tmod")) |>
+  select(vname, modtype, mod) |>
+  mutate(
+    pred = purrr::map(mod, \(x) {
+      predict(x, steps = nmonths, nsim = nsims, include_parameters = TRUE)
+    }),
+    y = purrr::map(pred, \(x) pluck(x, "y") |> t())
+  )
 sims
 
 saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
@@ -333,10 +376,10 @@ saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
 # function to create a matrix of sims x years from matrix of sims x months
 # Example matrix with 100 rows and 36 columns
 
-f <- function(mat, period=3){
+f <- function(mat, period = 3) {
   # collapse a matrix of arbitary number of columns to a new matrix with the same
   # number of rows but where each column is the sum of period columns
-  # for example, if the matrix has 360 columns and period=12 the result will be 
+  # for example, if the matrix has 360 columns and period=12 the result will be
   # a matrix with 30 columns, each of which is the sum of 12 columns
   # it uses R's fast built-in rowsum function combined with a group vector
   # because there is not a corresponding colsum function (which is what we really want)
@@ -344,7 +387,7 @@ f <- function(mat, period=3){
   # reuse mat to avoid unnecessary memory use
   mat <- t(mat)
   nnewrows <- nrow(mat) / period
-  group <- rep(1:nnewrows, each=period)
+  group <- rep(1:nnewrows, each = period)
   # group gives the new-column index that each old column will be summed into
   mat <- rowsum(mat, group)
   t(mat)
@@ -353,7 +396,7 @@ f <- function(mat, period=3){
 # (mat <- matrix(1:24, nrow=3, byrow = TRUE))
 # (newmat <- f(mat, period=4))
 # sum(mat); sum(newmat)
-# 
+#
 # mat <- matrix(runif(10e3 * 360), nrow = 10e3, ncol = 360)
 # newmat <- f(mat, period=12)
 # sum(mat); sum(newmat)
@@ -371,14 +414,16 @@ sims <- readRDS(here::here("data", "slvsims_sims_by_months.rds"))
 tail(sims)
 
 # pare it down and delete what we don't need - sims is very slow
-slv_sims <- sims |> 
-  select(vname, modtype, y) |> 
-  mutate(lrmat=map(y, \(x) f(x, period=12)))
+slv_sims <- sims |>
+  select(vname, modtype, y) |>
+  mutate(lrmat = map(y, \(x) f(x, period = 12)))
 slv_sims
 
-saveRDS(slv_sims |> 
-          select(vname, modtype, lrmat), 
-        here::here("data", "slvsims.rds"))
+saveRDS(
+  slv_sims |>
+    select(vname, modtype, lrmat),
+  here::here("data", "slvsims.rds")
+)
 
 ```
 
