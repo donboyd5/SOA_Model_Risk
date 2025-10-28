@@ -21,10 +21,9 @@ source(fs::path(rptdir, "function_penmod.R")) # for flatmat
 # Basic statistics
 # stats <- basicStats(returns_xts)
 # print(stats)
-# 
+#
 # # Skewness and kurtosis
 # skew_kurt <- rSkewnessKurtosis(returns_xts)
-
 
 ```
 
@@ -33,30 +32,44 @@ source(fs::path(rptdir, "function_penmod.R")) # for flatmat
 #| output: false
 
 slv_scen_names <- read_csv(
-"scenario,parm,parmdesc,scendesc
+  "scenario,parm,parmdesc,scendesc
 gaussmod, none, none, Stochastic volatility model with gaussian errors
 tmod, df, degrees of freedom, Stochastic volatility model with heavy tails
 skewmod, alpha, skewness parameter, Stochastic volatility model with skewed returns
-levmod, rho, correlation parameter, Stochastic volatility model, volatility correlated with returns (leverage)") |> 
-  mutate(framework="slv")
+levmod, rho, correlation parameter, Stochastic volatility model, volatility correlated with returns (leverage)"
+) |>
+  mutate(framework = "slv")
 slv_scen_names
 
 acli_scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
 
 scen_names <- bind_rows(
   slv_scen_names,
-  acli_scen_names |> 
-    mutate(scendesc=ifelse(scenario=="baseline",
-                           "Complex ESG baseline",
-                           scendesc))) |> 
+  acli_scen_names |>
+    mutate(
+      scendesc = ifelse(
+        scenario == "baseline",
+        "Complex ESG baseline",
+        scendesc
+      )
+    )
+) |>
   relocate(framework)
 
-scenorder <- c("gaussmod", "skewmod", "levmod",
-               "baseline",
-               "phi_lbound", "phi_ubound",
-               "tau_lbound", "tau_ubound",
-               "rho_lbound", "rho_ubound",
-               "sigma_v_lbound", "sigma_v_ubound")
+scenorder <- c(
+  "gaussmod",
+  "skewmod",
+  "levmod",
+  "baseline",
+  "phi_lbound",
+  "phi_ubound",
+  "tau_lbound",
+  "tau_ubound",
+  "rho_lbound",
+  "rho_ubound",
+  "sigma_v_lbound",
+  "sigma_v_ubound"
+)
 
 ```
 
@@ -65,47 +78,46 @@ scenorder <- c("gaussmod", "skewmod", "levmod",
 #| label: functions
 #| output: false
 
-getir <- function(ir){
+getir <- function(ir) {
   # ir: matrix of investment returns; rows are sims, columns are years
   nsims <- nrow(ir)
   nyears <- ncol(ir)
-  
+
   # create a tibble
-  df <- expand_grid(sim=1:nsims, year=1:nyears) |> 
-    mutate(ir=flatmat(ir))
+  df <- expand_grid(sim = 1:nsims, year = 1:nyears) |>
+    mutate(ir = flatmat(ir))
   df
 }
 
 
-fmeasures <- function(ir, nyears=30){
+fmeasures <- function(ir, nyears = 30) {
   # ir is a vector of returns for a given time period (or, if historical, all observations)
   n <- length(ir)
   npy <- n / nyears
 
   mean <- base::mean(ir)
   sd <- stats::sd(ir) # per stats::sd documentation, "Like var this uses denominator n - 1"
-  
+
   min <- base::min(ir)
   max <- base::max(ir)
   p05 <- stats::quantile(ir, 0.05)
   p95 <- stats::quantile(ir, 0.95)
-  
-  skew1 <- e1071::skewness(ir, type=1) # typical older textbook measure
+
+  skew1 <- e1071::skewness(ir, type = 1) # typical older textbook measure
   # skew2 <- e1071::skewness(ir, type=2) # SAS and SPSS measure, unbiased under normality; subtracts3
   # skew3 <- e1071::skewness(ir, type=3) # default; minitab and bmdp formula
   # all 3 skewness measures are unbiased under normality; they don't seem to be much different
-  
+
   # xkurt0 <- moments::kurtosis(ir) - 3 # the estimator of Pearson's measure of kurtosis, adjusted by me with -3
   # CAUTION: the e1071 measures already subtract 3, so don't do it again!
-  xkurt1 <- e1071::kurtosis(ir, type=1) # typical older textbook, subtracts 3, appears to be same as kurt0
+  xkurt1 <- e1071::kurtosis(ir, type = 1) # typical older textbook, subtracts 3, appears to be same as kurt0
   # xkurt2 <- e1071::kurtosis(ir, type=2) # SAS and SPSS measure, unbiased under normality; subtracts3
   # xkurt3 <- e1071::kurtosis(ir, type=3) # default; minitab and bmdp formula
-  
-  tibble(n, npy, mean, sd, min, max, p05, p95, skew=skew1, xkurt=xkurt1)
+
+  tibble(n, npy, mean, sd, min, max, p05, p95, skew = skew1, xkurt = xkurt1)
   # x <- rnorm(100)
   # uvmeasures(x)
 }
-
 
 
 ```
@@ -134,13 +146,12 @@ fmeasures <- function(ir, nyears=30){
 #| eval: false
 #| output: false
 
-
 # Skewness < 0: The distribution is negatively skewed (left-skewed).
 
 # Slight Negative Skew: Skewness between -0.5 and 0. The left tail is slightly longer or fatter, indicating a higher probability of extreme negative returns.
- 
+
 # Moderate Negative Skew: Skewness between -1.0 and -0.5. The left tail is more noticeably longer, indicating a significant probability of extreme negative returns.
- 
+
 # High Negative Skew: Skewness less than -1.0. The distribution has a long left tail, suggesting a substantial likelihood of extreme negative returns.
 
 ```
@@ -152,7 +163,10 @@ fmeasures <- function(ir, nyears=30){
 #| label: get-portfolios
 #| output: false
 
-portfolios <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
+portfolios <- readRDS(here::here(
+  "data",
+  "allscen_and_comparison_portfolios.rds"
+))
 
 # portfolios
 
@@ -168,20 +182,18 @@ portfolios <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"
 #| label: unnest-returns
 #| output: false
 
-nested <- portfolios |> 
-  filter(modtype=="model") |> 
-  # filter(row_number() <= 2) |> 
-  select(-mean, -sd) |> 
+nested <- portfolios |>
+  filter(modtype == "model") |>
+  # filter(row_number() <= 2) |>
+  select(-mean, -sd) |>
   # next statement "loops" (via map) through the rows and for each row it
   # calls getir using nsims, nyears, and the investment return matrix for the scenario in the row
-  mutate(irtibble = 
-           purrr::map(seq_along(lrmat),
-                      ~getir(ir = lrmat[[.x]]))) |> 
+  mutate(irtibble = purrr::map(seq_along(lrmat), ~ getir(ir = lrmat[[.x]]))) |>
   select(-lrmat)
 nested
 
 unnested <- nested |>
-  unnest(cols=irtibble)
+  unnest(cols = irtibble)
 
 unnested
 
@@ -192,10 +204,9 @@ unnested
 #| label: get-stats-for-total-distribution
 #| output: false
 
-totmeasures <- unnested |> 
-  filter(year > 0) |> 
-  summarise(fmeasures(ir), 
-            .by=c(framework, scenario, porttype, modtype))
+totmeasures <- unnested |>
+  filter(year > 0) |>
+  summarise(fmeasures(ir), .by = c(framework, scenario, porttype, modtype))
 
 totmeasures
 
@@ -212,45 +223,58 @@ totmeasures
 # acf_result$acf[2]  # the correlation
 
 facf <- function(ir) {
-  stats::acf(ir, lag.max = 1, demean=FALSE, type="correlation", plot=FALSE)$acf[2]
+  stats::acf(
+    ir,
+    lag.max = 1,
+    demean = FALSE,
+    type = "correlation",
+    plot = FALSE
+  )$acf[2]
 }
 
-acfmeasures <- unnested |> 
-  filter(year > 0) |> 
-  arrange(framework, scenario, porttype, modtype, sim, year) |> 
+acfmeasures <- unnested |>
+  filter(year > 0) |>
+  arrange(framework, scenario, porttype, modtype, sim, year) |>
   # first, summarise by sim
-  summarise(ircorr = facf(ir), 
-            .by=c(framework, scenario, porttype, modtype, sim)) |> 
+  summarise(
+    ircorr = facf(ir),
+    .by = c(framework, scenario, porttype, modtype, sim)
+  ) |>
   # now summarise by scenario
-  summarise(ircorr_p25 = quantile(ircorr, .25), 
-            ircorr_p50 = quantile(ircorr, .5),
-            ircorr_p75 = quantile(ircorr, .75),
-            .by=c(framework, scenario, porttype, modtype))
+  summarise(
+    ircorr_p25 = quantile(ircorr, .25),
+    ircorr_p50 = quantile(ircorr, .5),
+    ircorr_p75 = quantile(ircorr, .75),
+    .by = c(framework, scenario, porttype, modtype)
+  )
 
 # acfmeasures
 
 # arch measures
-farch <- function(ir, lags=3) {
+farch <- function(ir, lags = 3) {
   # Autoregressive Conditional Heteroskedasticity (ARCH) test
   #    examines whether the variance of the current error term is related to the past squared errors
   # ARCH Test p-value: A low p-value indicates significant time-varying volatility.
-  FinTS::ArchTest(ir, lags=lags, demean=FALSE)$p.value
+  FinTS::ArchTest(ir, lags = lags, demean = FALSE)$p.value
 }
 
-archmeasures <- unnested |> 
-  filter(year > 0) |> 
-  arrange(framework, scenario, porttype, modtype, sim, year) |> 
+archmeasures <- unnested |>
+  filter(year > 0) |>
+  arrange(framework, scenario, porttype, modtype, sim, year) |>
   # first, summarise by sim
-  summarise(irarchp = farch(ir, lags=1), 
-            .by=c(framework, scenario, porttype, modtype, sim)) |> 
+  summarise(
+    irarchp = farch(ir, lags = 1),
+    .by = c(framework, scenario, porttype, modtype, sim)
+  ) |>
   # now summarise by scenario
-  summarise(irarchp_p25 = quantile(irarchp, .25),
-            irarchp_p50 = quantile(irarchp, .5),
-            irarchp_p75 = quantile(irarchp, .75),
-            .by=c(framework, scenario, porttype, modtype))
+  summarise(
+    irarchp_p25 = quantile(irarchp, .25),
+    irarchp_p50 = quantile(irarchp, .5),
+    irarchp_p75 = quantile(irarchp, .75),
+    .by = c(framework, scenario, porttype, modtype)
+  )
 
 # archmeasures
-
 
 ```
 
@@ -263,58 +287,84 @@ archmeasures <- unnested |>
 #| output: false
 #| eval: true
 
-
 # add labels
-lmeasures <- totmeasures |> 
-  left_join(acfmeasures,
-            by = join_by(framework, scenario, porttype, modtype)) |> 
-  left_join(archmeasures,
-            by = join_by(framework, scenario, porttype, modtype)) |> 
-  left_join(scen_names |> 
-              select(framework, scenario, scendesc),
-            by = join_by(framework, scenario)) |>
-  filter(!str_starts(scenario, "rho_")) |> 
-  mutate(scenario=factor(scenario, levels=scenorder))
+lmeasures <- totmeasures |>
+  left_join(
+    acfmeasures,
+    by = join_by(framework, scenario, porttype, modtype)
+  ) |>
+  left_join(
+    archmeasures,
+    by = join_by(framework, scenario, porttype, modtype)
+  ) |>
+  left_join(
+    scen_names |>
+      select(framework, scenario, scendesc),
+    by = join_by(framework, scenario)
+  ) |>
+  filter(!str_starts(scenario, "rho_")) |>
+  mutate(scenario = factor(scenario, levels = scenorder))
 
 count(lmeasures, scenario)
 
 
-ftab <- function(porttype){
-  
-  if(porttype == "highequity") {
+ftab <- function(porttype) {
+  if (porttype == "highequity") {
     portlabel <- "High-equity portfolio"
-    } else if(porttype == "highfixed"){
-      portlabel <- "High fixed-income portfolio"
-    }
-  
-  lmeasures |> 
-    filter(porttype == !!porttype) |> 
-    arrange(scenario) |> 
-    select(scendesc, npy, mean, sd, p05, p95, skew, xkurt, ircorr_p50, irarchp_p50) |> 
-    gt() |> 
-    rows_add(.after=4, .n_empty = 1) |> 
-    rows_add(.after=3, .n_empty = 1) |> 
-    tab_header(title="Summary statistics for log investment returns, 30 years of data",
-               subtitle = portlabel) |>
-    tab_spanner(columns = c(mean, sd, p05, p95),
-                label="Log investment returns") |>
-    tab_spanner(columns = c(skew, xkurt),
-                label="Measures of distribution") |>
-    tab_spanner(columns = c(ircorr_p50, irarchp_p50),
-                label="Measures of relationships over time -- median across simulations") |>
-    cols_label(scendesc="Scenario", 
-               npy="# sims per year",
-               # porttype="Portfolio type",
-               skew=html("Skewness<br>(<0: extreme negative<br>returns more likely)"),
-               xkurt=html("Excess kurtosis<br>(>0: fatter tails)"),
-               ircorr_p50=html("Correlation with<br>return in previous year"),
-               irarchp_p50=html("ARCH test p-value<br>(near 0: significant<br>time-varying volatility)")
-               ) |>
-    fmt_number(columns=c(npy), decimals=0) |> 
-    fmt_number(columns=c(skew, xkurt, ircorr_p50, irarchp_p50), decimals=2) |> 
-    fmt_percent(columns=c(mean, sd, p05, p95), decimals=1) |>
+  } else if (porttype == "highfixed") {
+    portlabel <- "High fixed-income portfolio"
+  }
+
+  lmeasures |>
+    filter(porttype == !!porttype) |>
+    arrange(scenario) |>
+    select(
+      scendesc,
+      npy,
+      mean,
+      sd,
+      p05,
+      p95,
+      skew,
+      xkurt,
+      ircorr_p50,
+      irarchp_p50
+    ) |>
+    gt() |>
+    rows_add(.after = 4, .n_empty = 1) |>
+    rows_add(.after = 3, .n_empty = 1) |>
+    tab_header(
+      title = "Summary statistics for log investment returns, 30 years of data",
+      subtitle = portlabel
+    ) |>
+    tab_spanner(
+      columns = c(mean, sd, p05, p95),
+      label = "Log investment returns"
+    ) |>
+    tab_spanner(columns = c(skew, xkurt), label = "Measures of distribution") |>
+    tab_spanner(
+      columns = c(ircorr_p50, irarchp_p50),
+      label = "Measures of relationships over time -- median across simulations"
+    ) |>
+    cols_label(
+      scendesc = "Scenario",
+      npy = "# sims per year",
+      # porttype="Portfolio type",
+      skew = html("Skewness<br>(<0: extreme negative<br>returns more likely)"),
+      xkurt = html("Excess kurtosis<br>(>0: fatter tails)"),
+      ircorr_p50 = html("Correlation with<br>return in previous year"),
+      irarchp_p50 = html(
+        "ARCH test p-value<br>(near 0: significant<br>time-varying volatility)"
+      )
+    ) |>
+    fmt_number(columns = c(npy), decimals = 0) |>
+    fmt_number(
+      columns = c(skew, xkurt, ircorr_p50, irarchp_p50),
+      decimals = 2
+    ) |>
+    fmt_percent(columns = c(mean, sd, p05, p95), decimals = 1) |>
     sub_missing(columns = everything(), missing_text = "") |>
-    tab_options(table.font.size = 11) |> 
+    tab_options(table.font.size = 11) |>
     cols_width(-c(scendesc) ~ px(50))
 }
 
@@ -355,31 +405,36 @@ ftab("highfixed")
 #| label: asset-values
 #| output: false
 
- 
- # column: body-outset
+# column: body-outset
 
 unnested
 
 # initial_value * exp(cumsum(log_returns))
 
-assets <- unnested |> 
-  filter(year > 0) |> 
-  # filter(modtype=="model", framework=="slv", porttype=="highequity", sim==1) |> 
-  arrange(framework, scenario, porttype, modtype, sim, year) |> 
-  mutate(assets=exp(cumsum(ir)),
-         .by=c(framework, scenario, porttype, modtype, sim))
+assets <- unnested |>
+  filter(year > 0) |>
+  # filter(modtype=="model", framework=="slv", porttype=="highequity", sim==1) |>
+  arrange(framework, scenario, porttype, modtype, sim, year) |>
+  mutate(
+    assets = exp(cumsum(ir)),
+    .by = c(framework, scenario, porttype, modtype, sim)
+  )
 
-assetmeasures <- assets |> 
+assetmeasures <- assets |>
   filter(year == 10) |>
-  summarise(assets_p05 = quantile(assets, .05),
-            assets_p50 = quantile(assets, .5),
-            assets_p95 = quantile(assets, .95),
-            .by=c(framework, scenario, porttype, modtype)) |> 
-  left_join(scen_names |> 
-              select(framework, scenario, scendesc),
-            by = join_by(framework, scenario)) |>
-  filter(!str_starts(scenario, "rho_")) |> 
-  mutate(scenario=factor(scenario, levels=scenorder))
+  summarise(
+    assets_p05 = quantile(assets, .05),
+    assets_p50 = quantile(assets, .5),
+    assets_p95 = quantile(assets, .95),
+    .by = c(framework, scenario, porttype, modtype)
+  ) |>
+  left_join(
+    scen_names |>
+      select(framework, scenario, scendesc),
+    by = join_by(framework, scenario)
+  ) |>
+  filter(!str_starts(scenario, "rho_")) |>
+  mutate(scenario = factor(scenario, levels = scenorder))
 
 
 ```
@@ -389,31 +444,35 @@ assetmeasures <- assets |>
 #| label: asset-values-function
 #| output: false
 
-ftab2 <- function(porttype){
-  
-  if(porttype == "highequity") {
+ftab2 <- function(porttype) {
+  if (porttype == "highequity") {
     portlabel <- "High-equity portfolio"
-    } else if(porttype == "highfixed"){
-      portlabel <- "High fixed-income portfolio"
-    }
-  
-  assetmeasures |> 
-    filter(porttype == !!porttype) |> 
-    arrange(scenario) |> 
-    select(scendesc, assets_p05, assets_p50, assets_p95) |> 
-    gt() |> 
-    rows_add(.after=4, .n_empty = 1) |>
-    rows_add(.after=3, .n_empty = 1) |>
-    tab_header(title="Asset accumulation at the end of 10 years",
-               subtitle = portlabel) |>
-    tab_spanner(columns = c(assets_p05, assets_p50, assets_p95),
-                label="Quantile of asset accumulation") |>
-    cols_label(scendesc="Scenario",
-               assets_p05=html("5th percentile"),
-               assets_p50=html("median"),
-               assets_p95=html("95th percentile")
-               ) |>
-    fmt_number(columns=c(assets_p05, assets_p50, assets_p95), decimals=2) |>
+  } else if (porttype == "highfixed") {
+    portlabel <- "High fixed-income portfolio"
+  }
+
+  assetmeasures |>
+    filter(porttype == !!porttype) |>
+    arrange(scenario) |>
+    select(scendesc, assets_p05, assets_p50, assets_p95) |>
+    gt() |>
+    rows_add(.after = 4, .n_empty = 1) |>
+    rows_add(.after = 3, .n_empty = 1) |>
+    tab_header(
+      title = "Asset accumulation at the end of 10 years",
+      subtitle = portlabel
+    ) |>
+    tab_spanner(
+      columns = c(assets_p05, assets_p50, assets_p95),
+      label = "Quantile of asset accumulation"
+    ) |>
+    cols_label(
+      scendesc = "Scenario",
+      assets_p05 = html("5th percentile"),
+      assets_p50 = html("median"),
+      assets_p95 = html("95th percentile")
+    ) |>
+    fmt_number(columns = c(assets_p05, assets_p50, assets_p95), decimals = 2) |>
     sub_missing(columns = everything(), missing_text = "") |>
     tab_options(table.font.size = 11) |>
     cols_width(-c(scendesc) ~ px(50))
@@ -475,16 +534,15 @@ set.seed(123)
 #  Measure of the Extent to which Volatility Varies Over Time
 # Autoregressive Conditional Heteroskedasticity (ARCH) Test
 # The ARCH test can be used to test for time-varying volatility (heteroskedasticity) in the time series.
-# 
+#
 # Calculation: Use the ArchTest function from the FinTS package in R.
-
 
 # arch_test_result <- ArchTest(series)$p.value
 #   garch_model <- garchFit(~ garch(1, 1), data = series, trace = FALSE)
 #   garch_alpha <- coef(garch_model)["alpha1"]
 #   garch_beta <- coef(garch_model)["beta1"]
 
-data <- rnorm(30)  # Replace with your annual returns data
+data <- rnorm(30) # Replace with your annual returns data
 
 # mu <- -10  # Mean of the log volatility
 # phi <- 0.98  # Persistence parameter
@@ -493,12 +551,18 @@ data <- rnorm(30)  # Replace with your annual returns data
 # tmp <- svsim(len = 30, mu = 0, phi = .98, sigma = .4)
 (data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .6)$y)
 (data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .01)$y)
-plot(data1, type="l")
+plot(data1, type = "l")
 
 (data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .01)$y)
 
 
-(data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .6)$y); fit <- stochvolTMB::estimate_parameters(data1, model = "leverage", silent=TRUE); summary(fit, report = "transformed")
+(data1 <- svsim(len = 30, mu = 0, phi = .98, sigma = .6)$y)
+fit <- stochvolTMB::estimate_parameters(
+  data1,
+  model = "leverage",
+  silent = TRUE
+)
+summary(fit, report = "transformed")
 
 
 a <- fit
@@ -509,18 +573,18 @@ a$fit$par
 (kp <- tseries::kpss.test(data1))
 str(kp)
 
-(mlt <- TSA::McLeod.Li.test(y=data1))
+(mlt <- TSA::McLeod.Li.test(y = data1))
 # (mlt <- TSA::McLeod.Li.test(y=data1))
 str(mlt)
 # low Ljung-Box pvalues indicates autocorrelation
 
 library(TSA)
 data(CREF)
-r.cref=diff(log(CREF))*100
-McLeod.Li.test(y=r.cref)
+r.cref = diff(log(CREF)) * 100
+McLeod.Li.test(y = r.cref)
 
 # Perform CUSUM test
-cusum_test <- efp(data ~ 1, type="Rec-CUSUM")
+cusum_test <- efp(data ~ 1, type = "Rec-CUSUM")
 plot(cusum_test)
 summary(cusum_test)
 
@@ -535,18 +599,11 @@ str(wtest)
 wtest$p.value
 
 # Perform Breusch-Pagan Test
-bptest(mod)
-
-
-
+# bptest(mod) # Error in `bptest()`:! the auxiliary variance regression requires at least an intercept and a regressor
 
 # Extract the simulated series
 #returns <- sim_data$y
 #volatilities <- exp(sim_data$h / 2)
-
-
-
-
 
 set.seed(123)
 lr1 <- rnorm(30)
@@ -556,24 +613,32 @@ lr2 <- rnorm(30)
 # returns <- read.csv('returns.csv', header = TRUE)
 
 # Fit GARCH(1,1) models
-spec1 <- ugarchspec(variance.model = list(garchOrder = c(1,1)), mean.model = list(armaOrder = c(0,0)), distribution.model = "norm")
+spec1 <- ugarchspec(
+  variance.model = list(garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "norm"
+)
 fit1 <- ugarchfit(spec1, lr1)
 
-spec2 <- ugarchspec(variance.model = list(garchOrder = c(1,1)), mean.model = list(armaOrder = c(0,0)), distribution.model = "norm")
+spec2 <- ugarchspec(
+  variance.model = list(garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "norm"
+)
 fit2 <- ugarchfit(spec2, lr2)
 
 # Fit Stochastic Volatility (SV) models using estimate_parameters
 # fit_sv1 <- estimate_parameters(lr1, model = "sv", prior = list(phi = 0.95, sigma = 0.1, tau = 1))
 # fit_sv2 <- estimate_parameters(lr2, model = "sv", prior = list(phi = 0.95, sigma = 0.1, tau = 1))
 
-fit_sv1 <- estimate_parameters(lr1, model = "gaussian", silent=TRUE)
-fit_sv2 <- estimate_parameters(lr2, model = "gaussian", silent=TRUE)
+fit_sv1 <- estimate_parameters(lr1, model = "gaussian", silent = TRUE)
+fit_sv2 <- estimate_parameters(lr2, model = "gaussian", silent = TRUE)
 
 str(fit_sv1)
 fit_sv1$rep$value
 fitted(fit_sv1)
-predict(fit_sv1)
-sim(fit_sv1)
+# predict(fit_sv1) # Error in `MASS::mvrnorm()`: ! 'Sigma' is not positive definite
+# sim(fit_sv1) # from rnclust??
 
 # Calculate the Mean Squared Error (MSE) for the GARCH models
 mse_garch1 <- mean((lr1 - fit1@fit$fitted.values)^2)
@@ -608,11 +673,11 @@ log_returns <- rnorm(30)
 # Calculate ACF
 acf_result <- stats::acf(log_returns, lag.max = 1)
 str(acf_result)
-acf_result$acf[2]  # the correlation
+acf_result$acf[2] # the correlation
 
 # Perform ARCH test
 arch_test_result <- FinTS::ArchTest(log_returns)
-arch_test_result <- FinTS::ArchTest(log_returns, lags=1, demean = FALSE)
+arch_test_result <- FinTS::ArchTest(log_returns, lags = 1, demean = FALSE)
 
 # Fit GARCH model
 garch_model <- fGarch::garchFit(~ garch(1, 1), data = log_returns)
@@ -628,7 +693,6 @@ mu <- params["mu"]
 
 # Extract the latent volatility states
 log_vol <- sv_fit$latent_states
-
 
 ```
 
