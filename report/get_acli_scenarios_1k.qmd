@@ -33,7 +33,7 @@ This long dataframe is saved as `acli_scenarios.rds` in the data folder of the p
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
+source(fs::path(GROOT, "report", "_common.R"))
 
 ```
 
@@ -56,9 +56,11 @@ HY.csv, U.S. Corporate high yield (Below investment grade)
 
 (fnames <- read_csv(sfnames, col_names = c("fname", "fdesc")))
 # create a named vector
-(fnamesv <- setNames(fnames$fdesc, fnames$fname |> path_ext_remove() |> str_to_lower()))
+(fnamesv <- setNames(
+  fnames$fdesc,
+  fnames$fname |> path_ext_remove() |> str_to_lower()
+))
 # fnamesv["aggr"]
-
 
 # alternative parameter runs ----
 
@@ -67,29 +69,43 @@ types <- c("lbound", "ubound")
 runs <- outer(parms, types, paste, sep = "_") |> as.vector()
 (runs <- setNames(runs, runs))
 
-scen_names <- tibble(scenario=runs) |> 
-  mutate(temp=str_replace(scenario, "_lbound", "__lbound"),
-         temp=str_replace(temp, "_ubound", "__ubound")) |> 
-  separate(temp, c("parm", "bound"), sep="__") |> 
-  add_row(scenario="baseline", parm="baseline") |> 
-  mutate(parmdesc=case_when(
-    parm=="baseline" ~ "Baseline",
-    parm=="phi" ~ "Speed of mean reversion in volatility (phi)",
-    parm=="rho" ~ "Correlation between random shock to vol and random component of return (rho)",
-    parm=="sigma_v" ~ "Monthly sd of the log volatility process (sigma(v))",
-    parm=="tau" ~ "Target volatility (tau)")) |> 
-  mutate(scendesc=case_when(
-    bound=="lbound" ~ paste0(parmdesc, ": reduced to lower bound of 90% CI"),
-    bound=="ubound" ~ paste0(parmdesc, ": increased to upper bound of 90% CI"),
-    scenario=="baseline" ~ "Baseline"),
-    framework="acli") |> 
+scen_names <- tibble(scenario = runs) |>
+  mutate(
+    temp = str_replace(scenario, "_lbound", "__lbound"),
+    temp = str_replace(temp, "_ubound", "__ubound")
+  ) |>
+  separate(temp, c("parm", "bound"), sep = "__") |>
+  add_row(scenario = "baseline", parm = "baseline") |>
+  mutate(
+    parmdesc = case_when(
+      parm == "baseline" ~ "Baseline",
+      parm == "phi" ~ "Speed of mean reversion in volatility (phi)",
+      parm ==
+        "rho" ~ "Correlation between random shock to vol and random component of return (rho)",
+      parm == "sigma_v" ~ "Monthly sd of the log volatility process (sigma(v))",
+      parm == "tau" ~ "Target volatility (tau)"
+    )
+  ) |>
+  mutate(
+    scendesc = case_when(
+      bound == "lbound" ~ paste0(
+        parmdesc,
+        ": reduced to lower bound of 90% CI"
+      ),
+      bound == "ubound" ~ paste0(
+        parmdesc,
+        ": increased to upper bound of 90% CI"
+      ),
+      scenario == "baseline" ~ "Baseline"
+    ),
+    framework = "acli"
+  ) |>
   relocate(framework)
 scen_names
 
-saveRDS(scen_names, here::here("data", "acli_scenario_names.rds"))
+saveRDS(scen_names, fs::path(GROOT, "data", "acli_scenario_names.rds"))
 
-# scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
-
+# scen_names <- readRDS(fs::path(GROOT, "data", "acli_scenario_names.rds"))
 
 # TO COME: interest rate paremeterization directories ----
 itau1_m.50_dir <- "s_itau1_m.50" # default minus .50
@@ -103,24 +119,24 @@ itau1_p.50_dir <- "s_itau1_p.50" # default plus .50
 #| label: functions
 #| output: false
 
-
-dirget <- function(dirname, fnames){
-  
+dirget <- function(dirname, fnames) {
   # function to read ACLI output data files
-  
+
   ddata <- path(ddir, dirname)
   fndf <- path(ddata, fnames$fname)
-  df1 <- vroom(fndf, 
-               col_types = cols(.default = col_double()),
-               col_names=FALSE, id="fname")
-  
-  df2 <- df1 |> 
-    mutate(scenario=str_remove(dirname, "s_"),
-           fname=path_file(fname)) |> 
-    left_join(fnames, by = join_by(fname)) |> 
-    relocate(scenario) |> 
+  df1 <- vroom(
+    fndf,
+    col_types = cols(.default = col_double()),
+    col_names = FALSE,
+    id = "fname"
+  )
+
+  df2 <- df1 |>
+    mutate(scenario = str_remove(dirname, "s_"), fname = path_file(fname)) |>
+    left_join(fnames, by = join_by(fname)) |>
+    relocate(scenario) |>
     lcnames()
-  
+
   df2
 }
 
@@ -134,15 +150,15 @@ Running this next chunk gets all of the ACLI scenarios we created using their sp
 #| label: get-data
 #| output: false
 
-f <- function(dirname, fnames){
+f <- function(dirname, fnames) {
   print(dirname)
-  dirget(dirname, fnames) |> 
-    mutate(sim=row_number(), .by=fname)
+  dirget(dirname, fnames) |>
+    mutate(sim = row_number(), .by = fname)
 }
 
-stack <- purrr::map(scen_names$scenario, \(x) f(x, fnames)) |> 
-  list_rbind()|> 
-  mutate(fnbase=path_ext_remove(fname) |> str_to_lower())
+stack <- purrr::map(scen_names$scenario, \(x) f(x, fnames)) |>
+  list_rbind() |>
+  mutate(fnbase = path_ext_remove(fname) |> str_to_lower())
 glimpse(stack)
 
 count(stack, scenario)
@@ -150,26 +166,29 @@ count(stack, fnbase, fname, fdesc)
 count(stack, sim) |> ht()
 
 # create a  long version of the stacked file, with year starting at 0
-slong <- stack |> 
-  select(-fname) |> 
-  pivot_longer(cols=-c(scenario, fnbase, fdesc, sim),
-               values_to = "asset") |> 
-  mutate(year=str_sub(name, 2, -1) |> as.integer() - 1) |> 
-  select(-name) |> 
-  arrange(scenario, fnbase, sim, year) |> 
-  mutate(logreturn=log(asset / lag(asset)), # log return, not arithmetic return
-         cagr=asset^(1/year) - 1, # compound average growth rate
-         .by=scenario, fnbase, sim) |> 
+slong <- stack |>
+  select(-fname) |>
+  pivot_longer(cols = -c(scenario, fnbase, fdesc, sim), values_to = "asset") |>
+  mutate(year = str_sub(name, 2, -1) |> as.integer() - 1) |>
+  select(-name) |>
+  arrange(scenario, fnbase, sim, year) |>
+  mutate(
+    logreturn = log(asset / lag(asset)), # log return, not arithmetic return
+    cagr = asset^(1 / year) - 1, # compound average growth rate
+    .by = scenario,
+    fnbase,
+    sim
+  ) |>
   select(scenario, fnbase, fdesc, sim, year, asset, logreturn, cagr)
 
 glimpse(slong)
-saveRDS(slong, here::here("data", "acli_scenarios.rds"))
+saveRDS(slong, fs::path(GROOT, "data", "acli_scenarios.rds"))
 
 count(slong, scenario)
 count(slong, fnbase, fdesc)
 
-slong |> 
-  filter(fnbase=="fixed", year %in% 0:3, sim %in% 1:3) |> 
+slong |>
+  filter(fnbase == "fixed", year %in% 0:3, sim %in% 1:3) |>
   arrange(year)
 
 
@@ -181,11 +200,16 @@ slong |>
 #| label: explore
 #| output: false
 
+slong <- readRDS(fs::path(GROOT, "data", "acli_scenarios.rds"))
 
-slong <- readRDS(here::here("data", "acli_scenarios.rds"))
-
-slong |> 
-  filter(year==30, scenario=="baseline") |> 
-  summarise(n=n(), cagrmin=min(cagr), cagrmdn=median(cagr), cagrmax=max(cagr), .by = c(fnbase, fdesc))
+slong |>
+  filter(year == 30, scenario == "baseline") |>
+  summarise(
+    n = n(),
+    cagrmin = min(cagr),
+    cagrmdn = median(cagr),
+    cagrmax = max(cagr),
+    .by = c(fnbase, fdesc)
+  )
 
 ```

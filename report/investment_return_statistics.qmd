@@ -12,8 +12,9 @@ editor_options:
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
-source(fs::path(rptdir, "function_penmod.R")) # for flatmat
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
+source(fs::path(GROOT, "report", "function_penmod.R"))
 
 # library(moments)
 # library(fBasics)
@@ -41,7 +42,7 @@ levmod, rho, correlation parameter, Stochastic volatility model, volatility corr
   mutate(framework = "slv")
 slv_scen_names
 
-acli_scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+acli_scen_names <- readRDS(fs::path(GROOT, "data", "acli_scenario_names.rds"))
 
 scen_names <- bind_rows(
   slv_scen_names,
@@ -163,7 +164,8 @@ fmeasures <- function(ir, nyears = 30) {
 #| label: get-portfolios
 #| output: false
 
-portfolios <- readRDS(here::here(
+portfolios <- readRDS(fs::path(
+  GROOT,
   "data",
   "allscen_and_comparison_portfolios.rds"
 ))

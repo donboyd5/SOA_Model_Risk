@@ -12,10 +12,16 @@ editor_options:
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
-source(here::here("report", "libraries_ts.R"))
-source(here::here("report", "function_penmod.R")) # for flatmat
-source(here::here("report", "function_runslv.R"))
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
+source(fs::path(GROOT, "report", "libraries_ts.R"))
+source(fs::path(GROOT, "report", "function_penmod.R"))
+source(fs::path(GROOT, "report", "function_runslv.R"))
+
+# source(here::here("report", "_common.R"))
+# source(here::here("report", "libraries_ts.R"))
+# source(here::here("report", "function_penmod.R")) # for flatmat
+# source(here::here("report", "function_runslv.R"))
 
 library(quantmod)
 library(stats4)
@@ -37,7 +43,7 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 #| eval: true
 #| output: false
 
-combo2 <- readRDS(here::here("data", "slv_assets_rawdaily.rds"))
+combo2 <- readRDS(fs::path(GROOT, "data", "slv_assets_rawdaily.rds"))
 
 # establish portfolio weights ----
 highequity_weights <- c(equity = .7, fixed = .3)
@@ -63,10 +69,10 @@ aggrport2 <- combo2 |>
   ) # note that this is end of period assets
 ht(aggrport2)
 
-saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
+saveRDS(aggrport2, fs::path(GROOT, "data", "simportfolios_rawdaily.rds"))
 
 # take a look
-# tmp <- readRDS(here::here("data", "simportfolios_rawdaily.rds"))
+# tmp <- readRDS(fs::path(GROOT, "data", "simportfolios_rawdaily.rds"))
 # ht(tmp)
 
 ```
@@ -78,7 +84,7 @@ saveRDS(aggrport2, here::here("data", "simportfolios_rawdaily.rds"))
 #| output: false
 
 # get previously saved assets and construct log returns ----
-port_monthly1 <- readRDS(here::here("data", "simportfolios_rawdaily.rds"))
+port_monthly1 <- readRDS(fs::path(GROOT, "data", "simportfolios_rawdaily.rds"))
 
 port_monthly <- port_monthly1 |>
   mutate(ldom = ldom(date)) |>
@@ -198,7 +204,7 @@ summaries <- bind_rows(
 # note the different names for parameters depending on whether transformed or fixed
 saveRDS(
   list(res2 = res2, params2 = params2),
-  here::here("data", "slv_model_results.rds")
+  fs::path(GROOT, "data", "slv_model_results.rds")
 )
 
 ```
@@ -337,7 +343,7 @@ In the context of investment returns, α provides insights into the likelihood o
 # str(pred2)
 
 # pm1 <- simulate_parameters(m1[[1]], nsim = 1000) # get 1000 sets of parameters
-modlist <- readRDS(here::here("data", "slv_model_results.rds")) # 8 models
+modlist <- readRDS(fs::path(GROOT, "data", "slv_model_results.rds")) # 8 models
 res2 <- modlist$res2
 params2 <- modlist$params2
 
@@ -363,7 +369,7 @@ sims <- params2 |>
   )
 sims
 
-saveRDS(sims, here::here("data", "slvsims_sims_by_months.rds"))
+saveRDS(sims, fs::path(GROOT, "data", "slvsims_sims_by_months.rds"))
 
 
 ```
@@ -408,7 +414,7 @@ f <- function(mat, period = 3) {
 #| output: false
 
 # collapse to 30 years
-sims <- readRDS(here::here("data", "slvsims_sims_by_months.rds"))
+sims <- readRDS(fs::path(GROOT, "data", "slvsims_sims_by_months.rds"))
 # glimpse(sims) -- do not glimpse, too big
 # dim(sims)
 tail(sims)
@@ -422,7 +428,7 @@ slv_sims
 saveRDS(
   slv_sims |>
     select(vname, modtype, lrmat),
-  here::here("data", "slvsims.rds")
+  fs::path(GROOT, "data", "slvsims.rds")
 )
 
 ```

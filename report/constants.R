@@ -1,4 +1,5 @@
-rptdir <- here::here("report")
+# rptdir <- here::here("report")
+rptdir <- fs::path(GROOT, "report")
 
 # ddir <- r"(E:\data\soa\acli)"
 # base_dir <- "s_baseline"

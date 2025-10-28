@@ -17,7 +17,8 @@ Summarize the results for each scenario (each row of the result tibble) by unnes
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
 
 slv_scen_names <- read_csv(
   "scenario,parm,parmdesc,scendesc
@@ -29,7 +30,7 @@ levmod, rho, correlation parameter, slv model with volatility correlated with re
   mutate(framework = "slv")
 slv_scen_names
 
-acli_scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+acli_scen_names <- readRDS(fs::path(GROOT, "data", "acli_scenario_names.rds"))
 
 scen_names <- bind_rows(
   slv_scen_names,
@@ -41,7 +42,7 @@ scen_names <- bind_rows(
 # library(openxlsx)
 library(writexl)
 
-tabdir <- here::here("report", "results") # where we want to write tables
+tabdir <- fs::path(GROOT, "report", "results") # where we want to write tables
 
 # use this function to write tables
 write_tab <- function(tabname, tab = NULL, tabdir = NULL) {
@@ -174,7 +175,7 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 #| label: get-penmod-results
 #| output: false
 
-result <- readRDS(here::here("data", "allscen_and_comparison_penmod.rds"))
+result <- readRDS(fs::path(GROOT, "data", "allscen_and_comparison_penmod.rds"))
 
 result
 
@@ -375,7 +376,7 @@ tab
 gtsave(
   tab,
   "risk_measures_highequity_table.png",
-  path = here::here("report", "results")
+  path = fs::path(GROOT, "report", "results")
 )
 
 write_tab("risk_measures_highequity")
@@ -479,7 +480,7 @@ tab
 gtsave(
   tab,
   "risk_measures_highfixed_table.png",
-  path = here::here("report", "results")
+  path = fs::path(GROOT, "report", "results")
 )
 
 write_tab("risk_measures_highfixed")
@@ -577,7 +578,7 @@ figure_Vloss_model <- structure_flipped |>
 
 figure_Vloss_model
 ggsave(
-  filename = here::here("report", "results", "Figure_vloss_model.png"),
+  filename = fs::path(GROOT, "report", "results", "Figure_vloss_model.png"),
   plot = figure_Vloss_model,
   width = 10,
   height = 6
@@ -631,7 +632,7 @@ figure_VERC_model <- structure_flipped |>
 figure_VERC_model
 
 ggsave(
-  filename = here::here("report", "results", "Figure_VERC_model.png"),
+  filename = fs::path(GROOT, "report", "results", "Figure_VERC_model.png"),
   plot = figure_VERC_model,
   width = 10,
   height = 6
@@ -761,7 +762,7 @@ zoom <- 1
 gtsave(
   tab,
   "parm_risk_measures_highequity_table.png",
-  path = here::here("report", "results"),
+  path = fs::path(GROOT, "report", "results"),
   vwidth = vwidth,
   vheight = vheight,
   zoom = zoom
@@ -806,12 +807,12 @@ tab <- parm_flipped |>
   fmt_percent(columns = c(mean, sd), decimals = 1)
 tab
 
-# gtsave(tab, "parm_risk_measures_highfixed_table.png", path = here::here("report", "results"))
+# gtsave(tab, "parm_risk_measures_highfixed_table.png", path = fs::path(GROOT, "report", "results"))
 
 gtsave(
   tab,
   "parm_risk_measures_highfixed_table.png",
-  path = here::here("report", "results"),
+  path = fs::path(GROOT, "report", "results"),
   vwidth = vwidth,
   vheight = vheight,
   zoom = zoom
@@ -1000,7 +1001,7 @@ p <- range_data |>
   )
 p
 ggsave(
-  filename = here::here("report", "results", "FigureVaRLoss.png"),
+  filename = fs::path(GROOT, "report", "results", "FigureVaRLoss.png"),
   plot = p,
   width = 10,
   height = 6,
@@ -1048,7 +1049,7 @@ p <- range_data |>
   )
 p
 ggsave(
-  filename = here::here("report", "results", "FigureVaRERC.png"),
+  filename = fs::path(GROOT, "report", "results", "FigureVaRERC.png"),
   plot = p,
   width = 10,
   height = 6,
@@ -1067,7 +1068,7 @@ ggsave(
 
 library(openxlsx)
 
-tabdir <- here::here("report", "results") # where we want to write tables
+tabdir <- fs::path(GROOT, "report", "results") # where we want to write tables
 wbpath <- fs::path(tabdir, "wb.xlsx")
 # saveWorkbook(wb, wbpath, overwrite = TRUE) # ERROR wb not found!!!
 

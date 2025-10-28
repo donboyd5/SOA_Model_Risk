@@ -16,7 +16,8 @@ We create two portfolios, based on Gang's investigation: a "high equity" portfol
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
 
 ```
 
@@ -45,7 +46,7 @@ Thus, we have revised the calculations to scale the weights to achieve this.
 #| output: false
 
 weights_gang <- read_delim(
-"fnbase;label;highfixed;highequity
+  "fnbase;label;highfixed;highequity
 aggr;Emerging Markets, NASDAQ, Hang Seng;15.0;30.1
 balanced;60% Diversified Equity + 40% Fixed Income;22.9;21.3
 fixed;65% Intermediate term govt bond + 35 long term corporate bond;10.4;4.3
@@ -55,21 +56,30 @@ ig_long;Long term corporate bonds;13.3;6.4
 int;International equity;5.9;9.7
 small;US Small Cap;5.9;9.7
 us;US Big Cap;5.9;9.7
-", delim=";")
+",
+  delim = ";"
+)
 
-weights_gang |> 
+weights_gang |>
   summarise(across(c(highfixed, highequity), sum))
 
 weights1 <- weights_gang |>
-  mutate(equity_portion = case_when(
-    fnbase %in% c("aggr", "int", "small", "us") ~ 1,
-    fnbase == "balanced" ~ .60,
-    .default = 0)) |> 
-  pivot_longer(c(highfixed, highequity), names_to = "porttype", values_to = "weight") |> 
-  mutate(weight = weight / sum(weight), .by=porttype)
+  mutate(
+    equity_portion = case_when(
+      fnbase %in% c("aggr", "int", "small", "us") ~ 1,
+      fnbase == "balanced" ~ .60,
+      .default = 0
+    )
+  ) |>
+  pivot_longer(
+    c(highfixed, highequity),
+    names_to = "porttype",
+    values_to = "weight"
+  ) |>
+  mutate(weight = weight / sum(weight), .by = porttype)
 
 # ensure that weights sum to 1 for each portfolio
-weights1 |> summarise(weight=sum(weight), .by=porttype)
+weights1 |> summarise(weight = sum(weight), .by = porttype)
 
 
 ```
@@ -91,24 +101,25 @@ Adjust the weights to achieve these shares.
 
 library(nloptr)
 
-# tmp <- weights1 |> 
-#   filter(porttype == "highfixed") |> 
+# tmp <- weights1 |>
+#   filter(porttype == "highfixed") |>
 #   rename(weight_gang = weight)
 # w <- tmp$weight_gang; ep = tmp$equity_portion; target = .3
 
-get_weights <- function(w, ep, target){
-  
+get_weights <- function(w, ep, target) {
   n <- length(w)
   ratio0 <- rep(1, n)
-  
-  obj <- function(ratio, ep, target, w){
+
+  obj <- function(ratio, ep, target, w) {
     sum((ratio - 1)^2)
-    }
+  }
 
   constraints <- function(ratio, ep, target, w) {
     w2 <- w * ratio
-    c(sum(w2) - 1,  # new weights sum to 1
-      sum(w2 * ep) - target) # equity is equal to target
+    c(
+      sum(w2) - 1, # new weights sum to 1
+      sum(w2 * ep) - target
+    ) # equity is equal to target
   }
 
   res <- nloptr::nloptr(
@@ -121,11 +132,13 @@ get_weights <- function(w, ep, target){
       "algorithm" = "NLOPT_LN_COBYLA",
       "xtol_rel" = 1.0e-8,
       "maxeval" = 1000,
-      "print_level" = 1),
+      "print_level" = 1
+    ),
     ep = ep,
     target = target,
-    w = w)
-  
+    w = w
+  )
+
   ratio <- res$solution
   w2 <- w * ratio
   return(w2)
@@ -139,25 +152,31 @@ get_weights <- function(w, ep, target){
 #| label: adjust-weights-to-get-70-30-portfolios
 #| output: false
 
-weights2 <- weights1 |> 
-  rename(weight_gang = weight) |> 
-  mutate(weight = get_weights(w = weight_gang, 
-                    ep = equity_portion,
-                    target = case_when(
-                      porttype[1] == "highfixed" ~ 0.3,
-                      porttype[1] == "highequity" ~ 0.7,
-                      .default = 0)),
-         .by = porttype)
+weights2 <- weights1 |>
+  rename(weight_gang = weight) |>
+  mutate(
+    weight = get_weights(
+      w = weight_gang,
+      ep = equity_portion,
+      target = case_when(
+        porttype[1] == "highfixed" ~ 0.3,
+        porttype[1] == "highequity" ~ 0.7,
+        .default = 0
+      )
+    ),
+    .by = porttype
+  )
 
 # check that new weights do what they should
-weights2 |> 
+weights2 |>
   summarise(
     weightsum = sum(weight),
     equity = sum(weight * equity_portion),
     ssd = sum((weight / weight_gang - 1)^2),
-    .by=porttype)
+    .by = porttype
+  )
 
-weights <- weights2 |> 
+weights <- weights2 |>
   select(fnbase, label, porttype, weight)
 
 ```
@@ -172,29 +191,29 @@ Get the previously created ACLI scenarios long dataframe and construct the two p
 #| label: construct-portfolios
 #| output: false
 
-
-slong <- readRDS(here::here("data", "acli_scenarios.rds"))
+slong <- readRDS(fs::path(GROOT, "data", "acli_scenarios.rds"))
 
 # wtdslong has twice as many records as slong -- each asset class has the relevant highfixed or highequity weight
-wtdslong <- slong |> 
-  left_join(weights, by = join_by(fnbase),
-            relationship = "many-to-many")
+wtdslong <- slong |>
+  left_join(weights, by = join_by(fnbase), relationship = "many-to-many")
 
 # collapse by scenario, sim, year, and portfolio type
 
-portfolios <- wtdslong |> 
-  mutate(return_share=logreturn * weight) |> 
-  summarise(logreturn=sum(return_share), .by=c(scenario, sim, year, porttype)) |> 
-  mutate(logreturn=ifelse(year==0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
-  arrange(scenario, porttype, sim, year) |> 
+portfolios <- wtdslong |>
+  mutate(return_share = logreturn * weight) |>
+  summarise(
+    logreturn = sum(return_share),
+    .by = c(scenario, sim, year, porttype)
+  ) |>
+  mutate(logreturn = ifelse(year == 0, 0, logreturn)) |> # we don't have a return in year 0, set to zero
+  arrange(scenario, porttype, sim, year) |>
   # calc assets two ways - they are equivalent so we don't do the arithmetic approach
   # mutate(areturn=exp(logreturn) - 1,
   #        aasset=cumprod(1 + areturn), .by=c(scenario, sim, porttype)) |> # arithmetic asset
-  mutate(asset=exp(cumsum(logreturn)),
-         .by=c(scenario, sim, porttype)) |> 
+  mutate(asset = exp(cumsum(logreturn)), .by = c(scenario, sim, porttype)) |>
   select(scenario, porttype, sim, year, logreturn, asset)
 
-saveRDS(portfolios, here::here("data", "acli_portfolios.rds"))
+saveRDS(portfolios, fs::path(GROOT, "data", "acli_portfolios.rds"))
 
 ```
 
@@ -205,10 +224,10 @@ saveRDS(portfolios, here::here("data", "acli_portfolios.rds"))
 #| output: false
 
 # take a quick look at the result
-y30 <- portfolios |> 
-  filter(year==30) |> 
-  summarise(asset=median(asset), .by=c(scenario, porttype))
-  
+y30 <- portfolios |>
+  filter(year == 30) |>
+  summarise(asset = median(asset), .by = c(scenario, porttype))
+
 y30 |> arrange(desc(asset))
 
 ```
@@ -226,15 +245,17 @@ Note that:
 ```{r}
 #| label: get-plot-data
 
-# df <- readRDS(here::here("data", "acli_and_comparison_portfolios.rds"))
+# df <- readRDS(fs::path(GROOT, "data", "acli_and_comparison_portfolios.rds"))
 
-portfolios <- readRDS(here::here("data", "acli_portfolios.rds"))
+portfolios <- readRDS(fs::path(GROOT, "data", "acli_portfolios.rds"))
 
-df <- portfolios |> 
-  filter(year != 0) |> 
-  summarise(mean=mean(logreturn),
-            sd=sd(logreturn),
-            .by=c(scenario, porttype))
+df <- portfolios |>
+  filter(year != 0) |>
+  summarise(
+    mean = mean(logreturn),
+    sd = sd(logreturn),
+    .by = c(scenario, porttype)
+  )
 
 ```
 
@@ -242,30 +263,49 @@ df <- portfolios |>
 #| label: scenario-portfolio-plot
 #| output: true
 
-p <- df |> 
-  filter(!str_detect(scenario, "rho")) |> 
-  mutate(porttype=factor(porttype,
-                         levels=c("highequity", "highfixed"),
-                         labels=c("High equity", "High fixed"))) |> 
-  ggplot(aes(mean, sd, colour=porttype, label=scenario)) +
+p <- df |>
+  filter(!str_detect(scenario, "rho")) |>
+  mutate(
+    porttype = factor(
+      porttype,
+      levels = c("highequity", "highfixed"),
+      labels = c("High equity", "High fixed")
+    )
+  ) |>
+  ggplot(aes(mean, sd, colour = porttype, label = scenario)) +
   geom_point() +
-  geom_text_repel(vjust = -0.5, hjust = 0.5, min.segment.length = .5, max.overlaps = 15) +
-  scale_color_manual(values=c("darkgreen", "blue")) +
-  scale_x_continuous(name="mean", 
-                     breaks = seq(0, 1, .005),
-                     labels = scales::percent_format(accuracy = .01),
-                     limits = c(0.03, 0.085)) +
-  scale_y_continuous(name="standard deviation", 
-                     breaks = seq(0, 1, .01),
-                     labels = scales::percent_format(accuracy = .1)) +
-  ggtitle(label = "Mean and standard deviation of returns for the detailed ESG",
-          subtitle = "Under alternative scenarios and portfolios") +
-  guides(col= guide_legend(title= "Portfolio\ntype")) +
+  geom_text_repel(
+    vjust = -0.5,
+    hjust = 0.5,
+    min.segment.length = .5,
+    max.overlaps = 15
+  ) +
+  scale_color_manual(values = c("darkgreen", "blue")) +
+  scale_x_continuous(
+    name = "mean",
+    breaks = seq(0, 1, .005),
+    labels = scales::percent_format(accuracy = .01),
+    limits = c(0.03, 0.085)
+  ) +
+  scale_y_continuous(
+    name = "standard deviation",
+    breaks = seq(0, 1, .01),
+    labels = scales::percent_format(accuracy = .1)
+  ) +
+  ggtitle(
+    label = "Mean and standard deviation of returns for the detailed ESG",
+    subtitle = "Under alternative scenarios and portfolios"
+  ) +
+  guides(col = guide_legend(title = "Portfolio\ntype")) +
   theme_bw()
 p
 
-ggsave(here::here(rptdir, "results", "esg_meansd.png"),
-       scale=1.1, width=9, height = 9)
+ggsave(
+  fs::path(GROOT, rptdir, "results", "esg_meansd.png"),
+  scale = 1.1,
+  width = 9,
+  height = 9
+)
 
 ```
 
@@ -279,21 +319,31 @@ Plot just the high equity portfolio, for greater readability.
 #| label: scenario-portfolio-panel-plots
 #| output: true
 
-df |> 
-  filter(!str_detect(scenario, "rho"), porttype=="highequity") |> 
-  ggplot(aes(mean, sd, label=scenario)) +
-  geom_point(colour="blue") +
-  geom_text_repel(vjust = -0.5, hjust = 0.5, max.overlaps = 15, colour="blue") +
+df |>
+  filter(!str_detect(scenario, "rho"), porttype == "highequity") |>
+  ggplot(aes(mean, sd, label = scenario)) +
+  geom_point(colour = "blue") +
+  geom_text_repel(
+    vjust = -0.5,
+    hjust = 0.5,
+    max.overlaps = 15,
+    colour = "blue"
+  ) +
   # scale_color_manual(values=c("red", "blue")) +
-  scale_x_continuous(name="mean", 
-                     breaks = seq(0, 1, .0025),
-                     labels = scales::percent_format(accuracy = .01)) +
-  scale_y_continuous(name="standard deviation", 
-                     breaks = seq(0, 1, .01),
-                     labels = scales::percent_format(accuracy = .1)) +
-  ggtitle(label = "Mean and standard deviation for ACLI scenarios",
-          subtitle = "ACLI scenarios and portfolios") +
+  scale_x_continuous(
+    name = "mean",
+    breaks = seq(0, 1, .0025),
+    labels = scales::percent_format(accuracy = .01)
+  ) +
+  scale_y_continuous(
+    name = "standard deviation",
+    breaks = seq(0, 1, .01),
+    labels = scales::percent_format(accuracy = .1)
+  ) +
+  ggtitle(
+    label = "Mean and standard deviation for ACLI scenarios",
+    subtitle = "ACLI scenarios and portfolios"
+  ) +
   theme_bw()
-
 
 ```
