@@ -17,7 +17,7 @@ images/
 *.pdf
 *.png
 *.ppt*
-*.rds
+#  *.rds don't blanket gitignore these -- see rules in data folder
 *.txt
 *.woff
 *.xl*

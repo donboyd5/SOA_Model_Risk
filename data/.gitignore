@@ -2,3 +2,11 @@
 *
 # But don't ignore this file - this way we'll push an empty directory
 !.gitignore
+
+# don't ignore selected rds files downloaded from the internet
+!slv_assets_rawdaily.rds
+!sp500_index_rawdaily.rds
+!msci_eafe_eaf_rawdaily.rds
+!russell2000_rawdaily.rds
+!aggr_assets_rawdaily.rds
+!aggressive_rawdaily.rds
