@@ -12,7 +12,7 @@ library(stats4)
 library(stochvolTMB)
 library(stochvol)
 library(rstan)
-library(rstantools)
+# library(rstantools) # djb commented out 10/29/2025
 
 # options(pillar.sigfig = 3) # default
 options(pillar.print_max = 20)
