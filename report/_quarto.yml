@@ -83,6 +83,7 @@ format:
 
   
 # renv-related commands
+# renv::init()
 # renv::snapshot()
 # renv::restore()
 # renv::update()
