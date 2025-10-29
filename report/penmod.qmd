@@ -32,10 +32,11 @@ The following code runs all portfolios through the pension model Gang developed.
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
+source(fs::path(GROOT, "report", "function_penmod.R"))
 
-# get Gang's pension model, adapted to work with multiple simulations
-source(here::here("report", "function_penmod.R")) 
+source(fs::path(GROOT, "report", "_common.R"))
 
 ```
 
@@ -44,24 +45,31 @@ source(here::here("report", "function_penmod.R"))
 
 ```{r}
 
-portfolios <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
+portfolios <- readRDS(fs::path(
+  GROOT,
+  "data",
+  "allscen_and_comparison_portfolios.rds"
+))
 
 ```
 
 
 ```{r}
 
-result <- portfolios  |> 
+result <- portfolios |>
   # next stament "loops" (via map) through the 3 rows (the 3 scenarios), and for each row it
   # calls penmod using nsims, nyears, and the investment return matrix for the scenario in the row
-  mutate(penmod = 
-           purrr::map(seq_along(lrmat),
-                      ~penmod(
-                        ir = lrmat[[.x]])))
+  mutate(
+    penmod = purrr::map(
+      seq_along(lrmat),
+      ~ penmod(
+        ir = lrmat[[.x]]
+      )
+    )
+  )
 # result
 
-saveRDS(result, here::here("data", "allscen_and_comparison_penmod.rds"))
-
+saveRDS(result, fs::path(GROOT, "data", "allscen_and_comparison_penmod.rds"))
 
 ```
 

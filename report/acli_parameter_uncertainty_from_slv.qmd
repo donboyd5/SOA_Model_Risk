@@ -40,10 +40,16 @@ Also useful:
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
-source(here::here("report", "libraries_ts.R"))
-source(here::here("report", "function_penmod.R")) # for flatmat
-source(here::here("report", "function_runslv.R")) 
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
+source(fs::path(GROOT, "report", "libraries_ts.R"))
+source(fs::path(GROOT, "report", "function_penmod.R"))
+source(fs::path(GROOT, "report", "function_runslv.R"))
+
+# source(here::here("report", "_common.R"))
+# source(here::here("report", "libraries_ts.R"))
+# source(here::here("report", "function_penmod.R")) # for flatmat
+# source(here::here("report", "function_runslv.R"))
 
 library(quantmod)
 library(stats4)
@@ -52,13 +58,23 @@ library(stochvol)
 
 # options(pillar.sigfig = 3) # default
 options(pillar.print_max = 20)
-tprint <- 25  # default tibble print
+tprint <- 25 # default tibble print
 options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
 
 ```
 
 
 ## Get, save, and show main ACLI parameters
+
+
+```{r}
+#| label: define-folder
+
+# ddir_nsims <- fs::path(ddir, "1k_sims") # previous
+ddir_nsims <- fs::path(ddir, "10k_sims")
+
+```
+
 
 ```{r}
 #| label: get-save-params
@@ -67,42 +83,46 @@ options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprin
 # base_dir <- "s_baseline"
 # base_fn <- "baseline_ACLI_v1.46 Alt3 12-2020 100yrs.xlsm"
 
-fpath <- fs::path(ddir, base_dir, base_fn)
+fpath <- fs::path(ddir_nsims, base_dir, base_fn)
 
 ## equity parameters ----
 
-eqparams1 <- read_excel(fpath, sheet="Parameters", range = "H32:M44")
+eqparams1 <- read_excel(fpath, sheet = "Parameters", range = "H32:M44")
 # us=usdiverse, intl=intldiverse, small=intermedrisk, aggr=aggressive
-eqparams <- eqparams1 |> 
-  select(symbol=1, us=2, intl=3, small=4, aggr=5, desc=6) |> 
-  filter(row_number() > 1) |> 
-  mutate(across(-c(symbol, desc), as.numeric)) |> 
-  mutate(vname=case_when(
-    symbol == "sigma(v)" ~ "sigma_v",
-    symbol == "sigma(0)" ~ "sigma_0",
-    symbol == "sigma-" ~ "sigma_min",
-    symbol == "sigma+" ~ "sigma_max",
-    symbol == "sigma*" ~ "sigma_star",
-    .default = symbol)
-    ) |> 
+eqparams <- eqparams1 |>
+  select(symbol = 1, us = 2, intl = 3, small = 4, aggr = 5, desc = 6) |>
+  filter(row_number() > 1) |>
+  mutate(across(-c(symbol, desc), as.numeric)) |>
+  mutate(
+    vname = case_when(
+      symbol == "sigma(v)" ~ "sigma_v",
+      symbol == "sigma(0)" ~ "sigma_0",
+      symbol == "sigma-" ~ "sigma_min",
+      symbol == "sigma+" ~ "sigma_max",
+      symbol == "sigma*" ~ "sigma_star",
+      .default = symbol
+    )
+  ) |>
   relocate(vname, .before = desc)
-eqparams  
+eqparams
 
 # col_types = cols(.default = col_character())
 
 ## interest rate parameters ----
 
-intparams1 <- read_excel(fpath, sheet="Parameters", range = "B2:F39")
+intparams1 <- read_excel(fpath, sheet = "Parameters", range = "B2:F39")
 
-intparams <- intparams1 |> 
-  select(vname=1, default=3, desc=5) |> 
-  filter(row_number() > 1) |> 
+intparams <- intparams1 |>
+  select(vname = 1, default = 3, desc = 5) |>
+  filter(row_number() > 1) |>
   mutate(default = as.numeric(default))
 
 intparams
 
-saveRDS(list(eqparams=eqparams, intparams=intparams), 
-        here::here("data", "acli_default_parameters.rds"))
+saveRDS(
+  list(eqparams = eqparams, intparams = intparams),
+  fs::path(GROOT, "data", "acli_default_parameters.rds")
+)
 
 ```
 
@@ -118,71 +138,76 @@ Create files with monthly prices and log returns.
 # get previously downloaded and saved data
 
 ## prep Diversified Large Cap U.S. Equity ----
-spdaily <- readRDS(here::here("data", "sp500_index_rawdaily.rds"))
+spdaily <- readRDS(fs::path(GROOT, "data", "sp500_index_rawdaily.rds"))
 
-usdiverse <- spdaily |> 
-  to.monthly(OHLC=FALSE) |> 
+usdiverse <- spdaily |>
+  to.monthly(OHLC = FALSE) |>
   fortify.zoo() |> # to dataframe with Index from rowname
-  tibble() |> 
-  select(date=Index, price=GSPC.Adjusted) |> 
+  tibble() |>
+  select(date = Index, price = GSPC.Adjusted) |>
   # we can safely assume data are sorted by date
-  mutate(date=ldom(as.Date(date)),
-         vname="us", 
-         src="sp500",
-         lr=log(price / lag(price))) # note that we lose lr for the first observation
+  mutate(
+    date = ldom(as.Date(date)),
+    vname = "us",
+    src = "sp500",
+    lr = log(price / lag(price))
+  ) # note that we lose lr for the first observation
 
 ## prep Diversified International Equity ----
-mscidaily <- readRDS(here::here("data", "msci_eafe_eaf_rawdaily.rds"))
+mscidaily <- readRDS(fs::path(GROOT, "data", "msci_eafe_eaf_rawdaily.rds"))
 
-intldiverse <- mscidaily |> 
-  to.monthly(OHLC=FALSE) |> 
+intldiverse <- mscidaily |>
+  to.monthly(OHLC = FALSE) |>
   fortify.zoo() |> # to dataframe with Index from rowname
-  tibble() |> 
-  select(date=Index, price=EFA.Adjusted) |> 
+  tibble() |>
+  select(date = Index, price = EFA.Adjusted) |>
   # we can safely assume data are sorted by date
-  mutate(date=ldom(as.Date(date)),
-         vname="intl", 
-         src="mscieafe",
-         lr=log(price / lag(price))) # note that we lose lr for the first observation
+  mutate(
+    date = ldom(as.Date(date)),
+    vname = "intl",
+    src = "mscieafe",
+    lr = log(price / lag(price))
+  ) # note that we lose lr for the first observation
 
 ## prep Intermediate Risk Equity, U.S. Small Capitalization Index, 1955.12 – 2003.12 ----
-r2000daily <- readRDS(here::here("data", "russell2000_rawdaily.rds"))
+r2000daily <- readRDS(fs::path(GROOT, "data", "russell2000_rawdaily.rds"))
 
-intermediate_diverse <- r2000daily |> 
-  to.monthly(OHLC=FALSE) |> 
+intermediate_diverse <- r2000daily |>
+  to.monthly(OHLC = FALSE) |>
   fortify.zoo() |> # to dataframe with Index from rowname
-  tibble() |> 
-  select(date=Index, price=RUT.Adjusted) |> 
+  tibble() |>
+  select(date = Index, price = RUT.Adjusted) |>
   # we can safely assume data are sorted by date
-  mutate(date=ldom(as.Date(date)),
-         vname="small", 
-         src="russell2000", # Russell 2000 ^RUT
-         lr=log(price / lag(price))) # note that we lose lr for the first observation
+  mutate(
+    date = ldom(as.Date(date)),
+    vname = "small",
+    src = "russell2000", # Russell 2000 ^RUT
+    lr = log(price / lag(price))
+  ) # note that we lose lr for the first observation
 
 ## prep Aggressive Equity, Emerging Markets, NASDAQ, Hang Seng ----
-aggrport <- readRDS(here::here("data", "aggressive_rawdaily.rds"))
+aggrport <- readRDS(fs::path(GROOT, "data", "aggressive_rawdaily.rds"))
 
-aggressive <- aggrport |> 
-  mutate(ldom=ldom(date)) |> 
-  group_by(ldom) |> 
-  filter(date==max(date)) |> 
-  select(date=ldom, price=portassets) |> 
-  ungroup() |>  
-  mutate(vname="aggr", 
-         src="portfolio", # Russell 2000
-         lr=log(price / lag(price)))
+aggressive <- aggrport |>
+  mutate(ldom = ldom(date)) |>
+  group_by(ldom) |>
+  filter(date == max(date)) |>
+  select(date = ldom, price = portassets) |>
+  ungroup() |>
+  mutate(
+    vname = "aggr",
+    src = "portfolio", # Russell 2000
+    lr = log(price / lag(price))
+  )
 
 # stack ----
 
-stack <- bind_rows(usdiverse,
-                   intldiverse,
-                   intermediate_diverse,
-                   aggressive)
+stack <- bind_rows(usdiverse, intldiverse, intermediate_diverse, aggressive)
 count(stack, vname, src)
-stack |> 
+stack |>
   filter(is.na(lr))
 
-saveRDS(stack, here::here("data", "airg_equities.rds"))
+saveRDS(stack, fs::path(GROOT, "data", "airg_equities.rds"))
 
 
 ```
@@ -194,25 +219,31 @@ saveRDS(stack, here::here("data", "airg_equities.rds"))
 #| label: estimate-slv
 #| output: false
 
-stack <- readRDS(here::here("data", "airg_equities.rds"))
+stack <- readRDS(fs::path(GROOT, "data", "airg_equities.rds"))
 glimpse(stack)
 ht(stack)
 count(stack, vname, src)
 
 # run the slv model on each asset, for a particular time period
 # data must have vname, date, and lr columns
-res <- stack |> 
-  nest(.by=vname) |> 
-  mutate(mod=purrr::map(data, \(x) runslv(x, start="1950-01-01", end="2024-05-10")))
+res <- stack |>
+  nest(.by = vname) |>
+  mutate(
+    mod = purrr::map(data, \(x) {
+      runslv(x, start = "1950-01-01", end = "2024-05-10")
+    })
+  )
 res
 
 
 # get the model parameters
-params <- res |> 
-  mutate(summary=map(mod, \(x) summary(x, report="transformed") |> list()),
-         nobs=map(mod, \(x) pluck(x, "nobs")) |> unlist(),
-         aic=map(mod, \(x) AIC(x)) |> unlist(),
-         params=map(summary, \(x) pluck(x, 1)))
+params <- res |>
+  mutate(
+    summary = map(mod, \(x) summary(x, report = "transformed") |> list()),
+    nobs = map(mod, \(x) pluck(x, "nobs")) |> unlist(),
+    aic = map(mod, \(x) AIC(x)) |> unlist(),
+    params = map(summary, \(x) pluck(x, 1))
+  )
 # params
 
 ```
@@ -225,10 +256,10 @@ params <- res |>
 params
 
 # examine the model parameters
-params |> 
-  select(-c(data, mod, summary)) |> 
-  unnest(params) |> 
-  select(-type) |> 
+params |>
+  select(-c(data, mod, summary)) |>
+  unnest(params) |>
+  select(-type) |>
   arrange(parameter, vname)
 
 
@@ -240,44 +271,68 @@ params |>
 #| label: compare-parameters
 #| output: false
 
-plist <- readRDS(here::here("data", "acli_default_parameters.rds"))
+plist <- readRDS(fs::path(GROOT, "data", "acli_default_parameters.rds"))
 plist
 
 # prep ACLI parameters
 plist$eqparams
-eqparams1 <- plist$eqparams |> 
-  filter(vname %in% c("tau", "phi", "sigma_v", "rho")) |> 
-  select(vname, us, intl, small, aggr, desc) |> 
-  pivot_longer(cols=c(us, intl, small, aggr), names_to = "class", values_to = "param_acli") |> 
-  select(parameter=vname, class, param_acli, desc)
+eqparams1 <- plist$eqparams |>
+  filter(vname %in% c("tau", "phi", "sigma_v", "rho")) |>
+  select(vname, us, intl, small, aggr, desc) |>
+  pivot_longer(
+    cols = c(us, intl, small, aggr),
+    names_to = "class",
+    values_to = "param_acli"
+  ) |>
+  select(parameter = vname, class, param_acli, desc)
 
 # prep modeled parameters
-params |> 
-  select(-c(data, mod, summary)) |> 
-  unnest(params) |> 
-  select(-type) |> 
+params |>
+  select(-c(data, mod, summary)) |>
+  unnest(params) |>
+  select(-type) |>
   arrange(parameter, vname)
 
-params1 <- params |> 
-  unnest(params) |> 
-  mutate(parameter=case_when(
-    parameter=="sigma_y" ~ "tau",
-    parameter=="sigma_h" ~ "sigma_v",
-    .default = parameter
-  )) |> 
+params1 <- params |>
+  unnest(params) |>
+  mutate(
+    parameter = case_when(
+      parameter == "sigma_y" ~ "tau",
+      parameter == "sigma_h" ~ "sigma_v",
+      .default = parameter
+    )
+  ) |>
   # annualize the long-run volatility estimate (from monthly), and its stderror, then
   # calc 90% margin of error (using .95 cutpoint) so we can do 90% conf intervals
-  mutate(estimate=ifelse(parameter=="tau", estimate * sqrt(12), estimate),
-         std_error=ifelse(parameter=="tau", std_error * sqrt(12), std_error),
-         moe90=std_error * qnorm(.95)) |> 
-  select(parameter, class=vname, param_model=estimate, moe90, stderr=std_error, nobs)
+  mutate(
+    estimate = ifelse(parameter == "tau", estimate * sqrt(12), estimate),
+    std_error = ifelse(parameter == "tau", std_error * sqrt(12), std_error),
+    moe90 = std_error * qnorm(.95)
+  ) |>
+  select(
+    parameter,
+    class = vname,
+    param_model = estimate,
+    moe90,
+    stderr = std_error,
+    nobs
+  )
 
-comp <- eqparams1 |> 
-  left_join(params1,
-            by = join_by(parameter, class)) |> 
-  mutate(lbound_acli=param_acli - moe90,
-         ubound_acli=param_acli + moe90) |> 
-  select(parameter, class, param_model, param_acli, moe90, lbound_acli, ubound_acli, stderr, nobs, desc)
+comp <- eqparams1 |>
+  left_join(params1, by = join_by(parameter, class)) |>
+  mutate(lbound_acli = param_acli - moe90, ubound_acli = param_acli + moe90) |>
+  select(
+    parameter,
+    class,
+    param_model,
+    param_acli,
+    moe90,
+    lbound_acli,
+    ubound_acli,
+    stderr,
+    nobs,
+    desc
+  )
 
 comp
 
@@ -289,18 +344,30 @@ parm_order <- c("tau", "phi", "sigma_v", "rho")
 cols_order <- c("us", "intl", "small", "aggr")
 meas_order <- c("default", "lbound", "ubound")
 
-scenarios_ordered <- comp |> 
-  select(parameter, class, default=param_acli, lbound=lbound_acli, ubound=ubound_acli, desc) |> 
-  pivot_longer(cols=c(default, lbound, ubound), names_to = "measure") |> 
-  mutate(parameter=factor(parameter, levels=parm_order),
-         class=factor(class, levels=cols_order),
-         measure=factor(measure, levels=meas_order)) |> 
-  arrange(class) |> 
-  pivot_wider(names_from=class) |> 
-  arrange(parameter, measure) |> 
+scenarios_ordered <- comp |>
+  select(
+    parameter,
+    class,
+    default = param_acli,
+    lbound = lbound_acli,
+    ubound = ubound_acli,
+    desc
+  ) |>
+  pivot_longer(cols = c(default, lbound, ubound), names_to = "measure") |>
+  mutate(
+    parameter = factor(parameter, levels = parm_order),
+    class = factor(class, levels = cols_order),
+    measure = factor(measure, levels = meas_order)
+  ) |>
+  arrange(class) |>
+  pivot_wider(names_from = class) |>
+  arrange(parameter, measure) |>
   relocate(desc, .after = last_col())
 
-writexl::write_xlsx(scenarios_ordered, here::here("data", "equity_scenarios_ordered.xlsx"))
+writexl::write_xlsx(
+  scenarios_ordered,
+  fs::path(GROOT, "data", "equity_scenarios_ordered.xlsx")
+)
 
 ```
 
@@ -329,12 +396,10 @@ The table below shows:
 ```{r}
 #| label: show-comparison
 
-comp |> 
-  gt() |> 
-  fmt_number(columns=c(param_model:stderr),
-             decimals=4) |>
-  fmt_number(columns=c(nobs),
-             decimals=0)
+comp |>
+  gt() |>
+  fmt_number(columns = c(param_model:stderr), decimals = 4) |>
+  fmt_number(columns = c(nobs), decimals = 0)
 
 ```
 
@@ -343,7 +408,7 @@ The next table shows scenarios in a way that will be easy to use to run ACLI var
 ```{r}
 #| label: show-scenarios
 
-scenarios_ordered |> 
+scenarios_ordered |>
   kable()
 
 ```

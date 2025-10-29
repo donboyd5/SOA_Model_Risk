@@ -17,8 +17,9 @@ This will allow head-to-head comparison for each scenario-portfolio combination.
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
-source(fs::path(rptdir, "function_penmod.R")) # for flatmat
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
+source(fs::path(GROOT, "report", "function_penmod.R"))
 
 ```
 
@@ -37,7 +38,7 @@ Save the results as a tibble with list columns, for ease of understanding.
 #| label: functions
 #| output: false
 
-get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
+get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed = 12) {
   # ensure that we hit the desired mean and sd exactly
   set.seed(seed)
   irnorm <- rnorm(n = nsims * nyears) # N(0, 1)
@@ -59,17 +60,17 @@ get_normal <- function(meanreturn, sdreturn, nsims, nyears, seed=12){
 #| label: get-slvsims
 #| output: false
 
-slv_sims <- readRDS(here::here("data", "slvsims.rds"))
+slv_sims <- readRDS(fs::path(GROOT, "data", "slvsims.rds"))
 slv_sims
 glimpse(slv_sims)
 count(slv_sims, vname)
 count(slv_sims, modtype)
 count(slv_sims, vname, modtype) # missing highfixed, tmod
 
-slv_sims |> 
-  filter(vname=="highequity", modtype=="gaussmod") |> 
+slv_sims |>
+  filter(vname == "highequity", modtype == "gaussmod") |>
   unnest(lrmat)
-  
+
 ```
 
 
@@ -78,12 +79,11 @@ slv_sims |>
 #| label: get-acli-mean-logreturns
 #| output: false
 
+df <- readRDS(fs::path(GROOT, "data", "acli_portfolios.rds"))
 
-df <- readRDS(here::here("data", "acli_portfolios.rds"))
-
-acli_means <- df |> 
-  filter(scenario=="baseline", year>0) |> 
-  summarise(lr=mean(logreturn), .by=porttype)
+acli_means <- df |>
+  filter(scenario == "baseline", year > 0) |>
+  summarise(lr = mean(logreturn), .by = porttype)
 
 acli_means
 
@@ -97,42 +97,72 @@ acli_means
 # enhance with a constant matrix and a random normal matrix
 # modorder <- c("acli, constant", "rnormal")
 
-mean_annual_logreturn_highequity <- .0625 # same as highequity acli portfolio
-mean_annual_logreturn_highfixed <- 0.0499 # same as highfixed acli portfolio
+mean_annual_logreturn_highequity <- .0615 # same as highequity acli portfolio updated for 70/30 portfolio, from 0.625 at ~72/28
+mean_annual_logreturn_highfixed <- 0.0418 # same as highfixed acli portfolio updated for 30/70 portfolio, from 0.0499 at ~ 46/54
 
-c(mean_annual_logreturn_highequity, acli_means$lr[acli_means$porttype=="highequity"]) |> round(4)
-c(mean_annual_logreturn_highfixed, acli_means$lr[acli_means$porttype=="highfixed"]) |> round(4)
+c(
+  mean_annual_logreturn_highequity,
+  acli_means$lr[acli_means$porttype == "highequity"]
+) |>
+  round(4)
+c(
+  mean_annual_logreturn_highfixed,
+  acli_means$lr[acli_means$porttype == "highfixed"]
+) |>
+  round(4)
 
-  # mutate(slv=map(lrmat, \(x) x + mean_annual_logreturn_hiequity)) |>  # add target mean annual log return to innovations
-slv2 <- slv_sims |> 
-  rename(porttype=vname, scenario=modtype) |> # djb used to say slv=lrmat -- why??
-  group_by(porttype, scenario) |> 
-  mutate(model=map(lrmat, \(x) x + ifelse(porttype=="highequity",
-                                        mean_annual_logreturn_highequity,
-                                        mean_annual_logreturn_highfixed))) |>  # add target mean annual log return to innovations
-  # base stats on the targeted return, not the raw innovations
-  select(-lrmat) |> 
-  mutate(nsims=map(model, \(x) nrow(x)) |> pluck(1),
-         nyears=map(model, \(x) ncol(x)) |> pluck(1),
-         mean_model=map(model, \(x) mean(x)) |> pluck(1),
-         sd_model=map(model, \(x) sd(x)) |> pluck(1)) |> 
+# mutate(slv=map(lrmat, \(x) x + mean_annual_logreturn_hiequity)) |>  # add target mean annual log return to innovations
+slv2 <- slv_sims |>
+  rename(porttype = vname, scenario = modtype) |> # djb used to say slv=lrmat -- why??
+  group_by(porttype, scenario) |>
   mutate(
-    constant=matrix(data=mean_model, nrow=nsims, ncol=nyears) |> list(),
-    rnormal=get_normal(mean_model, sd_model, nsims, nyears, seed=1234) |> list()) |> 
-  pivot_longer(c(model, constant, rnormal),
-               names_to = "modtype",
-               values_to = "lrmat") |> # lrmat for log returns matrix
-  group_by(scenario, porttype, modtype) |> 
-  mutate(mean=mean(unlist(lrmat)),
-         sd=sd(unlist(lrmat))) |> 
-  select(scenario, porttype, modtype, 
-         nsims, nyears, mean, sd, mean_model, sd_model, lrmat) |> 
-  arrange(scenario, porttype, modtype) |> 
+    model = map(lrmat, \(x) {
+      x +
+        ifelse(
+          porttype == "highequity",
+          mean_annual_logreturn_highequity,
+          mean_annual_logreturn_highfixed
+        )
+    })
+  ) |> # add target mean annual log return to innovations
+  # base stats on the targeted return, not the raw innovations
+  select(-lrmat) |>
+  mutate(
+    nsims = map(model, \(x) nrow(x)) |> pluck(1),
+    nyears = map(model, \(x) ncol(x)) |> pluck(1),
+    mean_model = map(model, \(x) mean(x)) |> pluck(1),
+    sd_model = map(model, \(x) sd(x)) |> pluck(1)
+  ) |>
+  mutate(
+    constant = matrix(data = mean_model, nrow = nsims, ncol = nyears) |> list(),
+    rnormal = get_normal(mean_model, sd_model, nsims, nyears, seed = 1234) |>
+      list()
+  ) |>
+  pivot_longer(
+    c(model, constant, rnormal),
+    names_to = "modtype",
+    values_to = "lrmat"
+  ) |> # lrmat for log returns matrix
+  group_by(scenario, porttype, modtype) |>
+  mutate(mean = mean(unlist(lrmat)), sd = sd(unlist(lrmat))) |>
+  select(
+    scenario,
+    porttype,
+    modtype,
+    nsims,
+    nyears,
+    mean,
+    sd,
+    mean_model,
+    sd_model,
+    lrmat
+  ) |>
+  arrange(scenario, porttype, modtype) |>
   ungroup()
 
-slv2  
-  
-saveRDS(slv2, here::here("data", "slv_and_comparison_portfolios.rds"))
+slv2
+
+saveRDS(slv2, fs::path(GROOT, "data", "slv_and_comparison_portfolios.rds"))
 
 ```
 
@@ -143,7 +173,7 @@ saveRDS(slv2, here::here("data", "slv_and_comparison_portfolios.rds"))
 #| label: get-acli-portfolios
 #| output: false
 
-acli <- readRDS(here::here("data", "acli_portfolios.rds"))
+acli <- readRDS(fs::path(GROOT, "data", "acli_portfolios.rds"))
 glimpse(acli)
 count(acli, scenario)
 count(acli, porttype)
@@ -155,44 +185,62 @@ count(acli, porttype)
 #| label: get-acli-normals
 #| output: false
 
-port1 <- acli |> 
-  filter(year > 0) |> 
-  arrange(scenario, porttype, sim, year) |> 
-  group_by(scenario, porttype) |> 
-  summarise(nsims=length(unique(sim)),
-            nyears=length(unique(year)),
-            mean_model=mean(logreturn),
-            sd_model=sd(logreturn),
-            model=matrix(logreturn, 
-                         nrow=length(unique(sim)),
-                         ncol=length(unique(year)),
-                         byrow=FALSE) |>
-              list(),
-            .groups="drop")
+port1 <- acli |>
+  filter(year > 0) |>
+  arrange(scenario, porttype, sim, year) |>
+  group_by(scenario, porttype) |>
+  summarise(
+    nsims = length(unique(sim)),
+    nyears = length(unique(year)),
+    mean_model = mean(logreturn),
+    sd_model = sd(logreturn),
+    model = matrix(
+      logreturn,
+      nrow = length(unique(sim)),
+      ncol = length(unique(year)),
+      byrow = FALSE
+    ) |>
+      list(),
+    .groups = "drop"
+  )
 
 port1
 
 # enhance with a constant matrix and a random normal matrix
 # modorder <- c("acli, constant", "rnormal")
 
-port2 <- port1 |> 
-  group_by(scenario, porttype) |> 
+port2 <- port1 |>
+  group_by(scenario, porttype) |>
   mutate(
-    constant=matrix(data=mean_model, nrow=nsims, ncol=nyears) |> list(),
-    rnormal=get_normal(mean_model, sd_model, nsims, nyears, seed=1234) |> list()) |> 
-  pivot_longer(c(model, constant, rnormal),
-               names_to = "modtype",
-               values_to = "lrmat") |> # lrmat for log returns matrix
-  group_by(scenario, porttype, modtype) |> 
-  mutate(mean=mean(unlist(lrmat)),
-         sd=sd(unlist(lrmat))) |> 
-  select(scenario, porttype, modtype, nsims, nyears, mean, sd, mean_model, sd_model, lrmat) |> 
-  arrange(scenario, porttype, modtype) |> 
+    constant = matrix(data = mean_model, nrow = nsims, ncol = nyears) |> list(),
+    rnormal = get_normal(mean_model, sd_model, nsims, nyears, seed = 1234) |>
+      list()
+  ) |>
+  pivot_longer(
+    c(model, constant, rnormal),
+    names_to = "modtype",
+    values_to = "lrmat"
+  ) |> # lrmat for log returns matrix
+  group_by(scenario, porttype, modtype) |>
+  mutate(mean = mean(unlist(lrmat)), sd = sd(unlist(lrmat))) |>
+  select(
+    scenario,
+    porttype,
+    modtype,
+    nsims,
+    nyears,
+    mean,
+    sd,
+    mean_model,
+    sd_model,
+    lrmat
+  ) |>
+  arrange(scenario, porttype, modtype) |>
   ungroup()
 
-port2  
-  
-saveRDS(port2, here::here("data", "acli_and_comparison_portfolios.rds"))
+port2
+
+saveRDS(port2, fs::path(GROOT, "data", "acli_and_comparison_portfolios.rds"))
 
 
 ```
@@ -203,30 +251,47 @@ saveRDS(port2, here::here("data", "acli_and_comparison_portfolios.rds"))
 #| label: all-scenarios
 #| output: false
 
-slv_scen <- readRDS(here::here("data", "slv_and_comparison_portfolios.rds"))
-acli_scen <- readRDS(here::here("data", "acli_and_comparison_portfolios.rds"))
+slv_scen <- readRDS(fs::path(
+  GROOT,
+  "data",
+  "slv_and_comparison_portfolios.rds"
+))
+acli_scen <- readRDS(fs::path(
+  GROOT,
+  "data",
+  "acli_and_comparison_portfolios.rds"
+))
 
-all_scen <- bind_rows(slv_scen |> mutate(framework="slv"),
-                      acli_scen |> mutate(framework="acli")) |> 
+all_scen <- bind_rows(
+  slv_scen |> mutate(framework = "slv"),
+  acli_scen |> mutate(framework = "acli")
+) |>
   relocate(framework)
 
-saveRDS(all_scen, here::here("data", "allscen_and_comparison_portfolios.rds"))
+saveRDS(
+  all_scen,
+  fs::path(GROOT, "data", "allscen_and_comparison_portfolios.rds")
+)
 
-all_scen <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
+all_scen <- readRDS(fs::path(
+  GROOT,
+  "data",
+  "allscen_and_comparison_portfolios.rds"
+))
 
 head(all_scen)
 count(all_scen, modtype)
 
-all_scen |> 
+all_scen |>
   filter(modtype %in% c("model")) |>
-  filter(scenario != "tmod") |> 
+  filter(scenario != "tmod") |>
   # mutate(lab=paste0(porttype, "-", modtype, "-", scenario)) |>
-  mutate(lab=paste0(modtype, "-", scenario)) |> 
+  mutate(lab = paste0(modtype, "-", scenario)) |>
   ggplot(aes(mean_model, sd_model, colour = lab)) +
   geom_point() +
-  geom_text_repel(aes(label=lab)) +
-  scale_x_continuous(breaks=seq(.01, .10, by=.005)) +
-  scale_y_continuous(breaks=seq(.01, .20, by=.005)) +
+  geom_text_repel(aes(label = lab)) +
+  scale_x_continuous(breaks = seq(.01, .10, by = .005)) +
+  scale_y_continuous(breaks = seq(.01, .20, by = .005)) +
   facet_wrap(~porttype, ncol = 1, scales = "free")
 
 ```
@@ -245,15 +310,17 @@ Note that:
 ```{r}
 #| label: show-all-scenarios
 
+all_scen <- readRDS(fs::path(
+  GROOT,
+  "data",
+  "allscen_and_comparison_portfolios.rds"
+))
 
-all_scen <- readRDS(here::here("data", "allscen_and_comparison_portfolios.rds"))
-
-all_scen |> 
-  select(framework, scenario, porttype, modtype, nsims, nyears, mean, sd) |> 
-  gt() |> 
-  fmt_number(c(nsims, nyears), decimals=0) |>
-  fmt_percent(c(mean, sd), decimals=2)
-
+all_scen |>
+  select(framework, scenario, porttype, modtype, nsims, nyears, mean, sd) |>
+  gt() |>
+  fmt_number(c(nsims, nyears), decimals = 0) |>
+  fmt_percent(c(mean, sd), decimals = 2)
 
 ```
 

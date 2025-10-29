@@ -17,39 +17,46 @@ Summarize the results for each scenario (each row of the result tibble) by unnes
 #| label: setup
 #| output: false
 
-source(here::here("report", "_common.R"))
+GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
+source(fs::path(GROOT, "report", "_common.R"))
 
 slv_scen_names <- read_csv(
-"scenario,parm,parmdesc,scendesc
+  "scenario,parm,parmdesc,scendesc
 gaussmod, none, none, slv model with gaussian errors
 tmod, df, degrees of freedom, slv model with heavy tails
 skewmod, alpha, skewness parameter, slv model with skewed returns
-levmod, rho, correlation parameter, slv model with volatility correlated with returns") |> 
-  mutate(framework="slv")
+levmod, rho, correlation parameter, slv model with volatility correlated with returns"
+) |>
+  mutate(framework = "slv")
 slv_scen_names
 
-acli_scen_names <- readRDS(here::here("data", "acli_scenario_names.rds"))
+acli_scen_names <- readRDS(fs::path(GROOT, "data", "acli_scenario_names.rds"))
 
 scen_names <- bind_rows(
   slv_scen_names,
-  acli_scen_names) |> 
+  acli_scen_names
+) |>
   relocate(framework)
 
 ## prepare raw excel tables ----
 # library(openxlsx)
 library(writexl)
 
-tabdir <- here::here("report", "results") # where we want to write tables
+tabdir <- fs::path(GROOT, "report", "results") # where we want to write tables
 
 # use this function to write tables
-write_tab <- function(tabname, tab=NULL, tabdir=NULL) {
+write_tab <- function(tabname, tab = NULL, tabdir = NULL) {
   # create a small excel file from a table - regardless of whether it is a tibble or a gt table
   # assumes tab and tabdir exist in the environment, by those names - but can be passed
-  
-  if (is.null(tab)) tab <- get("tab", envir = parent.frame())
-  if (is.null(tabdir)) tabdir <- get("tabdir", envir = parent.frame())
+
+  if (is.null(tab)) {
+    tab <- get("tab", envir = parent.frame())
+  }
+  if (is.null(tabdir)) {
+    tabdir <- get("tabdir", envir = parent.frame())
+  }
   tpath <- fs::path(tabdir, paste0(tabname, ".xlsx"))
-  
+
   if (inherits(tab, "gt_tbl")) {
     data <- tab$`_data`
   } else if (tibble::is_tibble(tab)) {
@@ -58,7 +65,7 @@ write_tab <- function(tabname, tab=NULL, tabdir=NULL) {
     return("ERROR: tab is neither gt table nor tibble!")
   }
   write_xlsx(data, tpath)
-  
+
   # example:
   # write_tab("risk_equity")
 }
@@ -82,49 +89,49 @@ Put the functions here for now. Later put them in a separate file.
 # https://github.com/gchen3/pensionALM/blob/main/alm.R
 
 # Using simulation method to calculate VaR_loss, VaR_erc, VaR_uaal at 95% and 99% over t time period
-# Note: Monte Carlo simulation method for VaR: Under the Monte Carlo method, Value at Risk is calculated by randomly 
-# creating a number of scenarios for future rates to estimate the change in value for each scenario, 
+# Note: Monte Carlo simulation method for VaR: Under the Monte Carlo method, Value at Risk is calculated by randomly
+# creating a number of scenarios for future rates to estimate the change in value for each scenario,
 # and then calculating the VaR according to the worst losses.
 
 VaR_loss <- function(alpha, t, res) {
   # Worst (alpha percentile) asset loss at the end of year t
-  res_cut <- res |> filter(year==t)
-  assets_tail <- quantile(res_cut$assets, (1-alpha)) # assets at the tail
+  res_cut <- res |> filter(year == t)
+  assets_tail <- quantile(res_cut$assets, (1 - alpha)) # assets at the tail
   assets_initial <- res$assets[1] # first simulation in first year
-  
-  VaR_loss <-assets_tail - assets_initial
+
+  VaR_loss <- assets_tail - assets_initial
   VaR_loss_per <- VaR_loss / assets_initial # asset % reduction in year t at 1-alpha percentile
-  
+
   return(VaR_loss_per)
   # VaR_loss(alpha=0.95, t=2, res=test)
-  }
+}
 
 
 VaR_erc <- function(alpha, t, res) {
   # ERC amount at year t, alpha percentile
-  res_cut <- res |> filter(year==t) # data in year t
+  res_cut <- res |> filter(year == t) # data in year t
   erc_tail <- quantile(res_cut$contrib, alpha) # contribution at alpha percentile
   erc_initial <- res$contrib[1] # initial contribution
-  
-  VaR_erc_jump <- erc_tail - erc_initial
-  VaR_erc_jump_per <-  VaR_erc_jump / erc_initial # percentage jump in erc at alpha percentile in year t
 
-  # revisit whether to return all these values  
-  # output <- list(erc_tail=erc_tail, 
-  #                VaR_erc_jump=VaR_erc_jump, 
+  VaR_erc_jump <- erc_tail - erc_initial
+  VaR_erc_jump_per <- VaR_erc_jump / erc_initial # percentage jump in erc at alpha percentile in year t
+
+  # revisit whether to return all these values
+  # output <- list(erc_tail=erc_tail,
+  #                VaR_erc_jump=VaR_erc_jump,
   #                VaR_erc_jump_per=VaR_erc_jump_per)
-  
+
   output <- VaR_erc_jump_per # for now, return a scalar
-  
+
   return(output)
   # VaR_erc(alpha=0.95, t=10, res=test)
 }
 
 
 VaR_uaal <- function(alpha, t, res) {
-  # fr in year t, at 1 - alpha percentile 
-  res_cut <- res |> filter(year==t)
-  VaR_fr <- quantile(res_cut$fr, (1-alpha)) # fr at the 1-alpha percentile
+  # fr in year t, at 1 - alpha percentile
+  res_cut <- res |> filter(year == t)
+  VaR_fr <- quantile(res_cut$fr, (1 - alpha)) # fr at the 1-alpha percentile
   # just return the VaR_fr since VaR_uaal is easily computable if desired
   return(VaR_fr)
   # VaR_uaal(alpha=0.95, t=10, res=test)
@@ -133,23 +140,23 @@ VaR_uaal <- function(alpha, t, res) {
 
 prob_fr <- function(fr_threshold, t, res) {
   # Probability of funded ratio falling below x% at the end of t years
-  
-  res_cut <- res |> filter(year==t)
+
+  res_cut <- res |> filter(year == t)
   n_below <- sum(res_cut$fr < fr_threshold)
   n_percent = n_below / nrow(res_cut)
   return(n_percent)
   # prob_fr(fr_threshold=0.8, t=5, res=test)
- }
+}
 
 
 prob_erc <- function(erc_threshold, t, res) {
   # Probability of contribution rate higher than x% of payroll at the end of t years
   # See CalPERS "Probability of Employer Contribution Rates Exceeding Given Level (at any point in next 30 years)"
-  
-  res_cut <- res |> 
-    filter(year==t) |> 
-    mutate(erc_rate= contrib / payroll)
-  
+
+  res_cut <- res |>
+    filter(year == t) |>
+    mutate(erc_rate = contrib / payroll)
+
   n_above <- sum(res_cut$erc_rate > erc_threshold)
   n_percent <- n_above / nrow(res_cut)
   return(n_percent)
@@ -168,20 +175,20 @@ Get data, show the nested data, and show the head and tail of one scenario unnes
 #| label: get-penmod-results
 #| output: false
 
-result <- readRDS(here::here("data", "allscen_and_comparison_penmod.rds"))
+result <- readRDS(fs::path(GROOT, "data", "allscen_and_comparison_penmod.rds"))
 
 result
 
-result |> 
-  slice_head(n=2) |> 
-  select(-lrmat) |> 
-  unnest(penmod) |> 
+result |>
+  slice_head(n = 2) |>
+  select(-lrmat) |>
+  unnest(penmod) |>
   ht()
 
-result |> 
-  select(-lrmat) |> 
-  filter(scenario=="baseline") |> 
-  unnest(col=penmod) |> 
+result |>
+  select(-lrmat) |>
+  filter(scenario == "baseline") |>
+  unnest(col = penmod) |>
   ht()
 
 ```
@@ -194,46 +201,60 @@ result |>
 #| label: risk-measures
 #| output: false
 
-riskmeasures1 <- result |> 
+riskmeasures1 <- result |>
   # weed out bad results
-  filter(!(framework=="acli" & str_detect(scenario, "rho"))) |> # rho doesn't affect ACLI results
-  filter(!(framework=="slv" & scenario=="tmod")) |>  # t models did not work well for slv models
+  filter(!(framework == "acli" & str_detect(scenario, "rho"))) |> # rho doesn't affect ACLI results
+  filter(!(framework == "slv" & scenario == "tmod")) |> # t models did not work well for slv models
   # NOTE: leaves us with about 60 framework-scenario-portfolio-modtype combinations
   select(-c(lrmat, mean, sd)) |> # we don't need these
-  unnest(col=penmod) |> # 6.66 million observations
-  summarise(mean=first(mean_model),
-            sd=first(sd_model),
-            vloss_a95t10 = VaR_loss(alpha=0.95, t=10, res=pick(everything())), # asset loss at alpha percentile, year t
-            verc_a95t10 = VaR_erc(alpha=0.95, t=10, res=pick(everything())), # ERC amount at year t, alpha percentile
-            vuaal_a95t10 = VaR_uaal(alpha=0.95, t=10, res=pick(everything())), # fr in year t, (1 - alpha) percentile 
-            probfr_fr70t10 = prob_fr(fr_threshold=0.7, t=10, res=pick(everything())), # prob FR below x% at end year t
-            proberc_erc20t10 = prob_erc(erc_threshold=0.20, t=10, res=pick(everything())), # prob ERC above x% payroll at end year t
-            mdn_frt10=median(fr[year==10]), # median FR at end year t
-            .by=c(framework, scenario, porttype, modtype)) # 60 combos
+  unnest(col = penmod) |> # 6.66 million observations
+  summarise(
+    mean = first(mean_model),
+    sd = first(sd_model),
+    vloss_a95t10 = VaR_loss(alpha = 0.95, t = 10, res = pick(everything())), # asset loss at alpha percentile, year t
+    verc_a95t10 = VaR_erc(alpha = 0.95, t = 10, res = pick(everything())), # ERC amount at year t, alpha percentile
+    vuaal_a95t10 = VaR_uaal(alpha = 0.95, t = 10, res = pick(everything())), # fr in year t, (1 - alpha) percentile
+    probfr_fr70t10 = prob_fr(
+      fr_threshold = 0.7,
+      t = 10,
+      res = pick(everything())
+    ), # prob FR below x% at end year t
+    proberc_erc20t10 = prob_erc(
+      erc_threshold = 0.20,
+      t = 10,
+      res = pick(everything())
+    ), # prob ERC above x% payroll at end year t
+    mdn_frt10 = median(fr[year == 10]), # median FR at end year t
+    .by = c(framework, scenario, porttype, modtype)
+  ) # 60 combos
 
-riskmeasures <- riskmeasures1 |> 
-  pivot_longer(-c(framework, scenario, porttype, modtype, mean, sd),
-               names_to = "measure") |> # 6 measures for each combo=360 recs
+riskmeasures <- riskmeasures1 |>
+  pivot_longer(
+    -c(framework, scenario, porttype, modtype, mean, sd),
+    names_to = "measure"
+  ) |> # 6 measures for each combo=360 recs
   pivot_wider(names_from = modtype) |> # 3 modtypes means 120 recs
-  relocate(measure) |> 
-  relocate(model, .after = rnormal) |> 
-  mutate(diff=model - rnormal) |> 
-  left_join(scen_names |> 
-              select(framework, scenario, scendesc), 
-            by = join_by(framework, scenario)) |> 
-  relocate(scendesc) |> 
+  relocate(measure) |>
+  relocate(model, .after = rnormal) |>
+  mutate(diff = model - rnormal) |>
+  left_join(
+    scen_names |>
+      select(framework, scenario, scendesc),
+    by = join_by(framework, scenario)
+  ) |>
+  relocate(scendesc) |>
   arrange(measure, framework, scenario, porttype)
 
 riskmeasures
 
-riskmeasures |> 
+riskmeasures |>
   arrange(porttype, measure, scenario)
 
-riskmeasures |> 
-  filter(framework=="acli", scenario=="baseline", porttype=="highequity")
+riskmeasures |>
+  filter(framework == "acli", scenario == "baseline", porttype == "highequity")
 
-riskmeasures |> 
-  filter(scenario=="baseline", porttype=="highfixed")
+riskmeasures |>
+  filter(scenario == "baseline", porttype == "highfixed")
 
 ```
 
@@ -250,28 +271,50 @@ NOTE: maybe add pure asset measure w/o contribs or payouts
 #| output: false
 
 mod_order <- c("constant", "rnormal", "gaussmod", "skewmod", "levmod", "acli")
-mod_labs <- c("Deterministic", "Random\nnormal", "Gaussian SV", "Skewed SV", "Leverage SV", "Complex ESG")
+mod_labs <- c(
+  "Deterministic",
+  "Random\nnormal",
+  "Gaussian SV",
+  "Skewed SV",
+  "Leverage SV",
+  "Detailed ESG"
+)
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
-structure_flipped <- riskmeasures |> 
-  filter(framework=="slv" | (framework=="acli" & scenario=="baseline")) |> 
-  filter(measure %in% meas_order) |> 
-  select(framework, scenario, porttype, measure, mean, sd, constant, rnormal, model) |> 
-  mutate(measure=factor(measure, levels=meas_order)) |> # to put columns in right order when flipped
-  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
-  filter(!(type %in% c("constant", "rnormal") & scenario != "gaussmod")) |> 
-  mutate(type=case_when(
-    type %in% c("constant", "rnormal") ~ type,
-    framework == "acli" & scenario=="baseline" ~ "acli",
-    .default = scenario)) |> 
-  mutate(type=factor(type, levels=mod_order), # for proper ordering
-         typef=factor(type, levels=mod_order, labels=mod_labs)) |> # nice labels
-  relocate(type, typef) |> 
-  select(-scenario, -framework) |> 
+structure_flipped <- riskmeasures |>
+  filter(framework == "slv" | (framework == "acli" & scenario == "baseline")) |>
+  filter(measure %in% meas_order) |>
+  select(
+    framework,
+    scenario,
+    porttype,
+    measure,
+    mean,
+    sd,
+    constant,
+    rnormal,
+    model
+  ) |>
+  mutate(measure = factor(measure, levels = meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |>
+  filter(!(type %in% c("constant", "rnormal") & scenario != "gaussmod")) |>
+  mutate(
+    type = case_when(
+      type %in% c("constant", "rnormal") ~ type,
+      framework == "acli" & scenario == "baseline" ~ "acli",
+      .default = scenario
+    )
+  ) |>
+  mutate(
+    type = factor(type, levels = mod_order), # for proper ordering
+    typef = factor(type, levels = mod_order, labels = mod_labs)
+  ) |> # nice labels
+  relocate(type, typef) |>
+  select(-scenario, -framework) |>
   arrange(measure) |>
-  pivot_wider(names_from = measure) |> 
-  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
+  pivot_wider(names_from = measure) |>
+  mutate(sd = ifelse(type == "constant", 0, sd)) |>
   arrange(type)
 
 ```
@@ -294,40 +337,52 @@ Takeaways:
 #| eval: true
 #| output: true
 
-tab <- structure_flipped |> 
-  filter(porttype=="highequity") |> 
-  select(-porttype, -mdn_frt10) |> 
-  mutate(rn=row_number()) |> 
-  relocate(rn) |> 
-  gt() |> 
-  cols_hide(c(type)) |> 
+tab <- structure_flipped |>
+  filter(porttype == "highequity") |>
+  select(-porttype, -mdn_frt10) |>
+  mutate(rn = row_number()) |>
+  relocate(rn) |>
+  gt() |>
+  cols_hide(c(type)) |>
   tab_header(
-    title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"),
-    subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
+    title = html(
+      "Selected Risk Measures for Alternative Stochastic Volatility Models, High Equity Portfolio"
+    ),
+    subtitle = html(
+      "Normal returns calibrated to have same mean and SD as Gaussian SV model"
+    )
   ) |>
-  cols_label(rn="Row number",
-             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
-             mean = html("Mean annual<br>log return"),
-             sd = html("Standard deviation"),
-             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
-             ) |> 
-  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 1) |> 
-  fmt_percent(columns = c(mean, sd),
-              decimals = 1) |> 
-  tab_footnote(
-    footnote = "Complex model differs from other models in multiple ways",
-    locations = cells_body(
-      columns = c(typef),
-      rows = type == "acli"))
+  cols_label(
+    rn = "Row number",
+    typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+    mean = html("Mean annual<br>log return"),
+    sd = html("Standard deviation"),
+    vloss_a95t10 = html(
+      "VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"
+    ),
+    verc_a95t10 = html(
+      "VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"
+    )
+  ) |>
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10), decimals = 1) |>
+  fmt_percent(columns = c(mean, sd), decimals = 1) # |>
+# tab_footnote(
+#   footnote = "Detailed model differs from other models in multiple ways",
+#   locations = cells_body(
+#     columns = c(typef),
+#     rows = type == "acli"))
 tab
 
-write_tab("risk_measures_highequity")  
+gtsave(
+  tab,
+  "risk_measures_highequity_table.png",
+  path = fs::path(GROOT, "report", "results")
+)
+
+write_tab("risk_measures_highequity")
 
 # tab_source_note(source_note = "Asset loss at 5th percentile")
 #   tab_source_note(source_note = htmltools::HTML('<div style="text-align: left;">Note: This table shows sample data.</div>'))
-
 
 ```
 
@@ -339,26 +394,34 @@ write_tab("risk_measures_highequity")
 
 # NO LONGER USED ----
 
-structure_flipped |> 
-  filter(porttype=="highequity") |> 
-  filter(type != "constant") |> 
+structure_flipped |>
+  filter(porttype == "highequity") |>
+  filter(type != "constant") |>
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour="black") +
-  geom_text_repel(aes(label=typef), colour="blue") +
-  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
-                     breaks=seq(-1, 1, by=.01),
-                     labels = scales::percent_format(accuracy=1)) +
-  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
-                     breaks=seq(-1, 2, by=.01),
-                     labels = scales::percent_format(accuracy=1)) +  
-  ggtitle("Impact of model structure on risk of extreme asset loss and extreme contribution increase",
-          subtitle="High-equity portfolios") +
-  labs(caption="All portfolios have mean log return of ~6.25%") +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = typef), colour = "blue") +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "High-equity portfolios"
+  ) +
+  labs(caption = "All portfolios have mean log return of ~6.25%") +
   theme_bw() +
-  theme(plot.title = element_text(size = 11),
-        plot.subtitle = element_text(size = 8)) +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
   caption_left
-  
+
 
 ```
 
@@ -377,37 +440,50 @@ Takeaways:
 #| eval: true
 #| output: true
 
-tab <- structure_flipped |> 
-  filter(porttype=="highfixed") |> 
-  select(-porttype, -mdn_frt10) |>  
-  mutate(rn=row_number()) |> 
-  relocate(rn) |> 
-  gt() |> 
-  cols_hide(c(type)) |> 
+tab <- structure_flipped |>
+  filter(porttype == "highfixed") |>
+  select(-porttype, -mdn_frt10) |>
+  mutate(rn = row_number()) |>
+  relocate(rn) |>
+  gt() |>
+  cols_hide(c(type)) |>
   tab_header(
-    title = html("Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed-Income Portfolio"),
-    subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
+    title = html(
+      "Selected Risk Measures for Alternative Stochastic Volatility Models, High Fixed-Income Portfolio"
+    ),
+    subtitle = html(
+      "Normal returns calibrated to have same mean and SD as Gaussian SV model"
+    )
   ) |>
-  cols_label(rn="Row number",
-             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
-             mean = html("Mean annual<br>log return"),
-             sd = html("Standard deviation"),
-             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
-  ) |> 
-  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 1) |> 
-  fmt_percent(columns = c(mean, sd),
-              decimals = 1) |> 
-  tab_footnote(
-    footnote = "Complex model differs from other models in multiple ways",
-    locations = cells_body(
-      columns = c(typef),
-      rows = type == "acli"))
+  cols_label(
+    rn = "Row number",
+    typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+    mean = html("Mean annual<br>log return"),
+    sd = html("Standard deviation"),
+    vloss_a95t10 = html(
+      "VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"
+    ),
+    verc_a95t10 = html(
+      "VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"
+    )
+  ) |>
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10), decimals = 1) |>
+  fmt_percent(columns = c(mean, sd), decimals = 1) # |>
+# tab_footnote(
+#   footnote = "Detailed model differs from other models in multiple ways",
+#   locations = cells_body(
+#     columns = c(typef),
+#     rows = type == "acli"))
 
 tab
 
-write_tab("risk_measures_highfixed")  
+gtsave(
+  tab,
+  "risk_measures_highfixed_table.png",
+  path = fs::path(GROOT, "report", "results")
+)
+
+write_tab("risk_measures_highfixed")
 
 ```
 
@@ -419,30 +495,38 @@ write_tab("risk_measures_highfixed")
 
 # NO LONGER USED ----
 
-structure_flipped |> 
-  filter(porttype=="highfixed") |> 
-  filter(type != "constant") |> 
+structure_flipped |>
+  filter(porttype == "highfixed") |>
+  filter(type != "constant") |>
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour="black") +
-  geom_text_repel(aes(label=typef), colour="blue") +
-  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
-                     breaks=seq(-1, 1, by=.01),
-                     labels = scales::percent_format(accuracy=1)) +
-  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
-                     breaks=seq(-1, 2, by=.01),
-                     labels = scales::percent_format(accuracy=1)) +  
-  ggtitle("Impact of model structure on risk of extreme asset loss and extreme contribution increase",
-          subtitle="High fixed-income portfolios") +
-  labs(caption="All portfolios have mean log return of ~5.00%") +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = typef), colour = "blue") +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "High fixed-income portfolios"
+  ) +
+  labs(caption = "All portfolios have mean log return of ~5.00%") +
   theme_bw() +
-  theme(plot.title = element_text(size = 11),
-        plot.subtitle = element_text(size = 8)) +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
   caption_left
 
- # theme(
- #    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
- #    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
- #  )
+# theme(
+#    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
+#    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
+#  )
 
 ```
 
@@ -454,28 +538,51 @@ structure_flipped |>
 
 figure_Vloss_model <- structure_flipped |>
   # filter(porttype=="highequity") |>
-  mutate(porttype=factor(porttype,
-                         levels=c("highequity", "highfixed"),
-                         labels=c("High-Equity Portfolio", "High-Fixed Portfolio")),
-         fill_color = ifelse(type == "constant", "grey85", "grey70"),
-         line_type = ifelse(type == "constant", "solid", "dashed")) |>
+  mutate(
+    porttype = factor(
+      porttype,
+      levels = c("highequity", "highfixed"),
+      labels = c("High-Equity Portfolio", "High-Fixed Portfolio")
+    ),
+    fill_color = ifelse(type == "constant", "grey85", "grey70"),
+    line_type = ifelse(type == "constant", "solid", "dashed")
+  ) |>
   ggplot(aes(x = typef, y = vloss_a95t10)) +
-  geom_bar(stat = "identity", aes(fill = fill_color, linetype = line_type),
-           colour = "black", width = 0.5, show.legend = FALSE) +
-  geom_text(aes(label = scales::percent(vloss_a95t10, accuracy = 1)),
-            vjust = 1.5, size = 3) +
-  scale_y_continuous(name="% Change",
-                     breaks = seq(-0.4, 0.5, .1), limit = c(-0.4, 0.5), labels = label_percent(accuracy=1)) +
-  labs(x=NULL) +
+  geom_bar(
+    stat = "identity",
+    aes(fill = fill_color, linetype = line_type),
+    colour = "black",
+    width = 0.5,
+    show.legend = FALSE
+  ) +
+  geom_text(
+    aes(label = scales::percent(vloss_a95t10, accuracy = 1)),
+    vjust = 1.5,
+    size = 3
+  ) +
+  scale_y_continuous(
+    name = "% Change",
+    breaks = seq(-0.4, 0.5, .1),
+    limit = c(-0.4, 0.5),
+    labels = label_percent(accuracy = 1)
+  ) +
+  labs(x = NULL) +
   theme_bw() +
-  ggtitle("Asset % change year 10 vs. year 1, 5th percentile",
-          subtitle = "Alternative models, mean log return ~6.25%") +
+  ggtitle(
+    "Asset % change year 10 vs. year 1, 5th percentile",
+    subtitle = "Alternative models, mean log return ~6.15%"
+  ) +
   facet_wrap(~porttype, ncol = 1, scales = "fixed") +
   scale_fill_identity() +
   scale_color_identity()
- 
+
 figure_Vloss_model
-ggsave(filename=here::here("report", "results", "Figure_vloss_model.png"), plot=figure_Vloss_model, width=10, height=6)
+ggsave(
+  filename = fs::path(GROOT, "report", "results", "Figure_vloss_model.png"),
+  plot = figure_Vloss_model,
+  width = 10,
+  height = 6
+)
 
 ```
 
@@ -486,28 +593,50 @@ ggsave(filename=here::here("report", "results", "Figure_vloss_model.png"), plot=
 
 figure_VERC_model <- structure_flipped |>
   # filter(porttype=="highequity") |>
-  mutate(porttype=factor(porttype,
-                         levels=c("highequity", "highfixed"),
-                         labels=c("High-Equity Portfolio", "High-Fixed Portfolio")),
-         fill_color = ifelse(type == "constant", "grey85", "grey70"),
-         line_type = ifelse(type == "constant", "solid", "dashed")) |>
+  mutate(
+    porttype = factor(
+      porttype,
+      levels = c("highequity", "highfixed"),
+      labels = c("High-Equity Portfolio", "High-Fixed Portfolio")
+    ),
+    fill_color = ifelse(type == "constant", "grey85", "grey70"),
+    line_type = ifelse(type == "constant", "solid", "dashed")
+  ) |>
   ggplot(aes(x = typef, y = verc_a95t10)) +
-  geom_bar(stat = "identity", aes(fill = fill_color, linetype = line_type),
-           colour = "black", width = 0.5, show.legend = FALSE) +
-  geom_text(aes(label = scales::percent(verc_a95t10, accuracy = 1)),
-            vjust = 1.5, size = 3) +
-  scale_y_continuous(name="% Change",
-                     breaks = seq(-1, 2, .2), labels = label_percent(accuracy=1)) +
-  labs(x=NULL) +
+  geom_bar(
+    stat = "identity",
+    aes(fill = fill_color, linetype = line_type),
+    colour = "black",
+    width = 0.5,
+    show.legend = FALSE
+  ) +
+  geom_text(
+    aes(label = scales::percent(verc_a95t10, accuracy = 1)),
+    vjust = 1.5,
+    size = 3
+  ) +
+  scale_y_continuous(
+    name = "% Change",
+    breaks = seq(-1, 2, .2),
+    labels = label_percent(accuracy = 1)
+  ) +
+  labs(x = NULL) +
   theme_bw() +
-  ggtitle("Contribution % change year 10 vs. year 1, 95th percentile",
-          subtitle = "Alternative models, mean log return ~6.25%") +
+  ggtitle(
+    "Contribution % change year 10 vs. year 1, 95th percentile",
+    subtitle = "Alternative models, mean log return ~6.15%"
+  ) +
   facet_wrap(~porttype, ncol = 1, scales = "fixed") +
   scale_fill_identity() +
   scale_color_identity()
 figure_VERC_model
 
-ggsave(filename=here::here("report", "results", "Figure_VERC_model.png"), plot=figure_VERC_model, width=10, height=6)
+ggsave(
+  filename = fs::path(GROOT, "report", "results", "Figure_VERC_model.png"),
+  plot = figure_VERC_model,
+  width = 10,
+  height = 6
+)
 
 ```
 
@@ -526,38 +655,69 @@ Same portfolio, Same ACLI model, Same mean, Same SD
 
 scen_names
 
-parm_order <- c("constant", "rnormal", "baseline", "phi", "rho", "sigma_v", "tau")
+parm_order <- c(
+  "constant",
+  "rnormal",
+  "baseline",
+  "phi",
+  "rho",
+  "sigma_v",
+  "tau"
+)
 
-mod_order <- scen_names |> 
-  filter(framework=="acli") |> 
-  rename(type=scenario, typef=scendesc) |> 
-  add_row(framework="acli", type="constant", parm="constant", typef="Deterministic") |> 
-  add_row(framework="acli", type="rnormal", parm="rnormal", typef="Random normal") |> 
-  mutate(parm=factor(parm, levels=parm_order)) |> 
-  arrange(parm, bound) |> 
-  mutate(order=row_number())
+mod_order <- scen_names |>
+  filter(framework == "acli") |>
+  rename(type = scenario, typef = scendesc) |>
+  add_row(
+    framework = "acli",
+    type = "constant",
+    parm = "constant",
+    typef = "Deterministic"
+  ) |>
+  add_row(
+    framework = "acli",
+    type = "rnormal",
+    parm = "rnormal",
+    typef = "Random normal"
+  ) |>
+  mutate(parm = factor(parm, levels = parm_order)) |>
+  arrange(parm, bound) |>
+  mutate(order = row_number())
 
 meas_order <- c("vloss_a95t10", "verc_a95t10", "mdn_frt10")
 
-parm_flipped <- riskmeasures |> 
-  filter(framework=="acli", measure %in% meas_order) |> 
-  select(framework, porttype, scenario, measure, mean, sd, constant, rnormal, model) |> 
-  mutate(measure=factor(measure, levels=meas_order)) |>  # to put columns in right order when flipped
-  pivot_longer(c(constant, rnormal, model), names_to = "type") |> 
-  filter(!(type %in% c("constant", "rnormal") & scenario != "baseline")) |> 
-  mutate(type=case_when(
-    type %in% c("constant", "rnormal") ~ type,
-    .default = scenario)) |> 
-  select(-scenario) |> 
+parm_flipped <- riskmeasures |>
+  filter(framework == "acli", measure %in% meas_order) |>
+  select(
+    framework,
+    porttype,
+    scenario,
+    measure,
+    mean,
+    sd,
+    constant,
+    rnormal,
+    model
+  ) |>
+  mutate(measure = factor(measure, levels = meas_order)) |> # to put columns in right order when flipped
+  pivot_longer(c(constant, rnormal, model), names_to = "type") |>
+  filter(!(type %in% c("constant", "rnormal") & scenario != "baseline")) |>
+  mutate(
+    type = case_when(
+      type %in% c("constant", "rnormal") ~ type,
+      .default = scenario
+    )
+  ) |>
+  select(-scenario) |>
   arrange(measure) |>
-  pivot_wider(names_from = measure) |> 
-  relocate(type) |> 
-  left_join(mod_order, by = join_by(type, framework)) |> 
-  mutate(sd=ifelse(type=="constant", 0, sd)) |> 
-  arrange(porttype, order) |> 
+  pivot_wider(names_from = measure) |>
+  relocate(type) |>
+  left_join(mod_order, by = join_by(type, framework)) |>
+  mutate(sd = ifelse(type == "constant", 0, sd)) |>
+  arrange(porttype, order) |>
   select(-c(parmdesc, bound))
 
-parm_flipped  
+parm_flipped
 
 ```
 
@@ -567,31 +727,48 @@ parm_flipped
 #| eval: true
 #| output: true
 
-tab <- parm_flipped |> 
-  filter(porttype=="highequity") |> 
-  select(type, typef, mean, sd, vloss_a95t10, verc_a95t10)|> 
-  mutate(rn=row_number()) |> 
-  relocate(rn) |> 
-  gt() |> 
-  cols_hide(c(type)) |> 
+tab <- parm_flipped |>
+  filter(porttype == "highequity") |>
+  select(type, typef, mean, sd, vloss_a95t10, verc_a95t10) |>
+  mutate(rn = row_number()) |>
+  relocate(rn) |>
+  gt() |>
+  cols_hide(c(type)) |>
   tab_header(
-    title = html("Selected Risk Measures for Alternative Parameterizations of the Complex ESG, High Equity Portfolio"),
+    title = html(
+      "Selected Risk Measures for Alternative Parameter Assumptions for the Detailed ESG, High Equity Portfolio"
+    ),
     # subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
-  cols_label(rn="Row number",
-             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
-             mean = html("Mean annual<br>log return"),
-             sd = html("Standard deviation"),
-             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
-             ) |> 
-  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 1) |> 
-  fmt_percent(columns = c(mean, sd),
-              decimals = 1)
+  cols_label(
+    rn = "Row number",
+    typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+    mean = html("Mean annual<br>log return"),
+    sd = html("Standard deviation"),
+    vloss_a95t10 = html(
+      "VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"
+    ),
+    verc_a95t10 = html(
+      "VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"
+    )
+  ) |>
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10), decimals = 1) |>
+  fmt_percent(columns = c(mean, sd), decimals = 1)
 tab
 
-write_tab("parm_risk_measures_highequity")  
+vwidth <- 1340 # 992
+vheight <- 744 # 744
+zoom <- 1
+gtsave(
+  tab,
+  "parm_risk_measures_highequity_table.png",
+  path = fs::path(GROOT, "report", "results"),
+  vwidth = vwidth,
+  vheight = vheight,
+  zoom = zoom
+)
+
+write_tab("parm_risk_measures_highequity")
 ```
 
 
@@ -601,31 +778,48 @@ write_tab("parm_risk_measures_highequity")
 #| eval: true
 #| output: true
 
-tab <- parm_flipped |> 
-  filter(porttype=="highfixed") |> 
-  select(type, typef, mean, sd, vloss_a95t10, verc_a95t10)|> 
-  mutate(rn=row_number()) |> 
-  relocate(rn) |> 
-  gt() |> 
-  cols_hide(c(type)) |> 
+tab <- parm_flipped |>
+  filter(porttype == "highfixed") |>
+  select(type, typef, mean, sd, vloss_a95t10, verc_a95t10) |>
+  mutate(rn = row_number()) |>
+  relocate(rn) |>
+  gt() |>
+  cols_hide(c(type)) |>
   tab_header(
-    title = html("Selected Risk Measures for Alternative Parameterizations of the Complex ESG, High Fixed-Income Portfolio"),
+    title = html(
+      "Selected Risk Measures for Alternative Parameter Assumptions for the Detailed ESG, High Fixed-Income Portfolio"
+    ),
     # subtitle = html("Normal returns calibrated to have same mean and SD as Gaussian SV model")
   ) |>
-  cols_label(rn="Row number",
-             typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
-             mean = html("Mean annual<br>log return"),
-             sd = html("Standard deviation"),
-             vloss_a95t10 = html("VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"),
-             verc_a95t10 = html("VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)")
-             ) |> 
-  fmt_percent(columns = c(vloss_a95t10, verc_a95t10),
-             decimals = 1) |> 
-  fmt_percent(columns = c(mean, sd),
-              decimals = 1)
+  cols_label(
+    rn = "Row number",
+    typef = html("Deterministic,<br>Random normal, or<br>modeled returns"),
+    mean = html("Mean annual<br>log return"),
+    sd = html("Standard deviation"),
+    vloss_a95t10 = html(
+      "VaR % asset loss<br>Year 10 vs. Year 1<br>(5th percentile)"
+    ),
+    verc_a95t10 = html(
+      "VaR % contribution increase<br>Year 10 vs. Year 1<br>(95th percentile)"
+    )
+  ) |>
+  fmt_percent(columns = c(vloss_a95t10, verc_a95t10), decimals = 1) |>
+  fmt_percent(columns = c(mean, sd), decimals = 1)
 tab
 
-write_tab("parm_risk_measures_highfixed")  
+# gtsave(tab, "parm_risk_measures_highfixed_table.png", path = fs::path(GROOT, "report", "results"))
+
+gtsave(
+  tab,
+  "parm_risk_measures_highfixed_table.png",
+  path = fs::path(GROOT, "report", "results"),
+  vwidth = vwidth,
+  vheight = vheight,
+  zoom = zoom
+)
+
+write_tab("parm_risk_measures_highfixed")
+
 ```
 
 
@@ -640,28 +834,40 @@ NOTE: all scenarios come from a complex ESG.
 #| output: true
 
 parm_flipped |>
-  filter(porttype=="highequity", type != "constant") |> 
-  select(type, vloss_a95t10, verc_a95t10) |> 
-  mutate(rnorm=type=="rnormal") |> 
-  mutate(group=case_when(type=="rnormal" ~ 1,
-                         type=="baseline" ~ 2,
-                         .default=3),
-         group=factor(group)) |> 
+  filter(porttype == "highequity", type != "constant") |>
+  select(type, vloss_a95t10, verc_a95t10) |>
+  mutate(rnorm = type == "rnormal") |>
+  mutate(
+    group = case_when(
+      type == "rnormal" ~ 1,
+      type == "baseline" ~ 2,
+      .default = 3
+    ),
+    group = factor(group)
+  ) |>
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour="black") +
-  geom_text_repel(aes(label=type, colour=group)) +
-  scale_colour_manual(values=c("red", "darkgreen", "blue")) +
-  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
-                     breaks=seq(-1, 1, by=.02),
-                     labels = scales::percent_format(accuracy=1)) +
-  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
-                     breaks=seq(-1, 2, by=.02),
-                     labels = scales::percent_format(accuracy=1)) +  
-  ggtitle("Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
-          subtitle="Complex ESG, High-equity portfolios") +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = type, colour = group)) +
+  scale_colour_manual(values = c("red", "darkgreen", "blue")) +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .02),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .02),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "Complex ESG, High-equity portfolios"
+  ) +
   theme_bw() +
-  theme(plot.title = element_text(size = 11),
-        plot.subtitle = element_text(size = 8)) +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
   legend_none
 
 ```
@@ -676,28 +882,40 @@ parm_flipped |>
 #| output: true
 
 parm_flipped |>
-  filter(porttype=="highfixed", type != "constant") |> 
-  select(type, vloss_a95t10, verc_a95t10) |> 
-  mutate(rnorm=type=="rnormal") |> 
-  mutate(group=case_when(type=="rnormal" ~ 1,
-                         type=="baseline" ~ 2,
-                         .default=3),
-         group=factor(group)) |> 
+  filter(porttype == "highfixed", type != "constant") |>
+  select(type, vloss_a95t10, verc_a95t10) |>
+  mutate(rnorm = type == "rnormal") |>
+  mutate(
+    group = case_when(
+      type == "rnormal" ~ 1,
+      type == "baseline" ~ 2,
+      .default = 3
+    ),
+    group = factor(group)
+  ) |>
   ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour="black") +
-  geom_text_repel(aes(label=type, colour=group)) +
-  scale_colour_manual(values=c("red", "darkgreen", "blue")) +
-  scale_x_continuous(name="Asset % change year 10 vs. year 1, 5th percentile",
-                     breaks=seq(-1, 1, by=.02),
-                     labels = scales::percent_format(accuracy=1)) +
-  scale_y_continuous(name="Contribution % change year 10 vs. year 1, 95th percentile",
-                     breaks=seq(-1, 2, by=.02),
-                     labels = scales::percent_format(accuracy=1)) +  
-  ggtitle("Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
-          subtitle="Complex ESG, High fixed-income portfolios") +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = type, colour = group)) +
+  scale_colour_manual(values = c("red", "darkgreen", "blue")) +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .02),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .02),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model parameterization on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "Complex ESG, High fixed-income portfolios"
+  ) +
   theme_bw() +
-  theme(plot.title = element_text(size = 11),
-        plot.subtitle = element_text(size = 8))+
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
   legend_none
 
 ```
@@ -713,69 +931,130 @@ parm_flipped |>
 # ns(riskmeasures)
 # ns(riskmeasures1)
 
-range_data <- riskmeasures |> 
-  filter(framework=="acli", measure %in% c("vloss_a95t10", "verc_a95t10")) |> 
-  select(scenario, measure, porttype, rnormal, model) |> 
-  mutate(scenario=str_replace(scenario, "sigma_v", "sigmaV")) |> 
-  separate_wider_delim(cols=scenario, names=c("parameter", "bound"), delim="_", too_few = "align_start") |>
-  mutate(bound=ifelse(is.na(bound), "point", bound),
-         measure=factor(measure,
-                        levels=c("vloss_a95t10", "verc_a95t10"),
-                        labels=c("VaR_loss", "VaR_ERC")),
-         porttype=factor(porttype,
-                         levels=c("highequity", "highfixed"),
-                         labels=c("High-Equity Portfolio", "High-Fixed Portfolio"))) |> 
-  pivot_longer(cols = c(rnormal, model)) |> 
-  filter((parameter=="baseline") | name=="model") |>  
-  pivot_wider(names_from = bound) |> 
-  mutate(lowloss=pmin(lbound, ubound),
-         highloss=pmax(lbound, ubound))
+range_data <- riskmeasures |>
+  filter(framework == "acli", measure %in% c("vloss_a95t10", "verc_a95t10")) |>
+  select(scenario, measure, porttype, rnormal, model) |>
+  mutate(scenario = str_replace(scenario, "sigma_v", "sigmaV")) |>
+  separate_wider_delim(
+    cols = scenario,
+    names = c("parameter", "bound"),
+    delim = "_",
+    too_few = "align_start"
+  ) |>
+  mutate(
+    bound = ifelse(is.na(bound), "point", bound),
+    measure = factor(
+      measure,
+      levels = c("vloss_a95t10", "verc_a95t10"),
+      labels = c("VaR_loss", "VaR_ERC")
+    ),
+    porttype = factor(
+      porttype,
+      levels = c("highequity", "highfixed"),
+      labels = c("High-Equity Portfolio", "High-Fixed Portfolio")
+    )
+  ) |>
+  pivot_longer(cols = c(rnormal, model)) |>
+  filter((parameter == "baseline") | name == "model") |>
+  pivot_wider(names_from = bound) |>
+  mutate(lowloss = pmin(lbound, ubound), highloss = pmax(lbound, ubound))
 
-stats <- range_data |> 
-  filter(parameter=="baseline") |> 
+stats <- range_data |>
+  filter(parameter == "baseline") |>
   select(measure, porttype, name, point)
 
 p <- range_data |>
-  filter(parameter!="baseline") |> 
+  filter(parameter != "baseline") |>
   filter(measure == "VaR_loss") |>
-  # filter(porttype=="High-Equity") |> 
+  # filter(porttype=="High-Equity") |>
   ggplot(aes(y = parameter)) +
-  geom_linerange(aes(xmin = lowloss, xmax = highloss), linewidth=10, color = "gray70") + # size = 10, 
-  geom_text(aes(lowloss, label=percent(lowloss, accuracy=.1)), hjust=1, size = 3.5, nudge_x=-0.0015) +
-  geom_text(aes(highloss, label=percent(highloss, accuracy=.1)), hjust=0, size = 3.5, nudge_x=0.0015) +
+  geom_linerange(
+    aes(xmin = lowloss, xmax = highloss),
+    linewidth = 10,
+    color = "gray70"
+  ) + # size = 10,
+  geom_text(
+    aes(lowloss, label = percent(lowloss, accuracy = .1)),
+    hjust = 1,
+    size = 3.5,
+    nudge_x = -0.0015
+  ) +
+  geom_text(
+    aes(highloss, label = percent(highloss, accuracy = .1)),
+    hjust = 0,
+    size = 3.5,
+    nudge_x = 0.0015
+  ) +
   # geom_vline(aes(xintercept = point), colour="blue", data=stats |> filter(name=="model", measure == "VaR_loss")) +
   # geom_vline(aes(xintercept = point), colour="red", data=stats |> filter(name=="rnormal", measure == "VaR_loss")) +
-  scale_x_continuous(labels = scales::label_percent(accuracy=1), breaks = seq(-1, 1, .05)) +
+  scale_x_continuous(
+    labels = scales::label_percent(accuracy = 1),
+    breaks = seq(-1, 1, .05)
+  ) +
   xlab("Range of VaR Asset Loss (5th percentile) at 10th Year") +
   ylab(NULL) +
   theme_bw() +
-  facet_wrap(~ porttype, scales = "fixed",  ncol = 1) +
-  ggtitle("VaR of Asset Loss Under Alternative ESG Model Parameterizations",
-          subtitle = "Based on upper-bound and lower-bound values of important model parameters")
+  facet_wrap(~porttype, scales = "fixed", ncol = 1) +
+  ggtitle(
+    "VaR of Asset Loss Under Alternative ESG Model Parameter Assumptions",
+    subtitle = "Based on upper-bound and lower-bound values of important model parameters"
+  )
 p
-ggsave(filename=here::here("report", "results", "FigureVaRLoss.png"), plot=p, width=10, height=6, scale=1.5)
-
+ggsave(
+  filename = fs::path(GROOT, "report", "results", "FigureVaRLoss.png"),
+  plot = p,
+  width = 10,
+  height = 6,
+  scale = 1.5
+)
 
 
 p <- range_data |>
-  filter(parameter!="baseline") |> 
+  filter(parameter != "baseline") |>
   filter(measure == "VaR_ERC") |>
-  # filter(porttype=="High-Equity") |> 
+  # filter(porttype=="High-Equity") |>
   ggplot(aes(y = parameter)) +
-  geom_linerange(aes(xmin = lowloss, xmax = highloss), linewidth = 10, color = "gray70") +
-  geom_text(aes(lowloss, label=percent(lowloss, accuracy=.1)), hjust=1, size = 3.5, nudge_x=-0.0015) +
-  geom_text(aes(highloss, label=percent(highloss, accuracy=.1)), hjust=0, size = 3.5, nudge_x=0.0015) +
+  geom_linerange(
+    aes(xmin = lowloss, xmax = highloss),
+    linewidth = 10,
+    color = "gray70"
+  ) +
+  geom_text(
+    aes(lowloss, label = percent(lowloss, accuracy = .1)),
+    hjust = 1,
+    size = 3.5,
+    nudge_x = -0.0015
+  ) +
+  geom_text(
+    aes(highloss, label = percent(highloss, accuracy = .1)),
+    hjust = 0,
+    size = 3.5,
+    nudge_x = 0.0015
+  ) +
   # geom_vline(aes(xintercept = point), colour="blue", data=stats |> filter(name=="model", measure == "VaR_loss")) +
   # geom_vline(aes(xintercept = point), colour="red", data=stats |> filter(name=="rnormal", measure == "VaR_loss")) +
-  scale_x_continuous(labels = scales::label_percent(accuracy=1), breaks = seq(0, 2, .05)) +
-  xlab("Range of Employer Contribution Increase (Worst 95th percentile) at 10th Year") +
+  scale_x_continuous(
+    labels = scales::label_percent(accuracy = 1),
+    breaks = seq(0, 2, .05)
+  ) +
+  xlab(
+    "Range of Employer Contribution Increase (Worst 95th percentile) at 10th Year"
+  ) +
   ylab(NULL) +
   theme_bw() +
-  facet_wrap(~ porttype, scales = "fixed",  ncol = 1) +
-  ggtitle("VaR of Employer Contribution Increase Under Alternative ESG Model Parameterizations",
-          subtitle = "Based on upper-bound and lower-bound values of important model parameters")
+  facet_wrap(~porttype, scales = "fixed", ncol = 1) +
+  ggtitle(
+    "VaR of Employer Contribution Increase Under Alternative ESG Model Parameter Assumptions",
+    subtitle = "Based on upper-bound and lower-bound values of important model parameters"
+  )
 p
-ggsave(filename=here::here("report", "results", "FigureVaRERC.png"), plot=p, width=10, height=6, scale=1.5)
+ggsave(
+  filename = fs::path(GROOT, "report", "results", "FigureVaRERC.png"),
+  plot = p,
+  width = 10,
+  height = 6,
+  scale = 1.5
+)
 
 ```
 
@@ -789,25 +1068,29 @@ ggsave(filename=here::here("report", "results", "FigureVaRERC.png"), plot=p, wid
 
 library(openxlsx)
 
-tabdir <- here::here("report", "results") # where we want to write tables
+tabdir <- fs::path(GROOT, "report", "results") # where we want to write tables
 wbpath <- fs::path(tabdir, "wb.xlsx")
-saveWorkbook(wb, wbpath, overwrite = TRUE)
-
+# saveWorkbook(wb, wbpath, overwrite = TRUE) # ERROR wb not found!!!
 
 addxl <- function(tabname, tab = NULL, wbpath = NULL) {
   # add worksheet to a saved workbook
-  if (is.null(tab)) tab <- get("tab", envir = parent.frame())
-  if (is.null(wbpath)) wbpath <- get("wbpath", envir = parent.frame())
+  if (is.null(tab)) {
+    tab <- get("tab", envir = parent.frame())
+  }
+  if (is.null(wbpath)) {
+    wbpath <- get("wbpath", envir = parent.frame())
+  }
 
-  wb <- loadWorkbook(wbpath)
-  addWorksheet(wb, tabname)
-  writeData(wb, tabname, tab)
-  # note that overwrite is FALSE so we don't lose worksheets already added!
-  saveWorkbook(wb, wbpath, overwrite = TRUE)
-  # example: addxl("risk_equity")  # if we have a new table named tab and want to call it risk_equity in the xlsx file
-}
+# djb: error file does not exist
+#   wb <- loadWorkbook(wbpath)
+#   addWorksheet(wb, tabname)
+#   writeData(wb, tabname, tab)
+#   # note that overwrite is FALSE so we don't lose worksheets already added!
+#   saveWorkbook(wb, wbpath, overwrite = TRUE)
+#   # example: addxl("risk_equity")  # if we have a new table named tab and want to call it risk_equity in the xlsx file
+# }
 
-addxl("risk_equity")
+# addxl("risk_equity")
 
 ```
 
