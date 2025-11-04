@@ -1,15 +1,15 @@
 project:
   type: book
   output-dir: _report2025
-  
+
 # CAUTION: all .R and other files are in the report folder, not the upper
 # level folder R
-  
+
 execute:
   eval: true
   echo: true
   output: true
-  freeze: auto  # auto: during global project renders, re-render only when source changes; false
+  freeze: false  # auto: during global project renders, re-render only when source changes; false
 
 editor_options:
   chunk_output_type: console
@@ -22,19 +22,19 @@ book:
   date-format: long
   page-navigation: true
   # toc: true  # Enable the TOC in the sidebar
-  # toc-depth: 3  # Set the depth of the TOC  
+  # toc-depth: 3  # Set the depth of the TOC
   chapters:
     - index.qmd
-    
+
     - ONETIME_get_market_data.qmd # set eval: true when getting new data
-      
+
     - part: "Alternative models using simple SLV model"
       chapters:
       - slv_models.qmd
-      
+
     - part: "Alternative model parameterizations using ACLI/AIRG model"
       chapters:
-      - acli_parameter_uncertainty_from_slv.qmd    
+      - acli_parameter_uncertainty_from_slv.qmd
       - get_acli_scenarios_10k.qmd
       - create_acli_portfolios_and_save.qmd
       - add_comparison_returns.qmd # djb 3/19/2025 I think this should be run BEFORE investment return statistics
@@ -42,20 +42,20 @@ book:
     - part: "Investment return statistics"
       chapters:
       - investment_return_statistics.qmd
-      
+
     - part: "Run pension model on alternative ESG models and parameterizations"
       chapters:
       - penmod.qmd
-      
+
     - part: "Risk evaluation of results from pension model"
       chapters:
-      - risk_evaluation.qmd      
-      
+      - risk_evaluation.qmd
+
     # - part: "Appendix"
     #   chapters:
       # - appendix_model_returns.qmd  # looking for s_tau_m.05 folder
       # - appendix_gbm.qmd
-    
+
 # bibliography: references.bib
 
 format:
@@ -72,7 +72,7 @@ format:
 # useful reminders of quarto commands:
 # quarto publish netlify --no-render
 # quarto publish netlify --no-browser --no-prompt
-# quarto publish netlify --no-render --no-browser --no-prompt 
+# quarto publish netlify --no-render --no-browser --no-prompt
 
 # possibly use this at start of each doc??
 # ---
@@ -81,7 +81,7 @@ format:
 #   chunk_output_type: console
 # ---
 
-  
+
 # renv-related commands
 # renv::init()
 # renv::snapshot()
@@ -89,4 +89,3 @@ format:
 # renv::update()
 # renv::status()
 # Sys.getenv("RENV_PATHS_CELLAR") # RENV_PATHS_SOURCE RENV_PATHS_RENV
-  
