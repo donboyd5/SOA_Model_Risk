@@ -538,7 +538,7 @@ structure_flipped |>
 #| output: true
 
 # djb write fig data ----
-figure_Vloss_model <- structure_flipped |>
+figure_Vloss_model_data <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(
     porttype = factor(
@@ -548,7 +548,9 @@ figure_Vloss_model <- structure_flipped |>
     ),
     fill_color = ifelse(type == "constant", "grey85", "grey70"),
     line_type = ifelse(type == "constant", "solid", "dashed")
-  ) |>
+  )
+
+figure_Vloss_model <- figure_Vloss_model_data |>
   ggplot(aes(x = typef, y = vloss_a95t10)) +
   geom_bar(
     stat = "identity",
@@ -578,7 +580,15 @@ figure_Vloss_model <- structure_flipped |>
   scale_fill_identity() +
   scale_color_identity()
 
+fpath <- fs::path(GROOT, "report", "results", "figure_Vloss_model_data.csv")
+write_csv(figure_Vloss_model_data, fpath)
+
 figure_Vloss_model
+# here is how to get the data from the model object
+# built <- ggplot_build(figure_Vloss_model)
+# built$data[[1]]
+# built$data[[2]]
+
 ggsave(
   filename = fs::path(GROOT, "report", "results", "Figure_vloss_model.png"),
   plot = figure_Vloss_model,
@@ -593,7 +603,7 @@ ggsave(
 #| label: bar-charts-ercrise
 #| output: true
 
-figure_VERC_model <- structure_flipped |>
+figure_VERC_model_data <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(
     porttype = factor(
@@ -603,7 +613,9 @@ figure_VERC_model <- structure_flipped |>
     ),
     fill_color = ifelse(type == "constant", "grey85", "grey70"),
     line_type = ifelse(type == "constant", "solid", "dashed")
-  ) |>
+  )
+
+figure_VERC_model <- figure_VERC_model_data |>
   ggplot(aes(x = typef, y = verc_a95t10)) +
   geom_bar(
     stat = "identity",
@@ -632,6 +644,9 @@ figure_VERC_model <- structure_flipped |>
   scale_fill_identity() +
   scale_color_identity()
 figure_VERC_model
+
+fpath <- fs::path(GROOT, "report", "results", "figure_VERC_model_data.csv")
+write_csv(figure_VERC_model_data, fpath)
 
 ggsave(
   filename = fs::path(GROOT, "report", "results", "Figure_VERC_model.png"),
