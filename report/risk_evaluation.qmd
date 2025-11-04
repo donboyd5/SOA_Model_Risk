@@ -1082,6 +1082,7 @@ addxl <- function(tabname, tab = NULL, wbpath = NULL) {
   if (is.null(wbpath)) {
     wbpath <- get("wbpath", envir = parent.frame())
   }
+}
 
 # djb: error file does not exist
 #   wb <- loadWorkbook(wbpath)
