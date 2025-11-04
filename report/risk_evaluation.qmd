@@ -1,6 +1,6 @@
 ---
 output: html_document
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -19,6 +19,7 @@ Summarize the results for each scenario (each row of the result tibble) by unnes
 
 GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
 source(fs::path(GROOT, "report", "_common.R"))
+library(webshot2) # force renv to include webshot2
 
 slv_scen_names <- read_csv(
   "scenario,parm,parmdesc,scendesc
@@ -536,6 +537,7 @@ structure_flipped |>
 #| label: bar-charts-varloss
 #| output: true
 
+# djb write fig data ----
 figure_Vloss_model <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(
@@ -1093,4 +1095,3 @@ addxl <- function(tabname, tab = NULL, wbpath = NULL) {
 # addxl("risk_equity")
 
 ```
-
