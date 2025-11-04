@@ -1,6 +1,6 @@
 ---
 output: html_document
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -188,4 +188,3 @@ ht(aggrport)
 saveRDS(aggrport, fs::path(GROOT, "data", "aggressive_rawdaily.rds"))
 
 ```
-
