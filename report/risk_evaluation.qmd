@@ -990,8 +990,8 @@ p <- range_data |>
     subtitle = "Based on upper-bound and lower-bound values of important model parameters"
   )
 
-p
 p <- soa_theme(p)
+p
 
 ggsave(
   filename = fs::path(GROOT, "report", "results", "FigureVaRERC.png"),
