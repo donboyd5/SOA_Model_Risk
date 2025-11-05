@@ -329,6 +329,8 @@ uvmeasures <- function(ir) {
 # uvmeasures(x)
 
 # ggplot functions ----
+# SOA green (R:165 G:172 B:0) -- use this
+# SOA blue (R:2 G:77 B:124)
 soa_theme <- function(plot) {
   plot +
     labs(caption = "Source: Authors’ analysis") +
@@ -340,7 +342,8 @@ soa_theme <- function(plot) {
         linewidth = 2 # supposed to be 0.75pt width
       ),
       strip.background = element_rect(
-        fill = rgb(2, 77, 124, maxColorValue = 255),
+        # fill = rgb(2, 77, 124, maxColorValue = 255), # SOA blue
+        fill = rgb(165, 172, 0, maxColorValue = 255), # SOA green
         color = "black"
       ),
       strip.text = element_text(colour = "white", family = "Calibri"),
