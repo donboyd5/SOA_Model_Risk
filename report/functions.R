@@ -343,6 +343,7 @@ soa_theme <- function(plot) {
         fill = rgb(2, 77, 124, maxColorValue = 255),
         color = "black"
       ),
+      strip.text = element_text(colour = "white", family = "Calibri"),
       plot.caption = element_text(hjust = 0, vjust = 0, size = 10),
       plot.caption.position = "panel",
       plot.margin = margin(10, 10, 30, 10)
