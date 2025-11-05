@@ -39,9 +39,17 @@ library(PortfolioAnalytics)
 
 # colors for graphs and tables
 library(showtext)
-# Register font (regular style)
-font_add("Calibri", regular = "C:/Windows/Fonts/calibri.ttf") # CAUTION: Windows-specific
+
+if (.Platform$OS.type == "windows") {
+  font_add("Calibri", regular = "C:/Windows/Fonts/calibri.ttf")
+} else if (.Platform$OS.type == "unix") {
+  # Common locations on macOS or Linux, adjust as needed
+  font_add("Calibri", regular = "/Library/Fonts/Calibri.ttf")
+}
+
 showtext_auto()
+showtext_opts(dpi = 300)
+
 
 # graphics
 library(scales)
