@@ -299,6 +299,7 @@ p <- df |>
   guides(col = guide_legend(title = "Portfolio\ntype")) +
   theme_bw()
 p
+p <- soa_theme(p)
 
 ggsave(
   fs::path(GROOT, "report", "results", "esg_meansd.png"),

@@ -1,6 +1,6 @@
 ---
 output: html_document
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -162,7 +162,6 @@ prob_erc <- function(erc_threshold, t, res) {
   return(n_percent)
   # prob_erc(erc_threshold=0.30, t=4, res=test)
 }
-
 
 ```
 
@@ -387,44 +386,6 @@ write_tab("risk_measures_highequity")
 ```
 
 
-```{r}
-#| label: structure-equity-plot
-#| eval: false
-#| output: false
-
-# NO LONGER USED ----
-
-structure_flipped |>
-  filter(porttype == "highequity") |>
-  filter(type != "constant") |>
-  ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour = "black") +
-  geom_text_repel(aes(label = typef), colour = "blue") +
-  scale_x_continuous(
-    name = "Asset % change year 10 vs. year 1, 5th percentile",
-    breaks = seq(-1, 1, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  scale_y_continuous(
-    name = "Contribution % change year 10 vs. year 1, 95th percentile",
-    breaks = seq(-1, 2, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  ggtitle(
-    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
-    subtitle = "High-equity portfolios"
-  ) +
-  labs(caption = "All portfolios have mean log return of ~6.25%") +
-  theme_bw() +
-  theme(
-    plot.title = element_text(size = 11),
-    plot.subtitle = element_text(size = 8)
-  ) +
-  caption_left
-
-
-```
-
 
 ### High fixed portfolio
 
@@ -488,47 +449,6 @@ write_tab("risk_measures_highfixed")
 ```
 
 
-```{r}
-#| label: structure-fixed-plot
-#| eval: false
-#| output: false
-
-# NO LONGER USED ----
-
-structure_flipped |>
-  filter(porttype == "highfixed") |>
-  filter(type != "constant") |>
-  ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour = "black") +
-  geom_text_repel(aes(label = typef), colour = "blue") +
-  scale_x_continuous(
-    name = "Asset % change year 10 vs. year 1, 5th percentile",
-    breaks = seq(-1, 1, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  scale_y_continuous(
-    name = "Contribution % change year 10 vs. year 1, 95th percentile",
-    breaks = seq(-1, 2, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  ggtitle(
-    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
-    subtitle = "High fixed-income portfolios"
-  ) +
-  labs(caption = "All portfolios have mean log return of ~5.00%") +
-  theme_bw() +
-  theme(
-    plot.title = element_text(size = 11),
-    plot.subtitle = element_text(size = 8)
-  ) +
-  caption_left
-
-# theme(
-#    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
-#    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
-#  )
-
-```
 
 ### Bar charts
 
@@ -536,7 +456,8 @@ structure_flipped |>
 #| label: bar-charts-varloss
 #| output: true
 
-figure_Vloss_model <- structure_flipped |>
+# djb write fig data ----
+figure_Vloss_model_data <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(
     porttype = factor(
@@ -546,7 +467,9 @@ figure_Vloss_model <- structure_flipped |>
     ),
     fill_color = ifelse(type == "constant", "grey85", "grey70"),
     line_type = ifelse(type == "constant", "solid", "dashed")
-  ) |>
+  )
+
+figure_Vloss_model <- figure_Vloss_model_data |>
   ggplot(aes(x = typef, y = vloss_a95t10)) +
   geom_bar(
     stat = "identity",
@@ -576,7 +499,16 @@ figure_Vloss_model <- structure_flipped |>
   scale_fill_identity() +
   scale_color_identity()
 
+# fpath <- fs::path(GROOT, "report", "results", "figure_Vloss_model_data.csv")
+# write_csv(figure_Vloss_model_data, fpath)
+
+figure_Vloss_model <- soa_theme(figure_Vloss_model)
 figure_Vloss_model
+# here is how to get the data from the model object
+# built <- ggplot_build(figure_Vloss_model)
+# built$data[[1]]
+# built$data[[2]]
+
 ggsave(
   filename = fs::path(GROOT, "report", "results", "Figure_vloss_model.png"),
   plot = figure_Vloss_model,
@@ -591,7 +523,7 @@ ggsave(
 #| label: bar-charts-ercrise
 #| output: true
 
-figure_VERC_model <- structure_flipped |>
+figure_VERC_model_data <- structure_flipped |>
   # filter(porttype=="highequity") |>
   mutate(
     porttype = factor(
@@ -601,7 +533,9 @@ figure_VERC_model <- structure_flipped |>
     ),
     fill_color = ifelse(type == "constant", "grey85", "grey70"),
     line_type = ifelse(type == "constant", "solid", "dashed")
-  ) |>
+  )
+
+figure_VERC_model <- figure_VERC_model_data |>
   ggplot(aes(x = typef, y = verc_a95t10)) +
   geom_bar(
     stat = "identity",
@@ -629,6 +563,8 @@ figure_VERC_model <- structure_flipped |>
   facet_wrap(~porttype, ncol = 1, scales = "fixed") +
   scale_fill_identity() +
   scale_color_identity()
+
+figure_VERC_model <- soa_theme(figure_VERC_model)
 figure_VERC_model
 
 ggsave(
@@ -637,6 +573,9 @@ ggsave(
   width = 10,
   height = 6
 )
+
+# fpath <- fs::path(GROOT, "report", "results", "figure_VERC_model_data.csv")
+# write_csv(figure_VERC_model_data, fpath)
 
 ```
 
@@ -999,7 +938,10 @@ p <- range_data |>
     "VaR of Asset Loss Under Alternative ESG Model Parameter Assumptions",
     subtitle = "Based on upper-bound and lower-bound values of important model parameters"
   )
+
+p <- soa_theme(p)
 p
+
 ggsave(
   filename = fs::path(GROOT, "report", "results", "FigureVaRLoss.png"),
   plot = p,
@@ -1047,7 +989,10 @@ p <- range_data |>
     "VaR of Employer Contribution Increase Under Alternative ESG Model Parameter Assumptions",
     subtitle = "Based on upper-bound and lower-bound values of important model parameters"
   )
+
+p <- soa_theme(p)
 p
+
 ggsave(
   filename = fs::path(GROOT, "report", "results", "FigureVaRERC.png"),
   plot = p,
@@ -1055,6 +1000,93 @@ ggsave(
   height = 6,
   scale = 1.5
 )
+
+```
+
+
+```{r}
+#| echo: false
+knitr::knit_exit()
+```
+
+
+```{r}
+#| label: structure-equity-plot
+#| eval: false
+#| output: false
+
+# NO LONGER USED ----
+
+structure_flipped |>
+  filter(porttype == "highequity") |>
+  filter(type != "constant") |>
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = typef), colour = "blue") +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "High-equity portfolios"
+  ) +
+  labs(caption = "All portfolios have mean log return of ~6.25%") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
+  caption_left
+
+```
+
+
+```{r}
+#| label: structure-fixed-plot
+#| eval: false
+#| output: false
+
+# NO LONGER USED ----
+
+structure_flipped |>
+  filter(porttype == "highfixed") |>
+  filter(type != "constant") |>
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = typef), colour = "blue") +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "High fixed-income portfolios"
+  ) +
+  labs(caption = "All portfolios have mean log return of ~5.00%") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
+  caption_left
+
+# theme(
+#    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
+#    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
+#  )
 
 ```
 
@@ -1080,6 +1112,7 @@ addxl <- function(tabname, tab = NULL, wbpath = NULL) {
   if (is.null(wbpath)) {
     wbpath <- get("wbpath", envir = parent.frame())
   }
+}
 
 # djb: error file does not exist
 #   wb <- loadWorkbook(wbpath)
@@ -1093,4 +1126,3 @@ addxl <- function(tabname, tab = NULL, wbpath = NULL) {
 # addxl("risk_equity")
 
 ```
-

@@ -37,6 +37,20 @@ library(PortfolioAnalytics)
 # library(bggtools)
 # library(bmaps)
 
+# colors for graphs and tables
+library(showtext)
+
+if (.Platform$OS.type == "windows") {
+  font_add("Calibri", regular = "C:/Windows/Fonts/calibri.ttf")
+} else if (.Platform$OS.type == "unix") {
+  # Common locations on macOS or Linux, adjust as needed
+  font_add("Calibri", regular = "/Library/Fonts/Calibri.ttf")
+}
+
+showtext_auto()
+showtext_opts(dpi = 300)
+
+
 # graphics
 library(scales)
 # library(ggbeeswarm)
@@ -46,6 +60,7 @@ library(ggrepel)
 library(ggbreak)
 library(GGally)
 library(RColorBrewer)
+library(webshot2)
 
 # tables
 library(knitr)
