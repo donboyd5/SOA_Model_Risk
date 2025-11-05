@@ -52,7 +52,7 @@ library(ggrepel)
 library(ggbreak)
 library(GGally)
 library(RColorBrewer)
-
+library(webshot2)
 
 # tables
 library(knitr)
