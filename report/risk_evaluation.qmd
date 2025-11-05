@@ -939,9 +939,8 @@ p <- range_data |>
     subtitle = "Based on upper-bound and lower-bound values of important model parameters"
   )
 
-# figure_Vloss_model <- soa_theme(figure_Vloss_model)
+p <- soa_theme(p)
 p
-
 
 ggsave(
   filename = fs::path(GROOT, "report", "results", "FigureVaRLoss.png"),
@@ -990,7 +989,10 @@ p <- range_data |>
     "VaR of Employer Contribution Increase Under Alternative ESG Model Parameter Assumptions",
     subtitle = "Based on upper-bound and lower-bound values of important model parameters"
   )
+
 p
+p <- soa_theme(p)
+
 ggsave(
   filename = fs::path(GROOT, "report", "results", "FigureVaRERC.png"),
   plot = p,
