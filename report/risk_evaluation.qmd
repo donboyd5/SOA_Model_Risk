@@ -1005,42 +1005,6 @@ ggsave(
 
 
 ```{r}
-#| label: how-to-write-xl-workbook
-#| eval: false
-#| output: false
-
-# Not using this, but saving it so that the technique is available if wanted
-
-library(openxlsx)
-
-tabdir <- fs::path(GROOT, "report", "results") # where we want to write tables
-wbpath <- fs::path(tabdir, "wb.xlsx")
-# saveWorkbook(wb, wbpath, overwrite = TRUE) # ERROR wb not found!!!
-
-addxl <- function(tabname, tab = NULL, wbpath = NULL) {
-  # add worksheet to a saved workbook
-  if (is.null(tab)) {
-    tab <- get("tab", envir = parent.frame())
-  }
-  if (is.null(wbpath)) {
-    wbpath <- get("wbpath", envir = parent.frame())
-  }
-}
-
-# djb: error file does not exist
-#   wb <- loadWorkbook(wbpath)
-#   addWorksheet(wb, tabname)
-#   writeData(wb, tabname, tab)
-#   # note that overwrite is FALSE so we don't lose worksheets already added!
-#   saveWorkbook(wb, wbpath, overwrite = TRUE)
-#   # example: addxl("risk_equity")  # if we have a new table named tab and want to call it risk_equity in the xlsx file
-# }
-
-# addxl("risk_equity")
-
-```
-
-```{r}
 #| echo: false
 knitr::knit_exit()
 ```
@@ -1123,5 +1087,42 @@ structure_flipped |>
 #    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
 #    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
 #  )
+
+```
+
+
+```{r}
+#| label: how-to-write-xl-workbook
+#| eval: false
+#| output: false
+
+# Not using this, but saving it so that the technique is available if wanted
+
+library(openxlsx)
+
+tabdir <- fs::path(GROOT, "report", "results") # where we want to write tables
+wbpath <- fs::path(tabdir, "wb.xlsx")
+# saveWorkbook(wb, wbpath, overwrite = TRUE) # ERROR wb not found!!!
+
+addxl <- function(tabname, tab = NULL, wbpath = NULL) {
+  # add worksheet to a saved workbook
+  if (is.null(tab)) {
+    tab <- get("tab", envir = parent.frame())
+  }
+  if (is.null(wbpath)) {
+    wbpath <- get("wbpath", envir = parent.frame())
+  }
+}
+
+# djb: error file does not exist
+#   wb <- loadWorkbook(wbpath)
+#   addWorksheet(wb, tabname)
+#   writeData(wb, tabname, tab)
+#   # note that overwrite is FALSE so we don't lose worksheets already added!
+#   saveWorkbook(wb, wbpath, overwrite = TRUE)
+#   # example: addxl("risk_equity")  # if we have a new table named tab and want to call it risk_equity in the xlsx file
+# }
+
+# addxl("risk_equity")
 
 ```
