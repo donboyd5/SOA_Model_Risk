@@ -449,47 +449,6 @@ write_tab("risk_measures_highfixed")
 ```
 
 
-```{r}
-#| label: structure-fixed-plot
-#| eval: false
-#| output: false
-
-# NO LONGER USED ----
-
-structure_flipped |>
-  filter(porttype == "highfixed") |>
-  filter(type != "constant") |>
-  ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour = "black") +
-  geom_text_repel(aes(label = typef), colour = "blue") +
-  scale_x_continuous(
-    name = "Asset % change year 10 vs. year 1, 5th percentile",
-    breaks = seq(-1, 1, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  scale_y_continuous(
-    name = "Contribution % change year 10 vs. year 1, 95th percentile",
-    breaks = seq(-1, 2, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  ggtitle(
-    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
-    subtitle = "High fixed-income portfolios"
-  ) +
-  labs(caption = "All portfolios have mean log return of ~5.00%") +
-  theme_bw() +
-  theme(
-    plot.title = element_text(size = 11),
-    plot.subtitle = element_text(size = 8)
-  ) +
-  caption_left
-
-# theme(
-#    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
-#    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
-#  )
-
-```
 
 ### Bar charts
 
@@ -1119,5 +1078,48 @@ structure_flipped |>
     plot.subtitle = element_text(size = 8)
   ) +
   caption_left
+
+```
+
+
+```{r}
+#| label: structure-fixed-plot
+#| eval: false
+#| output: false
+
+# NO LONGER USED ----
+
+structure_flipped |>
+  filter(porttype == "highfixed") |>
+  filter(type != "constant") |>
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = typef), colour = "blue") +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "High fixed-income portfolios"
+  ) +
+  labs(caption = "All portfolios have mean log return of ~5.00%") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
+  caption_left
+
+# theme(
+#    plot.title = element_text(size = 14, hjust = 0.5),  # Adjust the size and position of the title
+#    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)  # Adjust the plot margins
+#  )
 
 ```
