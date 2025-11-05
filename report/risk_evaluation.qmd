@@ -19,7 +19,6 @@ Summarize the results for each scenario (each row of the result tibble) by unnes
 
 GROOT <- rprojroot::find_root(rprojroot::has_file(".git/index"))
 source(fs::path(GROOT, "report", "_common.R"))
-library(webshot2) # force renv to include webshot2
 
 slv_scen_names <- read_csv(
   "scenario,parm,parmdesc,scendesc
@@ -163,7 +162,6 @@ prob_erc <- function(erc_threshold, t, res) {
   return(n_percent)
   # prob_erc(erc_threshold=0.30, t=4, res=test)
 }
-
 
 ```
 
@@ -388,44 +386,6 @@ write_tab("risk_measures_highequity")
 ```
 
 
-```{r}
-#| label: structure-equity-plot
-#| eval: false
-#| output: false
-
-# NO LONGER USED ----
-
-structure_flipped |>
-  filter(porttype == "highequity") |>
-  filter(type != "constant") |>
-  ggplot(aes(vloss_a95t10, verc_a95t10)) +
-  geom_point(colour = "black") +
-  geom_text_repel(aes(label = typef), colour = "blue") +
-  scale_x_continuous(
-    name = "Asset % change year 10 vs. year 1, 5th percentile",
-    breaks = seq(-1, 1, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  scale_y_continuous(
-    name = "Contribution % change year 10 vs. year 1, 95th percentile",
-    breaks = seq(-1, 2, by = .01),
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  ggtitle(
-    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
-    subtitle = "High-equity portfolios"
-  ) +
-  labs(caption = "All portfolios have mean log return of ~6.25%") +
-  theme_bw() +
-  theme(
-    plot.title = element_text(size = 11),
-    plot.subtitle = element_text(size = 8)
-  ) +
-  caption_left
-
-
-```
-
 
 ### High fixed portfolio
 
@@ -580,9 +540,10 @@ figure_Vloss_model <- figure_Vloss_model_data |>
   scale_fill_identity() +
   scale_color_identity()
 
-fpath <- fs::path(GROOT, "report", "results", "figure_Vloss_model_data.csv")
-write_csv(figure_Vloss_model_data, fpath)
+# fpath <- fs::path(GROOT, "report", "results", "figure_Vloss_model_data.csv")
+# write_csv(figure_Vloss_model_data, fpath)
 
+figure_Vloss_model <- soa_theme(figure_Vloss_model)
 figure_Vloss_model
 # here is how to get the data from the model object
 # built <- ggplot_build(figure_Vloss_model)
@@ -643,10 +604,9 @@ figure_VERC_model <- figure_VERC_model_data |>
   facet_wrap(~porttype, ncol = 1, scales = "fixed") +
   scale_fill_identity() +
   scale_color_identity()
-figure_VERC_model
 
-fpath <- fs::path(GROOT, "report", "results", "figure_VERC_model_data.csv")
-write_csv(figure_VERC_model_data, fpath)
+figure_VERC_model <- soa_theme(figure_VERC_model)
+figure_VERC_model
 
 ggsave(
   filename = fs::path(GROOT, "report", "results", "Figure_VERC_model.png"),
@@ -654,6 +614,9 @@ ggsave(
   width = 10,
   height = 6
 )
+
+# fpath <- fs::path(GROOT, "report", "results", "figure_VERC_model_data.csv")
+# write_csv(figure_VERC_model_data, fpath)
 
 ```
 
@@ -1016,7 +979,11 @@ p <- range_data |>
     "VaR of Asset Loss Under Alternative ESG Model Parameter Assumptions",
     subtitle = "Based on upper-bound and lower-bound values of important model parameters"
   )
+
+# figure_Vloss_model <- soa_theme(figure_Vloss_model)
 p
+
+
 ggsave(
   filename = fs::path(GROOT, "report", "results", "FigureVaRLoss.png"),
   plot = p,
@@ -1109,5 +1076,48 @@ addxl <- function(tabname, tab = NULL, wbpath = NULL) {
 # }
 
 # addxl("risk_equity")
+
+```
+
+```{r}
+#| echo: false
+knitr::knit_exit()
+```
+
+
+```{r}
+#| label: structure-equity-plot
+#| eval: false
+#| output: false
+
+# NO LONGER USED ----
+
+structure_flipped |>
+  filter(porttype == "highequity") |>
+  filter(type != "constant") |>
+  ggplot(aes(vloss_a95t10, verc_a95t10)) +
+  geom_point(colour = "black") +
+  geom_text_repel(aes(label = typef), colour = "blue") +
+  scale_x_continuous(
+    name = "Asset % change year 10 vs. year 1, 5th percentile",
+    breaks = seq(-1, 1, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_y_continuous(
+    name = "Contribution % change year 10 vs. year 1, 95th percentile",
+    breaks = seq(-1, 2, by = .01),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  ggtitle(
+    "Impact of model structure on risk of extreme asset loss and extreme contribution increase",
+    subtitle = "High-equity portfolios"
+  ) +
+  labs(caption = "All portfolios have mean log return of ~6.25%") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 11),
+    plot.subtitle = element_text(size = 8)
+  ) +
+  caption_left
 
 ```
