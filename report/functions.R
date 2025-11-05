@@ -337,7 +337,7 @@ soa_theme <- function(plot) {
       plot.background = element_rect(
         color = rgb(231, 231, 231, maxColorValue = 255),
         fill = NA,
-        size = 3
+        linewidth = 3
       ),
       strip.background = element_rect(
         fill = rgb(2, 77, 124, maxColorValue = 255),
