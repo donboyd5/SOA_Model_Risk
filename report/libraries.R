@@ -37,6 +37,12 @@ library(PortfolioAnalytics)
 # library(bggtools)
 # library(bmaps)
 
+# colors for graphs and tables
+library(showtext)
+# Register font (regular style)
+font_add("Calibri", regular = "C:/Windows/Fonts/calibri.ttf") # CAUTION: Windows-specific
+showtext_auto()
+
 # graphics
 library(scales)
 # library(ggbeeswarm)
@@ -46,6 +52,7 @@ library(ggrepel)
 library(ggbreak)
 library(GGally)
 library(RColorBrewer)
+
 
 # tables
 library(knitr)
